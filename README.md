@@ -1,8 +1,11 @@
 # autokernel
 
-This tool can detect required kernel configuration options, properly manage
-changes to the default kernel config, and be used as a kernel build tool.
-All features can be used independently of each other.
+Have you ever though *Which kernel options do I need to enable to use this USB device?*,
+or did you ever wonder *Why have I enabled this kernel option?*, or *Which kernel options did I even change..*?
+
+This tool allows to both detect configuration options for the current system, and also
+provides a way to properly manage your configuration changes. It can also be used to
+automate the build process, but this is entirely optional.
 
 ## Detecting configuration options
 
