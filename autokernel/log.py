@@ -1,3 +1,9 @@
+verbose_output = False
+
+def verbose(msg):
+    if verbose_output:
+        print(" * [2;37m{}[m".format(msg))
+
 def info(msg):
     print("[1;32m *[m {}".format(msg))
 

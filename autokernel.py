@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import autokernel
-from autokernel import log, SystemInspector, Kconfig, print_expr_tree
+from autokernel import log, DeviceDetector, Kconfig, print_expr_tree
 
 import subprocess
 import os
@@ -37,13 +37,15 @@ def main():
     # Inspect the current system
     # TODO ensure that the running kernel can inspect all subsystems....
     # TODO what if we run on a minimal kernel?
-    detector = KernelOptionDetector()
+    detector = DeviceDetector()
 
     kconfig.all_no_config()
     kconfig.write_config(filename="a")
 
     # TODO download "https://cateee.net/sources/lkddb/lkddb.list"
     sym = kconfig.get_symbol("DVB_USB_RTL28XXU")
+    # TODO make autokernel --enable [CONFIG_]SOME_CONF,
+    # which tells you which were enabled why, and asks on optionals
     kconfig.set_sym_with_deps(sym, autokernel.MOD)
 
     kconfig.write_config(filename="b")
