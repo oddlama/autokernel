@@ -8,8 +8,8 @@ def create_modalias_regex(options):
     Creates a regex to match the given modalias options
     """
     modalias_regex = '([0-9a-z]*):'
-    for _, alias in options:
-        modalias_regex += '{}(?P<{}>[0-9A-Z*]*)'.format(alias, alias)
+    for alias, _ in options:
+        modalias_regex += '{}([0-9A-Z*]*)'.format(alias, alias)
     return re.compile(modalias_regex)
 
 class ModaliasDevice:
@@ -36,8 +36,8 @@ class ModaliasDevice:
             raise Exception("Could not parse modalias")
 
         # Assign attributes from the match groups
-        for i, (option, alias) in enumerate(modalias_options):
-            setattr(self, option, matches.group(alias))
+        for i, (alias, option) in enumerate(modalias_options):
+            setattr(self, option, matches.group(i + 2))
 
     def __str__(self):
         """
@@ -46,7 +46,7 @@ class ModaliasDevice:
 
         name = "{}{{".format(self.__class__.__name__)
         name += ', '.join(['{}={}'.format(option, getattr(self, option)) \
-                    for option, alias in self._get_modalias_options()])
+                    for alias, option in self._get_modalias_options()])
         name += '}'
         return name
 
@@ -70,29 +70,91 @@ class ModaliasDevice:
         cls.modalias_regex = create_modalias_regex(modalias_options)
         return cls.modalias_regex
 
+    @classmethod
+    def _get_sysfs_path_to_modaliases(cls):
+        """
+        Returns a globbable path to all modalias files in the kernel sysfs for the device type
+        """
+        return cls.modalias_sysfs_path
+
+    @staticmethod
+    def preprocess_modaliases(modaliases):
+        """
+        Allows a derived class to modify all modaliases before parsing, by
+        overriding this method
+        """
+        return modaliases
+
+    @classmethod
+    def read_modaliases(cls):
+        """
+        Reads all modaliases from the given glob path
+        """
+
+        modaliases = set()
+        for file_name in glob.glob(cls._get_sysfs_path_to_modaliases()):
+            # Open modalias file
+            with open(file_name, 'r', encoding='utf-8') as file:
+                # Iterate over lines
+                for line in file.readlines():
+                    # Strip trailing whitespace
+                    line = line.strip()
+                    if line:
+                        # Only add if line not empty
+                        modaliases.add(line)
+
+        # Return modaliases, after giving derived classes a chance to modify them
+        return cls.preprocess_modaliases(modaliases)
+
+    @classmethod
+    def detect_devices(cls):
+        log.info("Parsing '{}'".format(cls.modalias_sysfs_path))
+        devices = [cls(modalias) for modalias in cls.read_modaliases()]
+
+        # Log all devices, if we are in verbose mode
+        log.info(" - found {} devices".format(len(devices)))
+        if log.verbose_output:
+            for d in devices:
+                log.verbose(" - {}".format(d))
+
+        return devices
+
+
 class PciDevice(ModaliasDevice):
+    modalias_sysfs_path = '/sys/bus/pci/devices/*/modalias'
     modalias_options = [
-            ('vendor', 'v'),
-            ('device', 'd'),
-            ('subvendor', 'sv'),
-            ('subdevice', 'sd'),
-            ('bus_class', 'bc'),
-            ('bus_subclass', 'sc'),
-            ('interface', 'i'),
+            ('v' , 'vendor'      ),
+            ('d' , 'device'      ),
+            ('sv', 'subvendor'   ),
+            ('sd', 'subdevice'   ),
+            ('bc', 'bus_class'   ),
+            ('sc', 'bus_subclass'),
+            ('i' , 'interface'   ),
         ]
 
 class UsbDevice(ModaliasDevice):
+    modalias_sysfs_path = '/sys/bus/usb/devices/*/modalias'
     modalias_options = [
-            ('device_vendor', 'v'),
-            ('device_product', 'p'),
-            ('bcddevice', 'd'),
-            ('device_class', 'dc'),
-            ('device_subclass', 'dsc'),
-            ('device_protocol', 'dp'),
-            ('interface_class', 'ic'),
-            ('interface_subclass', 'isc'),
-            ('interface_protocol', 'ip'),
+            ('v'  , 'device_vendor'     ),
+            ('p'  , 'device_product'    ),
+            ('d'  , 'bcddevice'         ),
+            ('dc' , 'device_class'      ),
+            ('dsc', 'device_subclass'   ),
+            ('dp' , 'device_protocol'   ),
+            ('ic' , 'interface_class'   ),
+            ('isc', 'interface_subclass'),
+            ('ip' , 'interface_protocol'),
         ]
+
+class AcpiDevice(ModaliasDevice):
+    modalias_sysfs_path = '/sys/bus/acpi/devices/*/modalias'
+    modalias_options = [
+            ('' , 'id'),
+        ]
+
+    @staticmethod
+    def preprocess_modaliases(modaliases):
+        return []
 
 class DeviceDetector:
     """
@@ -108,46 +170,15 @@ class DeviceDetector:
         """
 
         log.info("Inspecting sysfs to find devices")
-        self._detect_pci_devices()
-        self._detect_usb_devices()
 
-    def _detect_pci_devices(self):
-        """
-        Parses devices from the pci sysfs nodes
-        """
+        # A list with all device classes
+        device_classes = [
+            PciDevice,
+            UsbDevice,
+            AcpiDevice,
+        ]
 
-        log.info("Parsing PCI device nodes")
-
-        self.pci_devices = [PciDevice(modalias) for modalias \
-            in self._read_modaliases('/sys/bus/pci/devices/*/modalias')]
-
-        log.info(" - found {} devices".format(len(self.pci_devices)))
-        if log.verbose_output:
-            for device in self.pci_devices:
-                log.verbose(" - {}".format(device))
-
-    def _detect_usb_devices(self):
-        """
-        Parses devices from the usb sysfs nodes
-        """
-
-        log.info("Parsing USB device nodes")
-
-        self.usb_devices = [UsbDevice(modalias) for modalias \
-            in self._read_modaliases('/sys/bus/usb/devices/*/modalias')]
-
-        log.info(" - found {} devices".format(len(self.usb_devices)))
-        if log.verbose_output:
-            for device in self.usb_devices:
-                log.verbose(" - {}".format(device))
-
-    def _read_modaliases(self, path):
-        """
-        Reads all modaliases from the given glob path
-        """
-
-        modaliases = set()
-        for file_name in glob.glob(path):
-            with open(file_name, 'r', encoding='utf-8') as file:
-                modaliases.update(file.read().splitlines())
-        return modaliases
+        # For each device class, detect devices in sysfs.
+        self.devices = []
+        for cls in device_classes:
+            self.devices.extend(cls.detect_devices())
