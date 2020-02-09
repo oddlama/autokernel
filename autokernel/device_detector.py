@@ -3,31 +3,96 @@ from . import log
 import re
 import glob
 
-class PciDevice:
+def create_modalias_regex(options):
     """
-    A class used to parse all information from a modalias file
-    related to a pci device.
+    Creates a regex to match the given modalias options
     """
-    modalias_regex = '([0-9a-z]*):v([0-9A-Z*]*)d([0-9A-Z*]*)sv([0-9A-Z*]*)sd([0-9A-Z*]*)bc([0-9A-Z*]*)sc([0-9A-Z*]*)i([0-9A-Z*]*)'
+    modalias_regex = '([0-9a-z]*):'
+    for _, alias in options:
+        modalias_regex += '{}(?P<{}>[0-9A-Z*]*)'.format(alias, alias)
+    return re.compile(modalias_regex)
+
+class ModaliasDevice:
+    """
+    A base class used for devices classes which get their information
+    by parsing a modalias file.
+    """
 
     def __init__(self, modalias):
-        self.modalias = modalias.replace('*', '')
+        """
+        Parses the modalias line and initializes device information
+        """
 
-        m = re.match(PciDevice.modalias_regex, self.modalias)
-        if not m:
-            raise Exception("Could not parse modalias for PciDevice")
+        # Save modalias information
+        self.modalias = modalias
 
-        self.vendor = m.group(2)
-        self.device = m.group(3)
-        self.subvendor = m.group(4)
-        self.subdevice = m.group(5)
-        self.bus_class = m.group(6)
-        self.bus_subclass = m.group(7)
-        self.interface = m.group(8)
+        # Create regex to Save modalias information
+        modalias_options = self._get_modalias_options()
+        modalias_regex = self._create_modalias_regex(modalias_options)
+
+        # Match the modalias against the regex
+        matches = modalias_regex.match(self.modalias)
+        if not matches:
+            raise Exception("Could not parse modalias")
+
+        # Assign attributes from the match groups
+        for i, (option, alias) in enumerate(modalias_options):
+            setattr(self, option, matches.group(alias))
 
     def __str__(self):
-        return "PciDevice{{vendor={}, device={}, subvendor={}, subdevice={}, bus_class={}, bus_subclass={}, interface={}}}".format(
-            self.vendor, self.device, self.subvendor, self.subdevice, self.bus_class, self.bus_subclass, self.interface)
+        """
+        Returns a string representation of this object
+        """
+
+        name = "{}{{".format(self.__class__.__name__)
+        name += ', '.join(['{}={}'.format(option, getattr(self, option)) \
+                    for option, alias in self._get_modalias_options()])
+        name += '}'
+        return name
+
+    @classmethod
+    def _get_modalias_options(cls):
+        """
+        Returns the modalias options of the derived class
+        """
+        return cls.modalias_options
+
+    @classmethod
+    def _create_modalias_regex(cls, modalias_options):
+        """
+        Creates (or retrieves) a compiled regex for the classes' modalias options
+        """
+        # If we have previously compiled a regex, return it
+        if hasattr(cls, 'modalias_regex'):
+            return cls.modalias_regex
+
+        # Otherwise create a new regex and save it in the derived class
+        cls.modalias_regex = create_modalias_regex(modalias_options)
+        return cls.modalias_regex
+
+class PciDevice(ModaliasDevice):
+    modalias_options = [
+            ('vendor', 'v'),
+            ('device', 'd'),
+            ('subvendor', 'sv'),
+            ('subdevice', 'sd'),
+            ('bus_class', 'bc'),
+            ('bus_subclass', 'sc'),
+            ('interface', 'i'),
+        ]
+
+class UsbDevice(ModaliasDevice):
+    modalias_options = [
+            ('device_vendor', 'v'),
+            ('device_product', 'p'),
+            ('bcddevice', 'd'),
+            ('device_class', 'dc'),
+            ('device_subclass', 'dsc'),
+            ('device_protocol', 'dp'),
+            ('interface_class', 'ic'),
+            ('interface_subclass', 'isc'),
+            ('interface_protocol', 'ip'),
+        ]
 
 class DeviceDetector:
     """
@@ -47,6 +112,10 @@ class DeviceDetector:
         self._detect_usb_devices()
 
     def _detect_pci_devices(self):
+        """
+        Parses devices from the pci sysfs nodes
+        """
+
         log.info("Parsing PCI device nodes")
 
         self.pci_devices = [PciDevice(modalias) for modalias \
@@ -58,6 +127,10 @@ class DeviceDetector:
                 log.verbose(" - {}".format(device))
 
     def _detect_usb_devices(self):
+        """
+        Parses devices from the usb sysfs nodes
+        """
+
         log.info("Parsing USB device nodes")
 
         self.usb_devices = [UsbDevice(modalias) for modalias \
@@ -69,6 +142,10 @@ class DeviceDetector:
                 log.verbose(" - {}".format(device))
 
     def _read_modaliases(self, path):
+        """
+        Reads all modaliases from the given glob path
+        """
+
         modaliases = set()
         for file_name in glob.glob(path):
             with open(file_name, 'r', encoding='utf-8') as file:
