@@ -121,6 +121,10 @@ class ModaliasDevice:
 
 
 class PciDevice(ModaliasDevice):
+    """
+    Specializes ModaliasDevice to parse PCI devices
+    """
+
     modalias_sysfs_path = '/sys/bus/pci/devices/*/modalias'
     modalias_options = [
             ('v' , 'vendor'      ),
@@ -133,6 +137,10 @@ class PciDevice(ModaliasDevice):
         ]
 
 class UsbDevice(ModaliasDevice):
+    """
+    Specializes ModaliasDevice to parse USB devices
+    """
+
     modalias_sysfs_path = '/sys/bus/usb/devices/*/modalias'
     modalias_options = [
             ('v'  , 'device_vendor'     ),
@@ -147,14 +155,32 @@ class UsbDevice(ModaliasDevice):
         ]
 
 class AcpiDevice(ModaliasDevice):
+    """
+    Specializes ModaliasDevice to parse ACPI devices
+    """
+
     modalias_sysfs_path = '/sys/bus/acpi/devices/*/modalias'
     modalias_options = [
-            ('' , 'id'),
+            ('id', 'id'),
         ]
 
     @staticmethod
-    def preprocess_modaliases(modaliases):
-        return []
+    def preprocess_modaliases(original_modaliases):
+        """
+        Contents of acpi modalias files can contain several ids per device.
+        Split these to create one acpi device per id.
+        """
+        modaliases = set()
+        for m in original_modaliases:
+            if not m.startswith('acpi:'):
+                continue
+
+            # Split on ':' and filter empty results
+            acpi_ids = filter(None, m[len('acpi:'):].split(':'))
+            for id in acpi_ids:
+                modaliases.add('acpi:id{}'.format(id))
+
+        return modaliases
 
 class DeviceDetector:
     """
