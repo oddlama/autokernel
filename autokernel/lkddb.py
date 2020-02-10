@@ -1,44 +1,76 @@
 from . import log
 
-import re
 import bz2
+import re
+import shlex
 import urllib.request
 
+class EntryParseException(Exception):
+    pass
+
+class WildcardToken():
+    pass
+
 class Entry:
-    def __init__(self, subsystem, config_options, source):
-        self.subsystem = subsystem
+    wildcard_regex = re.compile('^\.+$')
+
+    def __init__(self, arguments, config_options, source):
+        self.arguments = self._parse_arguments(arguments)
         self.config_options = config_options
         self.source = source
 
-        #'acpi':
-        #'fs':
-        #'hda':
-        #'hid':
-        #'i2c':
-        #'i2c-snd':
-        #'input':
-        #'kver':
-        #'module':
-        #'of':
-        #'parisc':
-        #'pci':
-        #'pci_epf':
-        #'pcmcia':
-        #'platform':
-        #'pnp':
-        #'rpmsg':
-        #'sdio':
-        #'sdw':
-        #'serio':
-        #'slim':
-        #'spi':
-        #'ssb':
-        #'tc':
-        #'usb':
-        #'vio':
-        #'virtio':
-        #'zorro':
+    @classmethod
+    def _get_parameters(cls):
+        return cls.parameters
 
+    def _parse_arguments(self, arguments):
+        # Split on space while preserving quoted strings
+        arguments = shlex.split(arguments)
+        # Replace wildcards with wildcard tokens
+        arguments = [WildcardToken() if Entry.wildcard_regex.match(p) else p for p in arguments]
+
+        # Get the parameter names from the derived class
+        parameters = self._get_parameters()
+        # Ensure the amount of arguments is equal to the required amount
+        if len(arguments) != len(parameters):
+            raise EntryParseException("{} requires {} parameters but {} were given".format(self.__class__.__name__, len(parameters), len(arguments)))
+
+    def get_config_options(self):
+        return self.config_options
+
+    def get_source(self):
+        return self.source
+
+class AcpiEntry(Entry):
+    parameters = ['name']
+
+class PciEntry(Entry):
+    parameters = ['vendor', 'device', 'subvendor', 'subdevice', 'class_mask']
+
+entry_classes = {
+       'acpi':      AcpiEntry,
+       #'fs':        FsEntry,
+       #'hda':       HdaEntry,
+       #'hid':       HidEntry,
+       #'i2c':       I2cEntry,
+       #'i2c-snd':   I2cEntry,
+       #'input':     InputEntry,
+       'pci':       PciEntry,
+       #'pcmcia':    PcmciaEntry,
+       #'platform':  PlatformEntry,
+       #'pnp':       PnpEntry,
+       #'sdio':      SdioEntry,
+       #'serio':     SerioEntry,
+       #'spi':       SpiEntry,
+       #'usb':       UsbEntry,
+       #'virtio':    VirtioEntry,
+    }
+
+def get_entry_class(subsystem):
+    """
+    Returns the entry class for a given subsystem
+    """
+    return entry_classes.get(subsystem)
 
 class Lkddb:
     """
@@ -57,6 +89,19 @@ class Lkddb:
         self._fetch_db()
         self._load_db()
 
+    def find_options(self, subsystem, data):
+        """
+        Tries to match the given data dictionary to a database entry in the same subsystem.
+        Returns the list of kernel options for all matched entries, or an empty list if
+        no match could be found.
+        """
+
+        if subsystem not in self.entries:
+            return []
+
+        #TODO for e in self.entries[subsystem]:
+        #TODO     if e.match(data):
+
     def _fetch_db(self):
         """
         Downloads the newest lkddb file.
@@ -72,17 +117,20 @@ class Lkddb:
         """
 
         log.info("Parsing lkddb database")
-        self.entries = []
+        self.entries = {}
 
         valid_lines = 0
         with bz2.open(self.lkddb_file, 'r') as f:
-            for line in f:
-                if self._parse_lkddb_line(line.decode('utf-8')):
+            for line_nr, line in enumerate(f, start=1):
+                if self._parse_lkddb_line(line.decode('utf-8'), line_nr):
                     valid_lines += 1
 
         log.info("Loaded {} lkddb entries".format(valid_lines))
 
-    def _parse_lkddb_line(self, line):
+    def _parse_lkddb_line(self, line, line_nr):
+        """
+        Parses a line in the lkddb file and creates an entry if it is valid.
+        """
         if line[0] == '#':
             # Skip comments
             return False
@@ -93,16 +141,43 @@ class Lkddb:
             # Skip lines that could not be matched
             return False
 
+        # Split information
         subsystem = m.group('subsystem')
         parameters = m.group('parameters')
-        config_options = m.group('config_options').split(' ')
+        config_options = filter(None, m.group('config_options').split(' '))
         source = m.group('source')
 
-        entry_for_subsystem = {}
-        if subsystem not in entry_for_subsystem:
-            # Skip lines for which we do not have a entry class
+        # Validate that each config option starts with CONFIG_
+        for c in config_options:
+            if not c.startswith('CONFIG_'):
+                # Skip entries with invalid options
+                return False
+
+        # ... and remove this CONFIG_ prefix
+        config_options = [c[len('CONFIG_'):] for c in config_options]
+
+        entry_cls = get_entry_class(subsystem)
+        if not entry_cls:
+            # Skip lines with an unkown subsystem
             return False
 
-        entry_cls = entry_for_subsystem[subsystem]
-        self.entries.append(entry_cls(subsystem, parameters, config_options, source))
+        try:
+            entry = entry_cls(parameters, config_options, source)
+        except EntryParseException as e:
+            log.warn('Could not parse entry at lkddb:{}: {}'.format(line_nr, repr(e)))
+            return False
+
+        self._add_entry(subsystem, entry)
         return True
+
+    def _add_entry(self, subsystem, entry):
+        """
+        Adds the given entry to all stored entries (indexed by subsystem)
+        """
+        # Add empty list in dictionary if key doesn't exist
+        if subsystem not in self.entries:
+            self.entries[subsystem] = []
+
+        # Append entry to list
+        self.entries[subsystem].append(entry)
+

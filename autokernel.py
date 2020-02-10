@@ -37,6 +37,11 @@ def detect_options():
     # Inspect the current system
     detector = NodeDetector()
 
+    # Try to find nodes in the database
+    for node in detector.nodes:
+        config_db.find_options(node.subsystem, node.data)
+
+
 def create_config():
     # Load kconfig file
     kernel_dir = "/usr/src/linux"
