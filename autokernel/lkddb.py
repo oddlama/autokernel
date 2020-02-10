@@ -25,22 +25,23 @@ class Lkddb:
 
     wildcard_regex = re.compile('^\.+$')
     entry_types = {
-           'acpi':      (Subsystem.acpi, ['name']),
-           #'fs':        [],
-           #'hda':       [],
-           #'hid':       [],
-           #'i2c':       [],
-           #'i2c-snd':   [],
-           #'input':     [],
-           'pci':       (Subsystem.pci, ['vendor', 'device', 'subvendor', 'subdevice', 'class_mask']),
-           #'pcmcia':    [],
-           #'platform':  [],
-           #'pnp':       [],
-           #'sdio':      [],
-           #'serio':     [],
-           #'spi':       [],
-           #'usb':       [],
-           #'virtio':    [],
+            # TODO mutators/mapping (e.g. merge/split columns.....)
+            'acpi':      (Subsystem.acpi,     ['name']),
+            'fs':        (Subsystem.fs,       ['fstype']),
+            #'hda':       (Subsystem.,         []),
+            #'hid':       (Subsystem.,         []),
+            'i2c':       (Subsystem.i2c,      ['name']),
+            'i2c-snd':   (Subsystem.i2c,      ['name']),
+            #'input':     (Subsystem.,         []),
+            'pci':       (Subsystem.pci,      ['vendor', 'device', 'subvendor', 'subdevice', 'class_mask']),
+            #'pcmcia':    (Subsystem.,         []),
+            'platform':  (Subsystem.platform, ['name']),
+            'pnp':       (Subsystem.pnp,      ['id']),
+            #'sdio':      (Subsystem.,         []),
+            #'serio':     (Subsystem.,         []),
+            #'spi':       (Subsystem.,         []),
+            #'usb':       (Subsystem.,         []),
+            #'virtio':    (Subsystem.,         []),
         }
 
     def __init__(self):
@@ -141,7 +142,7 @@ class Lkddb:
 
         # Ensure the amount of arguments is equal to the required amount
         if len(arguments) != len(entry_parameters):
-            raise EntryParsingException("{} requires {} parameters but {} were given".format(self.__class__.__name__, len(entry_parameters), len(arguments)))
+            raise EntryParsingException("{} requires {} parameters but {} were given".format(lkddb_subsystem, len(entry_parameters), len(arguments)))
 
         # Create data dictionary and insert all arguments
         data = {}
