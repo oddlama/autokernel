@@ -3,6 +3,7 @@ from . import log
 import re
 import glob
 import subprocess
+from pathlib import Path
 
 class NodeParserException(Exception):
     pass
@@ -234,36 +235,9 @@ class ModaliasNode(SysfsNode):
         """
         Finds and returns all modalias files in /sys
         """
-        print("TODO bAaaaaaaaaaaaaaaaad")
-        return subprocess.run(['find', '/sys', '-type', 'f', '-name', 'modalias'], stdout=subprocess.PIPE).stdout.decode('utf-8').strip().split('\n')
 
-class AcpiDevice(ModaliasNode):
-    """
-    Specializes ModaliasNode to parse acpi devices
-    """
-
-    node_type = 'acpi'
-    options = [
-            ('id', 'id'),
-        ]
-
-    @staticmethod
-    def preprocess_sysfs_lines(sysfs_lines):
-        """
-        Contents of acpi modalias files can contain several ids per device.
-        Split these to create one acpi device per id.
-        """
-        modaliases = set()
-        for l in sysfs_lines:
-            if not l.startswith('acpi:'):
-                continue
-
-            # Split on ':' and filter empty results
-            acpi_ids = filter(None, l[len('acpi:'):].split(':'))
-            for id in acpi_ids:
-                modaliases.add('acpi:id{}'.format(id))
-
-        return modaliases
+        # We use find here, because python raises an OSError when it reaches efivars directory. Probably
+        return filter(None, [i.decode('utf-8') for i in subprocess.run(['find', '/sys', '-type', 'f', '-name', 'modalias', '-print0'], stdout=subprocess.PIPE, stderr=subprocess.PIPE).stdout.split(b'\0')])
 
 class PnpNode(SysfsNode):
     """
