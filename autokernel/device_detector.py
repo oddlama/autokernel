@@ -37,7 +37,10 @@ class ModaliasDevice:
 
         # Assign attributes from the match groups
         for i, (alias, option) in enumerate(modalias_options):
-            setattr(self, option, matches.group(i + 2))
+            val = matches.group(i + 2)
+            if not val:
+                raise Exception("Modalias line is missing information for this device type")
+            setattr(self, option, val)
 
     def __str__(self):
         """
