@@ -133,7 +133,7 @@ class Subsystem:
         """
         Creates a node of correct type with given arguments
         """
-        return node_type(*args, **kwargs)
+        return self.node_type(*args, **kwargs)
 
 Subsystem.acpi     = Subsystem('acpi'    , AcpiNode    )
 Subsystem.fs       = Subsystem('fs'      , FsNode      )

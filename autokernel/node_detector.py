@@ -36,7 +36,7 @@ class Node:
         Returns a string representation of this object
         """
         if type(self.data) is list:
-            return '[' + ', '.join(self.data) + ']'
+            return '[' + ', '.join([str(i) for i in self.data]) + ']'
         return str(self.data)
 
 class SysfsNode(Node):
@@ -90,23 +90,28 @@ class SysfsNode(Node):
         return nodes
 
 def create_modalias_token_parser(subsystem, subsystem_regex_str, options):
-    class Data:
-        def __init__(self, modalias):
+    class Parser:
+        @staticmethod
+        def parse(modalias):
             """
-            Matches the modalias against the given options and extracts the data.
+            Matches the modalias against the given options and extracts the data,
+            which is returned as a subsystem node, or list of subsystem nodes
             """
 
             # Match the sysfs line against the regex
-            m = Data._get_regex().match(modalias)
+            m = Parser._get_regex().match(modalias)
             if not m:
                 raise NodeParserException("Could not parse sysfs line")
 
             # Assign attributes from the match groups
+            data = {}
             for option in options:
                 val = m.group(option[1])
                 if not val:
                     raise NodeParserException("Could not match modalias for parser '{}'".format(subsystem_regex_str))
-                setattr(self, option[1], val)
+                data[option[1]] = val
+
+            return subsystem.create_node(data)
 
         @staticmethod
         def _get_regex():
@@ -114,29 +119,32 @@ def create_modalias_token_parser(subsystem, subsystem_regex_str, options):
             Gets or creates a regex to match the given modalias options
             """
 
-            if not hasattr(Data, 'regex'):
+            if not hasattr(Parser, 'regex'):
                 regex = '{}:'.format(subsystem_regex_str)
                 for option in options:
                     alias = option[0]
                     optname = option[1]
                     part_regex = "[0-9A-Z*]*" if len(option) <= 2 else option[2]
                     regex += '{}(?P<{}>{})'.format(alias, optname, part_regex)
-                Data.regex = re.compile(regex)
+                Parser.regex = re.compile(regex)
 
-            return Data.regex
+            return Parser.regex
 
-    return Data
+    return Parser()
 
 def create_modalias_split_parser(subsystem, subsystem_str, delim):
-    class Data:
-        def __init__(self, modalias):
+    class Parser:
+        @staticmethod
+        def parse(modalias):
             """
-            Extracts all fields from the modalias line by splitting on delim
+            Extracts all fields from the modalias line by splitting on delim.
+            The data is returned as a subsystem node, or list of subsystem nodes
             """
 
-            self.values = filter(None, modalias[len(subsystem_str) + 1:].split(delim))
+            values = filter(None, modalias[len(subsystem_str) + 1:].split(delim))
+            return [subsystem.create_node({'value': v}) for v in values]
 
-    return Data
+    return Parser()
 
 class ModaliasNode(SysfsNode):
     """
@@ -145,7 +153,7 @@ class ModaliasNode(SysfsNode):
     """
 
     node_type = 'modalias'
-    data_types = {
+    modalias_parsers = {
         'acpi': create_modalias_split_parser(Subsystem.acpi, 'acpi', ':'),
         'hdaudio': create_modalias_token_parser(Subsystem.hda, 'hdaudio', [
                 ('v', 'vendor'     ),
@@ -225,9 +233,9 @@ class ModaliasNode(SysfsNode):
         self.modalias_subsystem = modalias[:modalias.index(':')]
 
         # If a data_type exists, create it to parse the modalias
-        if self.modalias_subsystem not in self.data_types:
+        if self.modalias_subsystem not in self.modalias_parsers:
             raise NodeParserException("No parser for modalias subsystem '{}'".format(self.modalias_subsystem))
-        self.data = self.data_types[self.modalias_subsystem](modalias)
+        self.data = self.modalias_parsers[self.modalias_subsystem].parse(modalias)
 
     @classmethod
     def get_sysfs_files(cls):
