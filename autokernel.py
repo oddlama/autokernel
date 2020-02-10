@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import autokernel
-from autokernel import log, DeviceDetector, Kconfig, print_expr_tree
+from autokernel import log, NodeDetector, Kconfig, print_expr_tree
 
 import subprocess
 import os
@@ -37,7 +37,7 @@ def main():
     # Inspect the current system
     # TODO ensure that the running kernel can inspect all subsystems....
     # TODO what if we run on a minimal kernel?
-    detector = DeviceDetector()
+    detector = NodeDetector()
 
     kconfig.all_no_config()
     kconfig.write_config(filename="a")
