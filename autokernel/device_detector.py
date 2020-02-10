@@ -108,11 +108,16 @@ class ModaliasDevice:
 
     @classmethod
     def detect_devices(cls):
-        log.info("Parsing '{}'".format(cls.modalias_sysfs_path))
-        devices = [cls(modalias) for modalias in cls.read_modaliases()]
+        # Create list of devices from modaliases
+        devices = []
+        for modalias in cls.read_modaliases():
+            try:
+                devices.append(cls(modalias))
+            except Exception:
+                pass
 
         # Log all devices, if we are in verbose mode
-        log.info(" - found {} devices".format(len(devices)))
+        log.info("Found {:2d} devices in '{}'".format(len(devices), cls.modalias_sysfs_path))
         if log.verbose_output:
             for d in devices:
                 log.verbose(" - {}".format(d))
@@ -120,43 +125,9 @@ class ModaliasDevice:
         return devices
 
 
-class PciDevice(ModaliasDevice):
-    """
-    Specializes ModaliasDevice to parse PCI devices
-    """
-
-    modalias_sysfs_path = '/sys/bus/pci/devices/*/modalias'
-    modalias_options = [
-            ('v' , 'vendor'      ),
-            ('d' , 'device'      ),
-            ('sv', 'subvendor'   ),
-            ('sd', 'subdevice'   ),
-            ('bc', 'bus_class'   ),
-            ('sc', 'bus_subclass'),
-            ('i' , 'interface'   ),
-        ]
-
-class UsbDevice(ModaliasDevice):
-    """
-    Specializes ModaliasDevice to parse USB devices
-    """
-
-    modalias_sysfs_path = '/sys/bus/usb/devices/*/modalias'
-    modalias_options = [
-            ('v'  , 'device_vendor'     ),
-            ('p'  , 'device_product'    ),
-            ('d'  , 'bcddevice'         ),
-            ('dc' , 'device_class'      ),
-            ('dsc', 'device_subclass'   ),
-            ('dp' , 'device_protocol'   ),
-            ('ic' , 'interface_class'   ),
-            ('isc', 'interface_subclass'),
-            ('ip' , 'interface_protocol'),
-        ]
-
 class AcpiDevice(ModaliasDevice):
     """
-    Specializes ModaliasDevice to parse ACPI devices
+    Specializes ModaliasDevice to parse acpi devices
     """
 
     modalias_sysfs_path = '/sys/bus/acpi/devices/*/modalias'
@@ -182,6 +153,129 @@ class AcpiDevice(ModaliasDevice):
 
         return modaliases
 
+class HdaudioDevice(ModaliasDevice):
+    """
+    Specializes ModaliasDevice to parse hdaudio devices
+    """
+
+    modalias_sysfs_path = '/sys/bus/hdaudio/devices/*/modalias'
+    modalias_options = [
+            ('v', 'vendor'     ),
+            ('r', 'revision'   ),
+            ('a', 'api_version'),
+        ]
+
+class HidDevice(ModaliasDevice):
+    """
+    Specializes ModaliasDevice to parse hid devices
+    """
+
+    modalias_sysfs_path = '/sys/bus/hid/devices/*/modalias'
+    modalias_options = [
+            ('b', 'bus'        ),
+            ('v', 'vendor'     ),
+            ('p', 'product'    ),
+            ('d', 'driver_data'),
+        ]
+
+class PciDevice(ModaliasDevice):
+    """
+    Specializes ModaliasDevice to parse pci devices
+    """
+
+    modalias_sysfs_path = '/sys/bus/pci/devices/*/modalias'
+    modalias_options = [
+            ('v' , 'vendor'      ),
+            ('d' , 'device'      ),
+            ('sv', 'subvendor'   ),
+            ('sd', 'subdevice'   ),
+            ('bc', 'bus_class'   ),
+            ('sc', 'bus_subclass'),
+            ('i' , 'interface'   ),
+        ]
+
+class PcmciaDevice(ModaliasDevice):
+    """
+    Specializes ModaliasDevice to parse pcmcia devices
+    """
+
+    modalias_sysfs_path = '/sys/bus/pcmcia/devices/*/modalias'
+    modalias_options = [
+            ('m'  , 'manf_id'  ),
+            ('c'  , 'card_id'  ),
+            ('f'  , 'func_id'  ),
+            ('fn' , 'function' ),
+            ('pfn', 'device_no'),
+            ('pa' , 'prod_id_1'),
+            ('pb' , 'prod_id_2'),
+            ('pc' , 'prod_id_3'),
+            ('pd' , 'prod_id_4'),
+        ]
+
+class PlatformDevice(ModaliasDevice):
+    """
+    Specializes ModaliasDevice to parse platform devices
+    """
+
+    modalias_sysfs_path = '/sys/bus/platform/devices/*/modalias'
+    modalias_options = [
+            ('', 'name'),
+        ]
+
+class SdioDevice(ModaliasDevice):
+    """
+    Specializes ModaliasDevice to parse sdio devices
+    """
+
+    modalias_sysfs_path = '/sys/bus/sdio/devices/*/modalias'
+    modalias_options = [
+            ('c', 'class'),
+            ('v', 'vendor'),
+            ('d', 'device'),
+        ]
+
+class SerioDevice(ModaliasDevice):
+    """
+    Specializes ModaliasDevice to parse serio devices
+    """
+
+    modalias_sysfs_path = '/sys/bus/serio/devices/*/modalias'
+    modalias_options = [
+            ('ty' , 'type' ),
+            ('pr' , 'proto'),
+            ('id' , 'id'   ),
+            ('ex' , 'extra'),
+        ]
+
+class UsbDevice(ModaliasDevice):
+    """
+    Specializes ModaliasDevice to parse usb devices
+    """
+
+    modalias_sysfs_path = '/sys/bus/usb/devices/*/modalias'
+    modalias_options = [
+            ('v'  , 'device_vendor'     ),
+            ('p'  , 'device_product'    ),
+            ('d'  , 'bcddevice'         ),
+            ('dc' , 'device_class'      ),
+            ('dsc', 'device_subclass'   ),
+            ('dp' , 'device_protocol'   ),
+            ('ic' , 'interface_class'   ),
+            ('isc', 'interface_subclass'),
+            ('ip' , 'interface_protocol'),
+        ]
+
+class VirtioDevice(ModaliasDevice):
+    """
+    Specializes ModaliasDevice to parse virtio devices
+    """
+
+    modalias_sysfs_path = '/sys/bus/virtio/devices/*/modalias'
+    modalias_options = [
+            ('v', 'vendor'),
+            ('d', 'device'),
+        ]
+
 class DeviceDetector:
     """
     This detector parses information in the kernel's sysfs to detect
@@ -195,13 +289,22 @@ class DeviceDetector:
         different buses on the sysfs.
         """
 
-        log.info("Inspecting sysfs to find devices")
+        log.info("Parsing modalias information in sysfs")
 
         # A list with all device classes
         device_classes = [
-            PciDevice,
-            UsbDevice,
             AcpiDevice,
+            HdaudioDevice,
+            HidDevice,
+            PciDevice,
+            PcmciaDevice,
+            PlatformDevice,
+            SdioDevice,
+            SerioDevice,
+            UsbDevice,
+            VirtioDevice,
+            # TODO PnpDevice (parse id file, no special regex)
+            # TODO I2cDevice (parse ...)
         ]
 
         # For each device class, detect devices in sysfs.
