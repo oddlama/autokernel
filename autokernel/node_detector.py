@@ -4,6 +4,9 @@ import re
 import glob
 import subprocess
 
+class NodeParserException(Exception):
+    pass
+
 class Node:
     """
     A base class used for all nodes
@@ -14,7 +17,7 @@ class Node:
         """
         Detects and returns a list of all nodes on the system.
         """
-        raise Exception("missing implementation for detect_nodes() on derived class '{}'".format(cls.__name__))
+        raise NodeParserException("missing implementation for detect_nodes() on derived class '{}'".format(cls.__name__))
 
     @classmethod
     def log_nodes(cls, nodes):
@@ -30,84 +33,15 @@ class SysfsNode(Node):
     by parsing a sysfs file.
     """
 
-    def __init__(self, sysfs_line):
-        """
-        Parses the given sysfs line and matches it against the regex to extract information
-        """
-
-        # Create regex to extract information
-        options = self._get_options()
-        regex = self._create_regex(options)
-
-        # Match the sysfs line against the regex
-        matches = regex.match(sysfs_line)
-        if not matches:
-            raise Exception("Could not parse sysfs line")
-
-        # Assign attributes from the match groups
-        for alias, option in options:
-            val = matches.group(option)
-            if not val:
-                raise Exception("Sysfs line is missing information for this parser")
-            setattr(self, option, val)
-
-    def __str__(self):
-        """
-        Returns a string representation of this object
-        """
-
-        name = "{}{{".format(self.__class__.__name__)
-        name += ', '.join(['{}={}'.format(option, getattr(self, option)) \
-                    for alias, option in self._get_options()])
-        name += '}'
-        return name
-
     @classmethod
-    def _get_options(cls):
+    def get_sysfs_files(cls):
         """
-        Returns the options of the derived class
-        """
-        return cls.options
-
-    @classmethod
-    def create_regex(cls, options):
-        raise Exception("missing implementation for create_regex() on derived class '{}'".format(cls.__name__))
-
-    @classmethod
-    def _create_regex(cls, options):
-        """
-        Creates (or retrieves) a compiled regex for the classes' options
-        """
-        # If we have previously compiled a regex, return it
-        if hasattr(cls, 'regex'):
-            return cls.regex
-
-        # Otherwise create a new regex and save it in the derived class
-        cls.regex = cls.create_regex(options)
-        return cls.regex
-
-    @classmethod
-    def _get_sysfs_path(cls):
-        """
-        Returns a globbable path to all files in the kernel sysfs for the node type.
-        If the property is not set, it returns cls.default_sysfs_path()
+        Returns all files in the sysfs to parse.
         """
         if hasattr(cls, 'sysfs_path'):
-            return cls.sysfs_path
+            return glob.glob(cls.sysfs_path)
 
-        return cls.default_sysfs_path()
-
-    @classmethod
-    def default_sysfs_path(cls):
-        raise Exception("missing implementation for default_sysfs_path() on derived class '{}'".format(cls.__name__))
-
-    @staticmethod
-    def preprocess_sysfs_lines(sysfs_lines):
-        """
-        Allows a derived class to modify all lines before parsing, by
-        overriding this method
-        """
-        return sysfs_lines
+        raise Exception("Missing sysfs_path or get_sysfs_files() implementation on derived class {}".format(cls.__name__))
 
     @classmethod
     def read_sysfs_lines(cls):
@@ -116,19 +50,19 @@ class SysfsNode(Node):
         """
 
         lines = set()
-        for file_name in glob.glob(cls._get_sysfs_path()):
+        for file_name in cls.get_sysfs_files():
             # Open sysfs file
             with open(file_name, 'r', encoding='utf-8') as file:
                 # Iterate over lines
-                for line in file.readlines():
+                for line in file:
                     # Strip trailing whitespace
                     line = line.strip()
                     if line:
-                        # Only add if line not empty
+                        # Only add if line is not empty
                         lines.add(line)
 
         # Return lines, after giving derived classes a chance to modify them
-        return cls.preprocess_sysfs_lines(lines)
+        return lines
 
     @classmethod
     def detect_nodes(cls):
@@ -137,11 +71,73 @@ class SysfsNode(Node):
         for sysfs_line in cls.read_sysfs_lines():
             try:
                 nodes.append(cls(sysfs_line))
-            except Exception:
-                pass
+            except NodeParserException as e:
+                log.verbose(repr(e))
 
         cls.log_nodes(nodes)
         return nodes
+
+def create_modalias_token_parser(subsystem_regex_str, options):
+    class Data:
+        def __init__(self, modalias):
+            """
+            Matches the modalias against the given options and extracts the data.
+            """
+
+            # Match the sysfs line against the regex
+            m = Data._get_regex().match(modalias)
+            if not m:
+                raise NodeParserException("Could not parse sysfs line")
+
+            # Assign attributes from the match groups
+            for alias, option in options:
+                val = m.group(option)
+                if not val:
+                    raise NodeParserException("Could not match modalias for parser '{}'".format(subsystem_regex_str))
+                setattr(self, option, val)
+
+        def __str__(self):
+            """
+            Returns a string representation of this object
+            """
+            str = 'Data{'
+            str += ', '.join(['{}={}'.format(option, getattr(self, option)) \
+                        for alias, option in options])
+            str += '}'
+            return str
+
+        @staticmethod
+        def _get_regex():
+            """
+            Gets or creates a regex to match the given modalias options
+            """
+
+            if not hasattr(Data, 'regex'):
+                regex = '{}:'.format(subsystem_regex_str)
+                for alias, option in options:
+                    regex += '{}(?P<{}>[0-9A-Z*]*)'.format(alias, option)
+                Data.regex = re.compile(regex)
+
+            return Data.regex
+
+    return Data
+
+def create_modalias_split_parser(subsystem_str, delim):
+    class Data:
+        def __init__(self, modalias):
+            """
+            Extracts all fields from the modalias line by splitting on delim
+            """
+
+            self.values = filter(None, modalias[len(subsystem_str) + 1:].split(delim))
+
+        def __str__(self):
+            """
+            Returns a string representation of this object
+            """
+            return 'Data{{values=[{}]}}'.format(', '.join(self.values))
+
+    return Data
 
 class ModaliasNode(SysfsNode):
     """
@@ -150,23 +146,96 @@ class ModaliasNode(SysfsNode):
     """
 
     node_type = 'modalias'
+    data_types = {
+        'acpi': create_modalias_split_parser('acpi', ':'),
+        'hdaudio': create_modalias_token_parser('hdaudio', [
+                ('v', 'vendor'     ),
+                ('r', 'revision'   ),
+                ('a', 'api_version'),
+            ]),
+        'hid': create_modalias_token_parser('hid', [
+                ('b', 'bus'        ),
+                ('v', 'vendor'     ),
+                ('p', 'product'    ),
+                ('d', 'driver_data'),
+            ]),
+        'pci': create_modalias_token_parser('pci', [
+                ('v' , 'vendor'      ),
+                ('d' , 'device'      ),
+                ('sv', 'subvendor'   ),
+                ('sd', 'subdevice'   ),
+                ('bc', 'bus_class'   ),
+                ('sc', 'bus_subclass'),
+                ('i' , 'interface'   ),
+            ]),
+        'pcmcia': create_modalias_token_parser('pcmcia', [
+                ('m'  , 'manf_id'  ),
+                ('c'  , 'card_id'  ),
+                ('f'  , 'func_id'  ),
+                ('fn' , 'function' ),
+                ('pfn', 'device_no'),
+                ('pa' , 'prod_id_1'),
+                ('pb' , 'prod_id_2'),
+                ('pc' , 'prod_id_3'),
+                ('pd' , 'prod_id_4'),
+            ]),
+        'platform': create_modalias_token_parser('platform', [
+                ('', 'name'), # Empty alias '' is used to match whole rest of line
+            ]),
+        'sdio': create_modalias_token_parser('sdio', [
+                ('c', 'class' ),
+                ('v', 'vendor'),
+                ('d', 'device'),
+            ]),
+        'serio': create_modalias_token_parser('serio', [
+                ('ty' , 'type' ),
+                ('pr' , 'proto'),
+                ('id' , 'id'   ),
+                ('ex' , 'extra'),
+            ]),
+        'usb': create_modalias_token_parser('usb', [
+                ('v'  , 'device_vendor'     ),
+                ('p'  , 'device_product'    ),
+                ('d'  , 'bcddevice'         ),
+                ('dc' , 'device_class'      ),
+                ('dsc', 'device_subclass'   ),
+                ('dp' , 'device_protocol'   ),
+                ('ic' , 'interface_class'   ),
+                ('isc', 'interface_subclass'),
+                ('ip' , 'interface_protocol'),
+            ]),
+        'virtio': create_modalias_token_parser('virtio', [
+                ('v', 'vendor'),
+                ('d', 'device'),
+            ]),
+        }
+
+    def __init__(self, modalias):
+        """
+        Parses the given modalias
+        """
+
+        # Extract subsystem from modalias
+        self.subsystem = modalias[:modalias.index(':')]
+
+        # If a data_type exists, create it to parse the modalias
+        if self.subsystem not in self.data_types:
+            raise NodeParserException("No parser for modalias subsystem '{}'".format(self.subsystem))
+        self.data = self.data_types[self.subsystem](modalias)
+
+    def __str__(self):
+        """
+        Returns a string representation of this object
+        """
+        return 'ModaliasNode{{subsystem={}, data={}}}'.format(self.subsystem, self.data)
 
     @classmethod
-    def default_sysfs_path(cls):
+    def get_sysfs_files(cls):
         """
-        Get the default sysfs path for derived nodes
+        Finds and returns all modalias files in /sys
         """
-        return '/sys/bus/{}/devices/*/modalias'.format(cls.node_type)
-
-    @classmethod
-    def create_regex(cls, options):
-        """
-        Creates a regex to match the given modalias options
-        """
-        regex = '([0-9a-z]*):'
-        for alias, option in options:
-            regex += '{}(?P<{}>[0-9A-Z*]*)'.format(alias, option)
-        return re.compile(regex)
+        print("TODO bAaaaaaaaaaaaaaaaad")
+        return subprocess.run(['find', '/sys', '-type', 'f', '-name', 'modalias'], stdout=subprocess.PIPE).stdout.decode('utf-8').strip().split('\n')
 
 class AcpiDevice(ModaliasNode):
     """
@@ -196,172 +265,45 @@ class AcpiDevice(ModaliasNode):
 
         return modaliases
 
-class HdaudioDevice(ModaliasNode):
-    """
-    Specializes ModaliasNode to parse hdaudio devices
-    """
-
-    node_type = 'hdaudio'
-    options = [
-            ('v', 'vendor'     ),
-            ('r', 'revision'   ),
-            ('a', 'api_version'),
-        ]
-
-class HidDevice(ModaliasNode):
-    """
-    Specializes ModaliasNode to parse hid devices
-    """
-
-    node_type = 'hid'
-    options = [
-            ('b', 'bus'        ),
-            ('v', 'vendor'     ),
-            ('p', 'product'    ),
-            ('d', 'driver_data'),
-        ]
-
-class PciDevice(ModaliasNode):
-    """
-    Specializes ModaliasNode to parse pci devices
-    """
-
-    node_type = 'pci'
-    options = [
-            ('v' , 'vendor'      ),
-            ('d' , 'device'      ),
-            ('sv', 'subvendor'   ),
-            ('sd', 'subdevice'   ),
-            ('bc', 'bus_class'   ),
-            ('sc', 'bus_subclass'),
-            ('i' , 'interface'   ),
-        ]
-
-class PcmciaDevice(ModaliasNode):
-    """
-    Specializes ModaliasNode to parse pcmcia devices
-    """
-
-    node_type = 'pcmcia'
-    options = [
-            ('m'  , 'manf_id'  ),
-            ('c'  , 'card_id'  ),
-            ('f'  , 'func_id'  ),
-            ('fn' , 'function' ),
-            ('pfn', 'device_no'),
-            ('pa' , 'prod_id_1'),
-            ('pb' , 'prod_id_2'),
-            ('pc' , 'prod_id_3'),
-            ('pd' , 'prod_id_4'),
-        ]
-
-class PlatformDevice(ModaliasNode):
-    """
-    Specializes ModaliasNode to parse platform devices
-    """
-
-    node_type = 'platform'
-    options = [
-            ('', 'name'),
-        ]
-
-class SdioDevice(ModaliasNode):
-    """
-    Specializes ModaliasNode to parse sdio devices
-    """
-
-    node_type = 'sdio'
-    options = [
-            ('c', 'class'),
-            ('v', 'vendor'),
-            ('d', 'device'),
-        ]
-
-class SerioDevice(ModaliasNode):
-    """
-    Specializes ModaliasNode to parse serio devices
-    """
-
-    node_type = 'serio'
-    options = [
-            ('ty' , 'type' ),
-            ('pr' , 'proto'),
-            ('id' , 'id'   ),
-            ('ex' , 'extra'),
-        ]
-
-class UsbDevice(ModaliasNode):
-    """
-    Specializes ModaliasNode to parse usb devices
-    """
-
-    node_type = 'usb'
-    options = [
-            ('v'  , 'device_vendor'     ),
-            ('p'  , 'device_product'    ),
-            ('d'  , 'bcddevice'         ),
-            ('dc' , 'device_class'      ),
-            ('dsc', 'device_subclass'   ),
-            ('dp' , 'device_protocol'   ),
-            ('ic' , 'interface_class'   ),
-            ('isc', 'interface_subclass'),
-            ('ip' , 'interface_protocol'),
-        ]
-
-class VirtioDevice(ModaliasNode):
-    """
-    Specializes ModaliasNode to parse virtio devices
-    """
-
-    node_type = 'virtio'
-    options = [
-            ('v', 'vendor'),
-            ('d', 'device'),
-        ]
-
-class PnpDevice(SysfsNode):
+class PnpNode(SysfsNode):
     """
     Specializes SysfsNode to parse pnp devices
     """
 
     node_type = 'pnp'
     sysfs_path = '/sys/bus/pnp/devices/*/id'
-    options = [
-            ('n', 'name'),
-        ]
 
-    @classmethod
-    def create_regex(cls, options):
+    def __init__(self, sysfs_line):
         """
-        Creates a regex to match the given pnp id
+        Initialize pnp node
         """
-        regex = ''
-        return re.compile('')
-        for alias, _ in options:
-            regex += '(?P<{}>.*)'.format(alias)
-        return re.compile(regex)
+        self.id = sysfs_line
 
-class I2cDevice(SysfsNode):
+    def __str__(self):
+        """
+        Returns a string representation of this object
+        """
+        return "PnpNode{{id='{}'}}".format(self.id)
+
+class I2cNode(SysfsNode):
     """
     Specializes SysfsNode to parse i2c devices
     """
 
     node_type = 'i2c'
     sysfs_path = '/sys/bus/i2c/devices/*/name'
-    options = [
-            ('n', 'name'),
-        ]
 
-    @classmethod
-    def create_regex(cls, options):
+    def __init__(self, sysfs_line):
         """
-        Creates a regex to match the given i2c name
+        Initialize i2c node
         """
-        regex = ''
-        return re.compile('')
-        for alias, _ in options:
-            regex += '(?P<{}>.*)'.format(alias)
-        return re.compile(regex)
+        self.name = sysfs_line
+
+    def __str__(self):
+        """
+        Returns a string representation of this object
+        """
+        return "I2cNode{{name='{}'}}".format(self.name)
 
 class FsTypeNode(Node):
     """
@@ -371,16 +313,14 @@ class FsTypeNode(Node):
 
     def __init__(self, fstype):
         """
-        Initialize a fstype node
+        Initialize fstype node
         """
-
         self.fstype = fstype
 
     def __str__(self):
         """
         Returns a string representation of this object
         """
-
         return 'FsTypeNode{{fstype={}}}'.format(self.fstype)
 
     @classmethod
@@ -392,8 +332,8 @@ class FsTypeNode(Node):
         for fstype in set(fstypes):
             try:
                 nodes.append(FsTypeNode(fstype))
-            except Exception:
-                pass
+            except NodeParserException as e:
+                log.verbose(repr(e))
 
         cls.log_nodes(nodes)
         return nodes
@@ -415,18 +355,9 @@ class NodeDetector:
 
         # A list with all device classes
         node_classes = [
-            AcpiDevice,
-            HdaudioDevice,
-            HidDevice,
-            PciDevice,
-            PcmciaDevice,
-            PlatformDevice,
-            SdioDevice,
-            SerioDevice,
-            UsbDevice,
-            VirtioDevice,
-            PnpDevice,
-            I2cDevice,
+            ModaliasNode,
+            PnpNode,
+            I2cNode,
             FsTypeNode,
         ]
 

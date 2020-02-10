@@ -10,36 +10,34 @@ class Entry:
         self.config_options = config_options
         self.source = source
 
-    @staticmethod
-    def from(subsystem, parameters, config_options, source):
-        'acpi':
-        'fs':
-        'hda':
-        'hid':
-        'i2c':
-        'i2c-snd':
-        'input':
-        'kver':
-        'module':
-        'of':
-        'parisc':
-        'pci':
-        'pci_epf':
-        'pcmcia':
-        'platform':
-        'pnp':
-        'rpmsg':
-        'sdio':
-        'sdw':
-        'serio':
-        'slim':
-        'spi':
-        'ssb':
-        'tc':
-        'usb':
-        'vio':
-        'virtio':
-        'zorro':
+        #'acpi':
+        #'fs':
+        #'hda':
+        #'hid':
+        #'i2c':
+        #'i2c-snd':
+        #'input':
+        #'kver':
+        #'module':
+        #'of':
+        #'parisc':
+        #'pci':
+        #'pci_epf':
+        #'pcmcia':
+        #'platform':
+        #'pnp':
+        #'rpmsg':
+        #'sdio':
+        #'sdw':
+        #'serio':
+        #'slim':
+        #'spi':
+        #'ssb':
+        #'tc':
+        #'usb':
+        #'vio':
+        #'virtio':
+        #'zorro':
 
 
 class Lkddb:
@@ -58,7 +56,6 @@ class Lkddb:
         """
         self._fetch_db()
         self._load_db()
-        self._parse_db()
 
     def _fetch_db(self):
         """
@@ -101,5 +98,11 @@ class Lkddb:
         config_options = m.group('config_options').split(' ')
         source = m.group('source')
 
-        self.entries.append(Entry.from(subsystem, parameters, config_options, source))
+        entry_for_subsystem = {}
+        if subsystem not in entry_for_subsystem:
+            # Skip lines for which we do not have a entry class
+            return False
+
+        entry_cls = entry_for_subsystem[subsystem]
+        self.entries.append(entry_cls(subsystem, parameters, config_options, source))
         return True
