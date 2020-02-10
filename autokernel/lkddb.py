@@ -6,69 +6,12 @@ import re
 import shlex
 import urllib.request
 
-class EntryParseException(Exception):
+
+class EntryParsingException(Exception):
     pass
 
-class Entry:
-    wildcard_regex = re.compile('^\.+$')
-
-    def __init__(self, arguments, config_options, source):
-        self.arguments = self._parse_arguments(arguments)
-        self.config_options = config_options
-        self.source = source
-
-    @classmethod
-    def _get_parameters(cls):
-        return cls.parameters
-
-    def _parse_arguments(self, arguments):
-        # Split on space while preserving quoted strings
-        arguments = shlex.split(arguments)
-        # Replace wildcards with wildcard tokens
-        arguments = [wildcard_token if Entry.wildcard_regex.match(p) else p for p in arguments]
-
-        # Get the parameter names from the derived class
-        parameters = self._get_parameters()
-        # Ensure the amount of arguments is equal to the required amount
-        if len(arguments) != len(parameters):
-            raise EntryParseException("{} requires {} parameters but {} were given".format(self.__class__.__name__, len(parameters), len(arguments)))
-
-    def get_config_options(self):
-        return self.config_options
-
-    def get_source(self):
-        return self.source
-
-class AcpiEntry(Entry):
-    parameters = ['name']
-
-class PciEntry(Entry):
-    parameters = ['vendor', 'device', 'subvendor', 'subdevice', 'class_mask']
-
-entry_classes = {
-       'acpi':      AcpiEntry,
-       #'fs':        FsEntry,
-       #'hda':       HdaEntry,
-       #'hid':       HidEntry,
-       #'i2c':       I2cEntry,
-       #'i2c-snd':   I2cEntry,
-       #'input':     InputEntry,
-       'pci':       PciEntry,
-       #'pcmcia':    PcmciaEntry,
-       #'platform':  PlatformEntry,
-       #'pnp':       PnpEntry,
-       #'sdio':      SdioEntry,
-       #'serio':     SerioEntry,
-       #'spi':       SpiEntry,
-       #'usb':       UsbEntry,
-       #'virtio':    VirtioEntry,
-    }
-
-def get_entry_class(subsystem):
-    """
-    Returns the entry class for a given subsystem
-    """
-    return entry_classes.get(subsystem)
+class UnkownLkddbSubsystemException(Exception):
+    pass
 
 class Lkddb:
     """
@@ -78,7 +21,27 @@ class Lkddb:
     lkddb_url = 'https://cateee.net/sources/lkddb/lkddb.list.bz2'
     # TODO cache file?
     lkddb_file = '/tmp/lkddb.list.bz2'
-    lkddb_line_regex = re.compile('^(?P<subsystem>[a-zA-Z0-9_-]*) (?P<parameters>.*) : (?P<config_options>[^:]*) : (?P<source>[^:]*)$')
+    lkddb_line_regex = re.compile('^(?P<lkddb_subsystem>[a-zA-Z0-9_-]*) (?P<arguments>.*) : (?P<config_options>[^:]*) : (?P<source>[^:]*)$')
+
+    wildcard_regex = re.compile('^\.+$')
+    entry_types = {
+           'acpi':      (Subsystem.acpi, ['name']),
+           #'fs':        [],
+           #'hda':       [],
+           #'hid':       [],
+           #'i2c':       [],
+           #'i2c-snd':   [],
+           #'input':     [],
+           'pci':       (Subsystem.pci, ['vendor', 'device', 'subvendor', 'subdevice', 'class_mask']),
+           #'pcmcia':    [],
+           #'platform':  [],
+           #'pnp':       [],
+           #'sdio':      [],
+           #'serio':     [],
+           #'spi':       [],
+           #'usb':       [],
+           #'virtio':    [],
+        }
 
     def __init__(self):
         """
@@ -87,17 +50,17 @@ class Lkddb:
         self._fetch_db()
         self._load_db()
 
-    def find_options(self, subsystem, data):
+    def find_options(self, subsystem, subsystem_node):
         """
         Tries to match the given data dictionary to a database entry in the same subsystem.
-        Returns the list of kernel options for all matched entries, or an empty list if
+        Returns the list of kernel options for all matched nodes, or an empty list if
         no match could be found.
         """
 
-        if subsystem not in self.entries:
+        if subsystem not in self.nodes:
             return []
 
-        #TODO for e in self.entries[subsystem]:
+        #TODO for e in self.nodes[subsystem]:
         #TODO     if e.match(data):
 
     def _fetch_db(self):
@@ -115,7 +78,7 @@ class Lkddb:
         """
 
         log.info("Parsing lkddb database")
-        self.entries = {}
+        self.nodes = {}
 
         valid_lines = 0
         with bz2.open(self.lkddb_file, 'r') as f:
@@ -133,15 +96,26 @@ class Lkddb:
             # Skip comments
             return False
 
+        try:
+            subsystem, data = self._parse_entry(line, line_nr)
+            self._add_node(subsystem, subsystem.create_node(data))
+            return True
+        except EntryParsingException as e:
+            log.warn('Could not parse entry at lkddb:{}: {}'.format(line_nr, str(e)))
+            return False
+        except UnkownLkddbSubsystemException:
+            pass
+
+    def _parse_entry(self, line, line_nr):
         # Match regex
         m = Lkddb.lkddb_line_regex.match(line)
         if not m:
             # Skip lines that could not be matched
-            return False
+            raise EntryParsingException("Regex mismatch")
 
-        # Split information
-        subsystem = m.group('subsystem')
-        parameters = m.group('parameters')
+        # Split line information
+        lkddb_subsystem = m.group('lkddb_subsystem')
+        arguments = m.group('arguments')
         config_options = filter(None, m.group('config_options').split(' '))
         source = m.group('source')
 
@@ -149,33 +123,41 @@ class Lkddb:
         for c in config_options:
             if not c.startswith('CONFIG_'):
                 # Skip entries with invalid options
-                return False
+                raise EntryParsingException("All config options must start with 'CONFIG_', but '{}' did not.".format(c))
 
         # ... and remove this CONFIG_ prefix
         config_options = [c[len('CONFIG_'):] for c in config_options]
 
-        entry_cls = get_entry_class(subsystem)
-        if not entry_cls:
-            # Skip lines with an unkown subsystem
-            return False
+        # Split arguments on space while preserving quoted strings
+        arguments = shlex.split(arguments)
+        # Replace wildcards with wildcard tokens
+        arguments = [wildcard_token if Lkddb.wildcard_regex.match(p) else p for p in arguments]
 
-        try:
-            entry = entry_cls(parameters, config_options, source)
-        except EntryParseException as e:
-            log.warn('Could not parse entry at lkddb:{}: {}'.format(line_nr, repr(e)))
-            return False
+        # Get the subsystem and parameters for the entry
+        if lkddb_subsystem not in Lkddb.entry_types:
+            raise UnkownLkddbSubsystemException("'{}'".format(lkddb_subsystem))
 
-        self._add_entry(subsystem, entry)
-        return True
+        subsystem, entry_parameters = Lkddb.entry_types[lkddb_subsystem]
 
-    def _add_entry(self, subsystem, entry):
+        # Ensure the amount of arguments is equal to the required amount
+        if len(arguments) != len(entry_parameters):
+            raise EntryParsingException("{} requires {} parameters but {} were given".format(self.__class__.__name__, len(entry_parameters), len(arguments)))
+
+        # Create data dictionary and insert all arguments
+        data = {}
+        for i, parameter in enumerate(entry_parameters):
+            data[parameter] = arguments[i]
+
+        return subsystem, data
+
+    def _add_node(self, subsystem, node):
         """
-        Adds the given entry to all stored entries (indexed by subsystem)
+        Adds the given node to all stored nodes (indexed by subsystem)
         """
         # Add empty list in dictionary if key doesn't exist
-        if subsystem not in self.entries:
-            self.entries[subsystem] = []
+        if subsystem not in self.nodes:
+            self.nodes[subsystem] = []
 
-        # Append entry to list
-        self.entries[subsystem].append(entry)
+        # Append node to list
+        self.nodes[subsystem].append(node)
 
