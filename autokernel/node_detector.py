@@ -91,19 +91,19 @@ def create_modalias_token_parser(subsystem_regex_str, options):
                 raise NodeParserException("Could not parse sysfs line")
 
             # Assign attributes from the match groups
-            for alias, option in options:
-                val = m.group(option)
+            for option in options:
+                val = m.group(option[1])
                 if not val:
                     raise NodeParserException("Could not match modalias for parser '{}'".format(subsystem_regex_str))
-                setattr(self, option, val)
+                setattr(self, option[1], val)
 
         def __str__(self):
             """
             Returns a string representation of this object
             """
             str = 'Data{'
-            str += ', '.join(['{}={}'.format(option, getattr(self, option)) \
-                        for alias, option in options])
+            str += ', '.join(['{}={}'.format(option[1], getattr(self, option[1])) \
+                        for option in options])
             str += '}'
             return str
 
@@ -115,8 +115,11 @@ def create_modalias_token_parser(subsystem_regex_str, options):
 
             if not hasattr(Data, 'regex'):
                 regex = '{}:'.format(subsystem_regex_str)
-                for alias, option in options:
-                    regex += '{}(?P<{}>[0-9A-Z*]*)'.format(alias, option)
+                for option in options:
+                    alias = option[0]
+                    optname = option[1]
+                    part_regex = "[0-9A-Z*]*" if len(option) <= 2 else option[2]
+                    regex += '{}(?P<{}>{})'.format(alias, optname, part_regex)
                 Data.regex = re.compile(regex)
 
             return Data.regex
@@ -159,6 +162,13 @@ class ModaliasNode(SysfsNode):
                 ('v', 'vendor'     ),
                 ('p', 'product'    ),
                 ('d', 'driver_data'),
+            ]),
+        'input': create_modalias_token_parser('input', [
+                ('b',  'bustype'),
+                ('v',  'vendor' ),
+                ('p',  'product'),
+                ('e',  'version'),
+                ('-e', 'list',   '.*'),
             ]),
         'pci': create_modalias_token_parser('pci', [
                 ('v' , 'vendor'      ),
