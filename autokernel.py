@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import autokernel
-from autokernel import log, NodeDetector, Kconfig, print_expr_tree
+from autokernel import log, Lkddb, NodeDetector, Kconfig, print_expr_tree
 
 import subprocess
 import os
@@ -28,27 +28,38 @@ def load_environment_variables(dir):
     os.environ["KERNELVERSION"] = subprocess.run(['make', 'kernelversion'], cwd=dir, stdout=subprocess.PIPE).stdout.decode('utf-8').strip().split('\n')[0]
     os.environ["CC_VERSION_TEXT"] = subprocess.run(['gcc', '--version'], stdout=subprocess.PIPE).stdout.decode('utf-8').strip().split('\n')[0]
 
-def main():
+def detect_options():
+    # TODO ensure that the running kernel can inspect all subsystems....
+    # TODO what if we run on a minimal kernel?
+
+    # Load the configuration database
+    config_db = Lkddb()
+    # Inspect the current system
+    detector = NodeDetector()
+
+def create_config():
     # Load kconfig file
     kernel_dir = "/usr/src/linux"
     load_environment_variables(dir=kernel_dir)
     kconfig = Kconfig(dir=kernel_dir)
 
-    # Inspect the current system
-    # TODO ensure that the running kernel can inspect all subsystems....
-    # TODO what if we run on a minimal kernel?
-    detector = NodeDetector()
-
+    # Begin with allnoconfig
     kconfig.all_no_config()
+
+    # Load configuration changes from config_dir
+
     kconfig.write_config(filename="a")
 
-    # TODO download "https://cateee.net/sources/lkddb/lkddb.list"
     sym = kconfig.get_symbol("DVB_USB_RTL28XXU")
     # TODO make autokernel --enable [CONFIG_]SOME_CONF,
     # which tells you which were enabled why, and asks on optionals
     kconfig.set_sym_with_deps(sym, autokernel.MOD)
 
     kconfig.write_config(filename="b")
+
+def main():
+    # TODO argparser
+    detect_options()
 
 if __name__ == '__main__':
     main()

@@ -149,6 +149,8 @@ class ModaliasNode(SysfsNode):
     by parsing a modalias file.
     """
 
+    node_type = 'modalias'
+
     @classmethod
     def default_sysfs_path(cls):
         """

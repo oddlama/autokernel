@@ -1,1 +1,2 @@
 kconfiglib
+progressbar2

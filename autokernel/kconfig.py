@@ -92,9 +92,16 @@ class Kconfig:
         Resets the current configuration to the equivalent of calling
         `make allnoconfig` in the kernel source tree.
         """
-        # TODO
-        print("TODO all_no_config")
-        pass
+
+        log.info("Loading allnoconfig")
+
+        # Allnoconfig from kconfiglib/allnoconfig.py
+        warn_save = kconf.warn
+        kconf.warn = False
+        for sym in kconf.unique_defined_syms:
+            sym.set_value(YES if sym.is_allnoconfig_y else NO)
+        kconf.warn = warn_save
+        kconf.load_allconfig("allno.config")
 
     def set_sym_with_deps(self, sym, target_value):
         """
