@@ -1,4 +1,5 @@
 from . import log
+from .subsystem import Subsystem
 
 import re
 import glob
@@ -10,7 +11,9 @@ class NodeParserException(Exception):
 
 class Node:
     """
-    A base class used for all nodes
+    A base class used for all nodes. Must expose a self.data member which is either an instance
+    of the correct node type for the used subsystem (See Subsystem.create_node()), or a list of
+    said type (to represent multiple nodes).
     """
 
     @classmethod
@@ -27,6 +30,14 @@ class Node:
         if log.verbose_output:
             for n in nodes:
                 log.verbose(" - {}".format(n))
+
+    def __str__(self):
+        """
+        Returns a string representation of this object
+        """
+        if type(self.data) is list:
+            return '[' + ', '.join(self.data) + ']'
+        return str(self.data)
 
 class SysfsNode(Node):
     """
@@ -78,7 +89,7 @@ class SysfsNode(Node):
         cls.log_nodes(nodes)
         return nodes
 
-def create_modalias_token_parser(subsystem_regex_str, options):
+def create_modalias_token_parser(subsystem, subsystem_regex_str, options):
     class Data:
         def __init__(self, modalias):
             """
@@ -96,16 +107,6 @@ def create_modalias_token_parser(subsystem_regex_str, options):
                 if not val:
                     raise NodeParserException("Could not match modalias for parser '{}'".format(subsystem_regex_str))
                 setattr(self, option[1], val)
-
-        def __str__(self):
-            """
-            Returns a string representation of this object
-            """
-            str = 'Data{'
-            str += ', '.join(['{}={}'.format(option[1], getattr(self, option[1])) \
-                        for option in options])
-            str += '}'
-            return str
 
         @staticmethod
         def _get_regex():
@@ -126,7 +127,7 @@ def create_modalias_token_parser(subsystem_regex_str, options):
 
     return Data
 
-def create_modalias_split_parser(subsystem_str, delim):
+def create_modalias_split_parser(subsystem, subsystem_str, delim):
     class Data:
         def __init__(self, modalias):
             """
@@ -134,12 +135,6 @@ def create_modalias_split_parser(subsystem_str, delim):
             """
 
             self.values = filter(None, modalias[len(subsystem_str) + 1:].split(delim))
-
-        def __str__(self):
-            """
-            Returns a string representation of this object
-            """
-            return 'Data{{values=[{}]}}'.format(', '.join(self.values))
 
     return Data
 
@@ -151,26 +146,26 @@ class ModaliasNode(SysfsNode):
 
     node_type = 'modalias'
     data_types = {
-        'acpi': create_modalias_split_parser('acpi', ':'),
-        'hdaudio': create_modalias_token_parser('hdaudio', [
+        'acpi': create_modalias_split_parser(Subsystem.acpi, 'acpi', ':'),
+        'hdaudio': create_modalias_token_parser(Subsystem.hda, 'hdaudio', [
                 ('v', 'vendor'     ),
                 ('r', 'revision'   ),
                 ('a', 'api_version'),
             ]),
-        'hid': create_modalias_token_parser('hid', [
+        'hid': create_modalias_token_parser(Subsystem.hid, 'hid', [
                 ('b', 'bus'        ),
                 ('v', 'vendor'     ),
                 ('p', 'product'    ),
                 ('d', 'driver_data'),
             ]),
-        'input': create_modalias_token_parser('input', [
+        'input': create_modalias_token_parser(Subsystem.input, 'input', [
                 ('b',  'bustype'),
                 ('v',  'vendor' ),
                 ('p',  'product'),
                 ('e',  'version'),
                 ('-e', 'list',   '.*'),
             ]),
-        'pci': create_modalias_token_parser('pci', [
+        'pci': create_modalias_token_parser(Subsystem.pci, 'pci', [
                 ('v' , 'vendor'      ),
                 ('d' , 'device'      ),
                 ('sv', 'subvendor'   ),
@@ -179,7 +174,7 @@ class ModaliasNode(SysfsNode):
                 ('sc', 'bus_subclass'),
                 ('i' , 'interface'   ),
             ]),
-        'pcmcia': create_modalias_token_parser('pcmcia', [
+        'pcmcia': create_modalias_token_parser(Subsystem.pcmcia, 'pcmcia', [
                 ('m'  , 'manf_id'  ),
                 ('c'  , 'card_id'  ),
                 ('f'  , 'func_id'  ),
@@ -190,21 +185,21 @@ class ModaliasNode(SysfsNode):
                 ('pc' , 'prod_id_3'),
                 ('pd' , 'prod_id_4'),
             ]),
-        'platform': create_modalias_token_parser('platform', [
+        'platform': create_modalias_token_parser(Subsystem.platform, 'platform', [
                 ('', 'name'), # Empty alias '' is used to match whole rest of line
             ]),
-        'sdio': create_modalias_token_parser('sdio', [
+        'sdio': create_modalias_token_parser(Subsystem.sdio, 'sdio', [
                 ('c', 'class' ),
                 ('v', 'vendor'),
                 ('d', 'device'),
             ]),
-        'serio': create_modalias_token_parser('serio', [
+        'serio': create_modalias_token_parser(Subsystem.serio, 'serio', [
                 ('ty' , 'type' ),
                 ('pr' , 'proto'),
                 ('id' , 'id'   ),
                 ('ex' , 'extra'),
             ]),
-        'usb': create_modalias_token_parser('usb', [
+        'usb': create_modalias_token_parser(Subsystem.usb, 'usb', [
                 ('v'  , 'device_vendor'     ),
                 ('p'  , 'device_product'    ),
                 ('d'  , 'bcddevice'         ),
@@ -215,7 +210,7 @@ class ModaliasNode(SysfsNode):
                 ('isc', 'interface_subclass'),
                 ('ip' , 'interface_protocol'),
             ]),
-        'virtio': create_modalias_token_parser('virtio', [
+        'virtio': create_modalias_token_parser(Subsystem.virtio, 'virtio', [
                 ('v', 'vendor'),
                 ('d', 'device'),
             ]),
@@ -226,19 +221,13 @@ class ModaliasNode(SysfsNode):
         Parses the given modalias
         """
 
-        # Extract subsystem from modalias
-        self.subsystem = modalias[:modalias.index(':')]
+        # Extract subsystem name from modalias
+        self.modalias_subsystem = modalias[:modalias.index(':')]
 
         # If a data_type exists, create it to parse the modalias
-        if self.subsystem not in self.data_types:
-            raise NodeParserException("No parser for modalias subsystem '{}'".format(self.subsystem))
-        self.data = self.data_types[self.subsystem](modalias)
-
-    def __str__(self):
-        """
-        Returns a string representation of this object
-        """
-        return 'ModaliasNode{{subsystem={}, data={}}}'.format(self.subsystem, self.data)
+        if self.modalias_subsystem not in self.data_types:
+            raise NodeParserException("No parser for modalias subsystem '{}'".format(self.modalias_subsystem))
+        self.data = self.data_types[self.modalias_subsystem](modalias)
 
     @classmethod
     def get_sysfs_files(cls):
@@ -261,13 +250,7 @@ class PnpNode(SysfsNode):
         """
         Initialize pnp node
         """
-        self.id = sysfs_line
-
-    def __str__(self):
-        """
-        Returns a string representation of this object
-        """
-        return "PnpNode{{id='{}'}}".format(self.id)
+        self.data = Subsystem.pnp.create_node({'id': sysfs_line})
 
 class I2cNode(SysfsNode):
     """
@@ -281,13 +264,7 @@ class I2cNode(SysfsNode):
         """
         Initialize i2c node
         """
-        self.name = sysfs_line
-
-    def __str__(self):
-        """
-        Returns a string representation of this object
-        """
-        return "I2cNode{{name='{}'}}".format(self.name)
+        self.data = Subsystem.i2c.create_node({'name': sysfs_line})
 
 class FsTypeNode(Node):
     """
@@ -299,13 +276,7 @@ class FsTypeNode(Node):
         """
         Initialize fstype node
         """
-        self.fstype = fstype
-
-    def __str__(self):
-        """
-        Returns a string representation of this object
-        """
-        return 'FsTypeNode{{fstype={}}}'.format(self.fstype)
+        self.data = Subsystem.fs.create_node({'fstype': fstype})
 
     @classmethod
     def detect_nodes(cls):

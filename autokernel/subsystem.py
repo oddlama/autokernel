@@ -129,6 +129,12 @@ class Subsystem:
         """
         return self.name
 
+    def create_node(self, *args, **kwargs):
+        """
+        Creates a node of correct type with given arguments
+        """
+        return node_type(*args, **kwargs)
+
 Subsystem.acpi     = Subsystem('acpi'    , AcpiNode    )
 Subsystem.fs       = Subsystem('fs'      , FsNode      )
 Subsystem.hda      = Subsystem('hda'     , HdaNode     )

@@ -1,4 +1,5 @@
-from . import log, subsystem
+from . import log
+from .subsystem import Subsystem, wildcard_token
 
 import bz2
 import re
@@ -24,7 +25,7 @@ class Entry:
         # Split on space while preserving quoted strings
         arguments = shlex.split(arguments)
         # Replace wildcards with wildcard tokens
-        arguments = [subsystem.wildcard_token if Entry.wildcard_regex.match(p) else p for p in arguments]
+        arguments = [wildcard_token if Entry.wildcard_regex.match(p) else p for p in arguments]
 
         # Get the parameter names from the derived class
         parameters = self._get_parameters()
