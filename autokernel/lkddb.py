@@ -1,4 +1,4 @@
-from . import log
+from . import log, subsystem
 
 import bz2
 import re
@@ -6,9 +6,6 @@ import shlex
 import urllib.request
 
 class EntryParseException(Exception):
-    pass
-
-class WildcardToken():
     pass
 
 class Entry:
@@ -27,7 +24,7 @@ class Entry:
         # Split on space while preserving quoted strings
         arguments = shlex.split(arguments)
         # Replace wildcards with wildcard tokens
-        arguments = [WildcardToken() if Entry.wildcard_regex.match(p) else p for p in arguments]
+        arguments = [subsystem.wildcard_token if Entry.wildcard_regex.match(p) else p for p in arguments]
 
         # Get the parameter names from the derived class
         parameters = self._get_parameters()
