@@ -1,3 +1,5 @@
+import sys
+
 # TODO set from command line pls
 verbose_output = False
 
@@ -12,4 +14,4 @@ def warn(msg):
     print("[1;33m *[m {}".format(msg))
 
 def error(msg):
-    print("[1;31m * ERROR:[m {}".format(msg))
+    print("[1;31m * ERROR:[m {}".format(msg), file=sys.stderr)

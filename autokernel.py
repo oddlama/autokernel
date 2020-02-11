@@ -42,15 +42,40 @@ def detect_options():
     detected_options = set()
     for detector_node in detector.nodes:
         for node in detector_node.nodes:
-            print("options for {}:".format(node))
+            #print("options for {}:".format(node))
             opts = config_db.find_options(node)
-            for i in opts:
-                print(" - {}".format(i))
+            #for i in opts:
+                #print(" - {}".format(i))
             detected_options.update(opts)
 
-    print("all detected options:")
+    # Load current kernel config and check against detected options
+    kernel_dir = "/usr/src/linux"
+    load_environment_variables(dir=kernel_dir)
+    kconfig = Kconfig(dir=kernel_dir)
+    kconfig.kconfig.load_config(filename='.config')
+
+    #print("all detected options:")
+    #for i in detected_options:
+    #    print(" - {}".format(i))
+
+    log.info("The following options were detected:")
+    import kconfiglib
+
+    # Resolve symbols
+    syms = []
     for i in detected_options:
-        print(" - {}".format(i))
+        syms.append(kconfig.get_symbol(i))
+
+    for sym in sorted(syms, key=lambda s: (-s.tri_value, s.name)):
+        color = ""
+        if sym.tri_value == autokernel.NO:
+            color = "1;31"
+        elif sym.tri_value == autokernel.MOD:
+            color = "1;33"
+        elif sym.tri_value == autokernel.YES:
+            color = "1;32"
+
+        print("[[{}m{}[m] {}".format(color, kconfiglib.TRI_TO_STR[sym.tri_value], sym.name))
 
 def create_config():
     # Load kconfig file
