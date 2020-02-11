@@ -58,6 +58,7 @@ def detect_options():
     #for i in detected_options:
     #    print(" - {}".format(i))
 
+    # TODO only print summary like 25 options were alreay enabled, 24 are currently modules that can be enabled permanently and 134 are missing
     log.info("The following options were detected:")
     import kconfiglib
 
