@@ -136,8 +136,9 @@ class ModuleParser(ParamParser):
 
 class PciParser(ParamParser):
     subsystem = Subsystem.pci
-    parameters = ['vendor', 'device', 'subvendor', 'subdevice', 'class_mask']
+    parameters = ['vendor', 'device', 'subvendor', 'subdevice']
     mandatory = ['vendor', 'device']
+    discard_extra = True
 
 class PcmciaParser(ParamParser):
     subsystem = Subsystem.pcmcia
