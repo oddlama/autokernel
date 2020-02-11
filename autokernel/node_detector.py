@@ -39,7 +39,33 @@ class Node:
             return '[' + ', '.join([str(i) for i in self.data]) + ']'
         return str(self.data)
 
-class SysfsNode(Node):
+class LineParserNode(Node):
+    """
+    A node superclass for line based parsing
+    """
+    @classmethod
+    def get_lines(cls):
+        """
+        Returns an iterable of lines to parse
+        """
+        raise Exception("Missing get_lines() method implementation on derived class {}".format(cls.__name__))
+
+    @classmethod
+    def detect_nodes(cls):
+        fstypes = subprocess.run(['findmnt', '-A', '-n', '-o', 'FSTYPE'], stdout=subprocess.PIPE).stdout.decode('utf-8').strip().split('\n')
+
+        # Create list of nodes from lines
+        nodes = []
+        for line in cls.get_lines():
+            try:
+                nodes.append(cls(line))
+            except NodeParserException as e:
+                log.verbose(repr(e))
+
+        cls.log_nodes(nodes)
+        return nodes
+
+class SysfsNode(LineParserNode):
     """
     A base class used for nodes which get their information
     by parsing a sysfs file.
@@ -56,11 +82,10 @@ class SysfsNode(Node):
         raise Exception("Missing sysfs_path or get_sysfs_files() implementation on derived class {}".format(cls.__name__))
 
     @classmethod
-    def read_sysfs_lines(cls):
+    def get_lines(cls):
         """
         Reads all lines from the given glob path
         """
-
         lines = set()
         for file_name in cls.get_sysfs_files():
             # Open sysfs file
@@ -75,19 +100,6 @@ class SysfsNode(Node):
 
         # Return lines, after giving derived classes a chance to modify them
         return lines
-
-    @classmethod
-    def detect_nodes(cls):
-        # Create list of nodes from sysfs lines
-        nodes = []
-        for sysfs_line in cls.read_sysfs_lines():
-            try:
-                nodes.append(cls(sysfs_line))
-            except NodeParserException as e:
-                log.verbose(repr(e))
-
-        cls.log_nodes(nodes)
-        return nodes
 
 def create_modalias_token_parser(subsystem, subsystem_regex_str, options):
     class Parser:
@@ -272,32 +284,42 @@ class I2cNode(SysfsNode):
         """
         self.nodes = [Subsystem.i2c.create_node({'name': sysfs_line})]
 
-class FsTypeNode(Node):
+class FsTypeNode(LineParserNode):
     """
     Specializes Node to gather used filesystems
     """
     node_type = 'filesystem'
 
-    def __init__(self, fstype):
+    def __init__(self, line):
         """
         Initialize fstype node
         """
-        self.nodes = [Subsystem.fs.create_node({'fstype': fstype})]
+        self.nodes = [Subsystem.fs.create_node({'fstype': line})]
 
     @classmethod
-    def detect_nodes(cls):
+    def get_lines(cls):
         fstypes = subprocess.run(['findmnt', '-A', '-n', '-o', 'FSTYPE'], stdout=subprocess.PIPE).stdout.decode('utf-8').strip().split('\n')
+        return set(fstypes)
 
-        # Create list of nodes from fstypes
-        nodes = []
-        for fstype in set(fstypes):
-            try:
-                nodes.append(FsTypeNode(fstype))
-            except NodeParserException as e:
-                log.verbose(repr(e))
+class ModuleNode(LineParserNode):
+    """
+    Specializes Node to gather used modules
+    """
+    node_type = 'module'
 
-        cls.log_nodes(nodes)
-        return nodes
+    def __init__(self, line):
+        """
+        Initialize module node
+        """
+        self.nodes = [Subsystem.module.create_node({'name': line})]
+
+    @classmethod
+    def get_lines(cls):
+        """
+        Returns all module names of loaded modules
+        """
+        with open('/proc/modules', 'r') as f:
+            return set([line.split(' ')[0] for line in f])
 
 class NodeDetector:
     """
@@ -320,6 +342,7 @@ class NodeDetector:
             PnpNode,
             I2cNode,
             FsTypeNode,
+            ModuleNode,
         ]
 
         # For each node class, detect nodes in sysfs.

@@ -129,6 +129,11 @@ class InputParser(ParamParser):
     mandatory = ['vendor', 'product']
     discard_extra = True
 
+class ModuleParser(ParamParser):
+    subsystem = Subsystem.module
+    parameters = ['name']
+    discard_extra = True
+
 class PciParser(ParamParser):
     subsystem = Subsystem.pci
     parameters = ['vendor', 'device', 'subvendor', 'subdevice', 'class_mask']
@@ -193,6 +198,7 @@ class Lkddb:
             'i2c':       I2cParser(),
             'i2c-snd':   I2cSndParser(),
             'input':     InputParser(),
+            'module':    ModuleParser(),
             'pci':       PciParser(),
             'pcmcia':    PcmciaParser(),
             'platform':  PlatformParser(),
@@ -268,6 +274,9 @@ class Lkddb:
 
         try:
             subsystem, data_list, entry_data = self._parse_entry(line, line_nr)
+            if not subsystem:
+                return False
+
             for data in data_list:
                 self._add_entry(subsystem, subsystem.create_node(data), entry_data)
             return True
@@ -288,6 +297,12 @@ class Lkddb:
         lkddb_subsystem = m.group('lkddb_subsystem')
         arguments = m.group('arguments')
         source = m.group('source')
+
+        if source.startswith('arch/'):
+            # TODO dont hardcode. use arch config from somewhere.....
+            if not source.startswith('arch/x86/'):
+                # We skip entries that do not match our architecture
+                return None, None, None
 
         # Validate that each config option starts with CONFIG_,
         # remove the prefix and make a unique set.

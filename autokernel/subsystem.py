@@ -94,6 +94,9 @@ class I2cNode(SubsystemNode):
 class InputNode(SubsystemNode):
     parameters = {'bustype': hex, 'vendor': hex, 'product': hex}
 
+class ModuleNode(SubsystemNode):
+    parameters = {'name': str}
+
 class PciNode(SubsystemNode):
     parameters = {'vendor': hex, 'device': hex, 'subvendor': hex, 'subdevice': hex}
 
@@ -156,6 +159,7 @@ Subsystem.hda      = Subsystem('hda'     , HdaNode     )
 Subsystem.hid      = Subsystem('hid'     , HidNode     )
 Subsystem.i2c      = Subsystem('i2c'     , I2cNode     )
 Subsystem.input    = Subsystem('input'   , InputNode   )
+Subsystem.module   = Subsystem('module'  , ModuleNode  )
 Subsystem.pci      = Subsystem('pci'     , PciNode     )
 Subsystem.pcmcia   = Subsystem('pcmcia'  , PcmciaNode  )
 Subsystem.platform = Subsystem('platform', PlatformNode)
