@@ -37,10 +37,20 @@ def detect_options():
     # Inspect the current system
     detector = NodeDetector()
 
+    log.info("Matching detected nodes against database")
     # Try to find nodes in the database
-    for node in detector.nodes:
-        config_db.find_options(node.subsystem, node.data)
+    detected_options = set()
+    for detector_node in detector.nodes:
+        for node in detector_node.nodes:
+            print("options for {}:".format(node))
+            opts = config_db.find_options(node)
+            for i in opts:
+                print(" - {}".format(i))
+            detected_options.update(opts)
 
+    print("all detected options:")
+    for i in detected_options:
+        print(" - {}".format(i))
 
 def create_config():
     # Load kconfig file
