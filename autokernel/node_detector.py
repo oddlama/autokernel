@@ -132,7 +132,7 @@ def create_modalias_token_parser(subsystem, subsystem_regex_str, options):
 
     return Parser()
 
-def create_modalias_split_parser(subsystem, subsystem_str, delim):
+def create_modalias_split_parser(subsystem, subsystem_str, delim, attr_name='value'):
     class Parser:
         @staticmethod
         def parse(modalias):
@@ -142,7 +142,7 @@ def create_modalias_split_parser(subsystem, subsystem_str, delim):
             """
 
             values = filter(None, modalias[len(subsystem_str) + 1:].split(delim))
-            return [subsystem.create_node({'value': v}) for v in values]
+            return [subsystem.create_node({attr_name: v}) for v in values]
 
     return Parser()
 
@@ -154,7 +154,7 @@ class ModaliasNode(SysfsNode):
 
     node_type = 'modalias'
     modalias_parsers = {
-        'acpi': create_modalias_split_parser(Subsystem.acpi, 'acpi', ':'),
+        'acpi': create_modalias_split_parser(Subsystem.acpi, 'acpi', ':', attr_name='id'),
         'hdaudio': create_modalias_token_parser(Subsystem.hda, 'hdaudio', [
                 ('v', 'vendor'     ),
                 ('r', 'revision'   ),
@@ -193,7 +193,7 @@ class ModaliasNode(SysfsNode):
                 ('pc' , 'prod_id_3'),
                 ('pd' , 'prod_id_4'),
             ]),
-        'platform': create_modalias_split_parser(Subsystem.platform, 'platform', ':'),
+        'platform': create_modalias_split_parser(Subsystem.platform, 'platform', ':', attr_name='name'),
         'sdio': create_modalias_token_parser(Subsystem.sdio, 'sdio', [
                 ('c', 'class' ),
                 ('v', 'vendor'),
