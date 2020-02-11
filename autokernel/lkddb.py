@@ -241,11 +241,17 @@ class Lkddb:
         # Return if we have no matches
         if len(matching_entries) == 0:
             return []
+
         # If there are at least two matches, and the first two have the same score,
-        # matches are ambiguous, and we will not select anything.
-        elif len(matching_entries) >= 2 and matching_entries[0][0] == matching_entries[1][0]:
-            log.warn("Ambiguous matches for node: {}".format(node))
-            return []
+        # the matches could be ambiguous, and we dont want to select ambiguous matches.
+        if len(matching_entries) >= 2:
+            best_score = matching_entries[0][0]
+            if best_score == matching_entries[1][0]:
+                # A match can only be ambiguous, if the score is below the ambiguity_threshold
+                # defined in the node. (e.g. a node with only one parameter can never be ambiguous)
+                if best_score < node.get_ambiguity_threshold():
+                    log.warn("Ambiguous matches for node: {}".format(node))
+                    return []
 
         # Get best entry by score
         best_entry = matching_entries[0][1]

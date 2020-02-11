@@ -82,6 +82,16 @@ class SubsystemNode:
     def _get_parameters(cls):
         return cls.parameters
 
+    @classmethod
+    def _get_mandatory(cls):
+        if hasattr(cls, 'mandatory'):
+            return cls.mandatory
+        return cls._get_parameters()
+
+    @classmethod
+    def get_ambiguity_threshold(cls):
+        return len(cls._get_mandatory())
+
 class AcpiNode(SubsystemNode):
     parameters = {'id': str}
 
@@ -90,24 +100,29 @@ class FsNode(SubsystemNode):
 
 class HdaNode(SubsystemNode):
     parameters = {'vendor': hex, 'revision': hex}
+    mandatory = ['vendor']
 
 class HidNode(SubsystemNode):
     parameters = {'bus': hex, 'vendor': hex, 'product': hex}
+    mandatory = ['vendor', 'product']
 
 class I2cNode(SubsystemNode):
     parameters = {'id': str}
 
 class InputNode(SubsystemNode):
     parameters = {'bustype': hex, 'vendor': hex, 'product': hex}
+    mandatory = ['vendor', 'product']
 
 class ModuleNode(SubsystemNode):
     parameters = {'name': str}
 
 class PciNode(SubsystemNode):
     parameters = {'vendor': hex, 'device': hex, 'subvendor': hex, 'subdevice': hex}
+    mandatory = ['vendor', 'device']
 
 class PcmciaNode(SubsystemNode):
     parameters = {'manf_id': hex, 'card_id': hex, 'func_id': hex, 'function': hex, 'device_no': hex, 'prod_id_1': str, 'prod_id_2': str, 'prod_id_3': str, 'prod_id_4': str}
+    mandatory = ['manf_id', 'card_id']
 
 class PlatformNode(SubsystemNode):
     parameters = {'name': str}
@@ -117,15 +132,18 @@ class PnpNode(SubsystemNode):
 
 class SdioNode(SubsystemNode):
     parameters = {'class': hex, 'vendor': hex, 'device': hex}
+    mandatory = ['vendor', 'device']
 
 class SerioNode(SubsystemNode):
     parameters = {'type': hex, 'proto': hex, 'id': hex, 'extra': hex}
+    mandatory = ['type']
 
 class SpiNode(SubsystemNode):
     parameters = {'id': str}
 
 class UsbNode(SubsystemNode):
     parameters = {'device_vendor': hex, 'device_product': hex, 'device_class': hex, 'device_subclass': hex, 'device_protocol': hex, 'interface_class': hex, 'interface_subclass': hex, 'interface_protocol': hex}
+    mandatory = ['device_vendor']
 
 class VirtioNode(SubsystemNode):
     parameters = {'vendor': hex, 'device': hex}
