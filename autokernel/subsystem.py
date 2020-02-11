@@ -48,29 +48,35 @@ class SubsystemNode:
         elif ptype == hex:
             return hex(p)
 
-    def matches(self, other):
+    def match_score(self, other):
         """
-        Compares self to other and returns True if the nodes match
-        (are the same while allowing wildcard tokens), False otherwise.
+        Compares self to other and returns a positive integer if the nodes match,
+        representing the amount of parameters matched, excluding wildcard parameters.
+        Returns 0 if nodes did not match.
         """
+        score = 0
+
         for p in self._get_parameters():
             a = getattr(self, p)
             b = getattr(other, p)
 
             if a is wildcard_token or b is wildcard_token:
-                # Wildcard tokens always match
+                # Wildcard tokens always match, but don't increase score.
                 continue
 
             # If a or b is None, it will not match
             if not a or not b:
-                return False
+                return 0
 
             # If a != b, values do not match.
             if a != b:
-                return False
+                return 0
+
+            # Parameter matches, increase score
+            score += 1
 
         # All parameters have passed comparison checks
-        return True
+        return score
 
     @classmethod
     def _get_parameters(cls):

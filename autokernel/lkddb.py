@@ -229,13 +229,28 @@ class Lkddb:
 
         # Match node against all nodes in the database with the same subsystem
         # and collect the corresponding options
-        matching_config_options = set()
+        matching_entries = []
         for entry in self.entries[node.subsystem]:
-            if entry.node.matches(node):
-                # Add all config options to the set
-                matching_config_options.update(entry.data.config_options)
+            score = entry.node.match_score(node)
+            if score > 0:
+                matching_entries.append((score, entry))
 
-        return matching_config_options
+        # Sort by score
+        matching_entries.sort(key=lambda x: x[0], reverse=True)
+
+        # Return if we have no matches
+        if len(matching_entries) == 0:
+            return []
+        # If there are at least two matches, and the first two have the same score,
+        # matches are ambiguous, and we will not select anything.
+        elif len(matching_entries) >= 2 and matching_entries[0][0] == matching_entries[1][0]:
+            log.warn("Ambiguous matches for node: {}".format(node))
+            return []
+
+        # Get best entry by score
+        best_entry = matching_entries[0][1]
+        # Add all config options to the set
+        return set(best_entry.data.config_options)
 
     def _fetch_db(self):
         """
