@@ -193,9 +193,7 @@ class ModaliasNode(SysfsNode):
                 ('pc' , 'prod_id_3'),
                 ('pd' , 'prod_id_4'),
             ]),
-        'platform': create_modalias_token_parser(Subsystem.platform, 'platform', [
-                ('', 'name'), # Empty alias '' is used to match whole rest of line
-            ]),
+        'platform': create_modalias_split_parser(Subsystem.platform, 'platform', ':'),
         'sdio': create_modalias_token_parser(Subsystem.sdio, 'sdio', [
                 ('c', 'class' ),
                 ('v', 'vendor'),

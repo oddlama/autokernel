@@ -65,46 +65,49 @@ class SubsystemNode:
         return cls.parameters
 
 class AcpiNode(SubsystemNode):
-    parameters = ['value', ]
+    parameters = ['value']
 
 class FsNode(SubsystemNode):
-    parameters = ['fstype', ]
+    parameters = ['fstype']
 
 class HdaNode(SubsystemNode):
-    parameters = ['vendor', 'revision', ]
+    parameters = ['vendor', 'revision']
 
 class HidNode(SubsystemNode):
-    parameters = ['bus', 'vendor', 'product', ]
+    parameters = ['bus', 'vendor', 'product']
 
 class I2cNode(SubsystemNode):
-    parameters = ['name', ]
+    parameters = ['name']
 
 class InputNode(SubsystemNode):
-    parameters = ['bustype', 'vendor', 'product', ]
+    parameters = ['bustype', 'vendor', 'product']
 
 class PciNode(SubsystemNode):
-    parameters = ['vendor', 'device', 'subvendor', 'subdevice', ]
+    parameters = ['vendor', 'device', 'subvendor', 'subdevice']
 
 class PcmciaNode(SubsystemNode):
-    parameters = ['manf_id', 'card_id', 'func_id', 'function', 'device_no', ]
+    parameters = ['manf_id', 'card_id', 'func_id', 'function', 'device_no', 'prod_id_1', 'prod_id_2', 'prod_id_3', 'prod_id_4']
 
 class PlatformNode(SubsystemNode):
-    parameters = ['name', ]
+    parameters = ['name']
 
 class PnpNode(SubsystemNode):
-    parameters = ['id', ]
+    parameters = ['id']
 
 class SdioNode(SubsystemNode):
-    parameters = ['class', 'vendor', 'device', ]
+    parameters = ['class', 'vendor', 'device']
 
 class SerioNode(SubsystemNode):
-    parameters = ['type', 'proto', 'id', 'extra', ]
+    parameters = ['type', 'proto', 'id', 'extra']
+
+class SpiNode(SubsystemNode):
+    parameters = ['name']
 
 class UsbNode(SubsystemNode):
-    parameters = ['device_vendor', 'device_product', 'bcddevice', 'device_class', 'device_subclass', 'device_protocol', 'interface_class', 'interface_subclass', 'interface_protocol', ]
+    parameters = ['device_vendor', 'device_product', 'device_class', 'device_subclass', 'device_protocol', 'interface_class', 'interface_subclass', 'interface_protocol']
 
 class VirtioNode(SubsystemNode):
-    parameters = ['vendor', 'device', ]
+    parameters = ['vendor', 'device']
 
 class Subsystem:
     """
@@ -147,5 +150,6 @@ Subsystem.platform = Subsystem('platform', PlatformNode)
 Subsystem.pnp      = Subsystem('pnp'     , PnpNode     )
 Subsystem.sdio     = Subsystem('sdio'    , SdioNode    )
 Subsystem.serio    = Subsystem('serio'   , SerioNode   )
+Subsystem.spi      = Subsystem('spi'     , SpiNode     )
 Subsystem.usb      = Subsystem('usb'     , UsbNode     )
 Subsystem.virtio   = Subsystem('virtio'  , VirtioNode  )

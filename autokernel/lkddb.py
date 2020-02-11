@@ -1,6 +1,7 @@
 from . import log
 from .subsystem import Subsystem, wildcard_token
 
+import os
 import bz2
 import re
 import shlex
@@ -12,6 +13,69 @@ class EntryParsingException(Exception):
 
 class UnkownLkddbSubsystemException(Exception):
     pass
+
+def create_lkddb_split_args_parser(attr_name):
+    """
+    Creates a parser which creates one node per argument, while discarding empty arguments.
+    """
+    class Parser:
+        @staticmethod
+        def parse(arguments):
+            """
+            Parses the arguments into a several data objects, one per argument.
+            Must return a list.
+            """
+            # Filter empty arguments
+            arguments = filter(None, arguments)
+            return [{attr_name: a} for a in arguments]
+
+    return Parser()
+
+def create_lkddb_param_parser(parameters, discard_extra_arguments=False, empty_args_are_wildcards=False):
+    """
+    Creates a parser which matches one argument for each parameter (sequetially).
+    """
+    class Parser:
+        @staticmethod
+        def parse(arguments):
+            """
+            Parses the arguments into a single data object.
+            Must return a list.
+            """
+            # Ensure the amount of arguments is equal to the required amount
+            if len(arguments) != len(parameters) and not discard_extra_arguments:
+                raise EntryParsingException("parser requires exactly {} arguments but {} were given".format(len(parameters), len(arguments)))
+            elif len(arguments) < len(parameters):
+                raise EntryParsingException("parser requires at least {} arguments but only {} were given".format(len(parameters), len(arguments)))
+
+            # Create data dictionary and insert all arguments
+            data = {}
+            for i, parameter in enumerate(parameters):
+                if empty_args_are_wildcards and not arguments[i]:
+                    data[parameter] = wildcard_token
+                else:
+                    data[parameter] = arguments[i]
+
+            return [data]
+
+    return Parser()
+
+class EntryData:
+    """
+    A class representing additional information about and entry,
+    such as the configuration options or the source
+    """
+    def __init__(self, config_options, source):
+        self.config_options = config_options
+        self.source = source
+
+class Entry:
+    """
+    Associates a node to entry data
+    """
+    def __init__(self, node, data):
+        self.node = node
+        self.data = data
 
 class Lkddb:
     """
@@ -25,23 +89,22 @@ class Lkddb:
 
     wildcard_regex = re.compile('^\.+$')
     entry_types = {
-            # TODO mutators/mapping (e.g. merge/split columns.....)
-            'acpi':      (Subsystem.acpi,     ['name']),
-            'fs':        (Subsystem.fs,       ['fstype']),
-            #'hda':       (Subsystem.,         []),
-            #'hid':       (Subsystem.,         []),
-            'i2c':       (Subsystem.i2c,      ['name']),
-            'i2c-snd':   (Subsystem.i2c,      ['name']),
-            #'input':     (Subsystem.,         []),
-            'pci':       (Subsystem.pci,      ['vendor', 'device', 'subvendor', 'subdevice', 'class_mask']),
-            #'pcmcia':    (Subsystem.,         []),
-            'platform':  (Subsystem.platform, ['name']),
-            'pnp':       (Subsystem.pnp,      ['id']),
-            #'sdio':      (Subsystem.,         []),
-            #'serio':     (Subsystem.,         []),
-            #'spi':       (Subsystem.,         []),
-            #'usb':       (Subsystem.,         []),
-            #'virtio':    (Subsystem.,         []),
+            'acpi':      (Subsystem.acpi,     create_lkddb_param_parser(['name'])),
+            'fs':        (Subsystem.fs,       create_lkddb_param_parser(['fstype'])),
+            'hda':       (Subsystem.hda,      create_lkddb_param_parser(['vendor'], discard_extra_arguments=True)),
+            'hid':       (Subsystem.hid,      create_lkddb_param_parser(['bus', 'vendor', 'product'])),
+            'i2c':       (Subsystem.i2c,      create_lkddb_param_parser(['name'])),
+            'i2c-snd':   (Subsystem.i2c,      create_lkddb_param_parser(['name'])),
+            'input':     (Subsystem.input,    create_lkddb_param_parser(['bustype', 'vendor', 'product'], discard_extra_arguments=True)),
+            'pci':       (Subsystem.pci,      create_lkddb_param_parser(['vendor', 'device', 'subvendor', 'subdevice', 'class_mask'])),
+            'pcmcia':    (Subsystem.pcmcia,   create_lkddb_param_parser(['manf_id', 'card_id', 'func_id', 'function', 'device_no', 'prod_id_1', 'prod_id_2', 'prod_id_3', 'prod_id_4'], empty_args_are_wildcards=True)),
+            'platform':  (Subsystem.platform, create_lkddb_param_parser(['name'], discard_extra_arguments=True)),
+            'pnp':       (Subsystem.pnp,      create_lkddb_split_args_parser('id')),
+            'sdio':      (Subsystem.sdio,     create_lkddb_param_parser(['class', 'vendor', 'device'])),
+            'serio':     (Subsystem.serio,    create_lkddb_param_parser(['type', 'proto', 'id', 'extra'])),
+            'spi':       (Subsystem.spi,      create_lkddb_param_parser(['name'])),
+            'usb':       (Subsystem.usb,      create_lkddb_param_parser(['device_vendor', 'device_product', 'device_class', 'device_subclass', 'device_protocol', 'interface_class', 'interface_subclass', 'interface_protocol'], discard_extra_arguments=True)),
+            'virtio':    (Subsystem.virtio,   create_lkddb_param_parser(['vendor', 'device'])),
         }
 
     def __init__(self):
@@ -70,7 +133,9 @@ class Lkddb:
         """
 
         log.info("Downloading lkddb database")
-        urllib.request.urlretrieve(self.lkddb_url, self.lkddb_file)
+        # TODO only when upstream version is newer
+        if not os.path.exists(self.lkddb_file):
+            urllib.request.urlretrieve(self.lkddb_url, self.lkddb_file)
 
     def _load_db(self):
         """
@@ -93,13 +158,14 @@ class Lkddb:
         """
         Parses a line in the lkddb file and creates an entry if it is valid.
         """
-        if line[0] == '#':
-            # Skip comments
+        if line[0] == '#' or line.startswith('kver'):
+            # Skip comments and kver line
             return False
 
         try:
-            subsystem, data = self._parse_entry(line, line_nr)
-            self._add_node(subsystem, subsystem.create_node(data))
+            subsystem, data_list, entry_data = self._parse_entry(line, line_nr)
+            for data in data_list:
+                self._add_node(subsystem, subsystem.create_node(data), entry_data)
             return True
         except EntryParsingException as e:
             log.warn('Could not parse entry at lkddb:{}: {}'.format(line_nr, str(e)))
@@ -138,20 +204,12 @@ class Lkddb:
         if lkddb_subsystem not in Lkddb.entry_types:
             raise UnkownLkddbSubsystemException("'{}'".format(lkddb_subsystem))
 
-        subsystem, entry_parameters = Lkddb.entry_types[lkddb_subsystem]
+        # Return subsystem, list of parsed data and associated entry data
+        entry_data = EntryData(config_options, source)
+        subsystem, entry_parser = Lkddb.entry_types[lkddb_subsystem]
+        return subsystem, entry_parser.parse(arguments), entry_data
 
-        # Ensure the amount of arguments is equal to the required amount
-        if len(arguments) != len(entry_parameters):
-            raise EntryParsingException("{} requires {} parameters but {} were given".format(lkddb_subsystem, len(entry_parameters), len(arguments)))
-
-        # Create data dictionary and insert all arguments
-        data = {}
-        for i, parameter in enumerate(entry_parameters):
-            data[parameter] = arguments[i]
-
-        return subsystem, data
-
-    def _add_node(self, subsystem, node):
+    def _add_node(self, subsystem, node, entry_data):
         """
         Adds the given node to all stored nodes (indexed by subsystem)
         """
@@ -160,5 +218,5 @@ class Lkddb:
             self.nodes[subsystem] = []
 
         # Append node to list
-        self.nodes[subsystem].append(node)
+        self.nodes[subsystem].append(Entry(node, entry_data))
 

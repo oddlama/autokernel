@@ -1,5 +1,5 @@
 # TODO set from command line pls
-verbose_output = True
+verbose_output = False
 
 def verbose(msg):
     if verbose_output:
