@@ -114,18 +114,25 @@ class Lkddb:
         self._fetch_db()
         self._load_db()
 
-    def find_options(self, subsystem, subsystem_node):
+    def find_options(self, node):
         """
         Tries to match the given data dictionary to a database entry in the same subsystem.
         Returns the list of kernel options for all matched nodes, or an empty list if
         no match could be found.
         """
 
-        if subsystem not in self.nodes:
+        if node.subsystem not in self.entries:
             return []
 
-        #TODO for e in self.nodes[subsystem]:
-        #TODO     if e.match(data):
+        # Match node against all nodes in the database with the same subsystem
+        # and collect the corresponding options
+        matching_config_options = set()
+        for entry in self.entries[node.subsystem]:
+            if entry.node.matches(node):
+                # Add all config options to the set
+                matching_config_options.update(entry.data.config_options)
+
+        return matching_config_options
 
     def _fetch_db(self):
         """
@@ -144,7 +151,7 @@ class Lkddb:
         """
 
         log.info("Parsing lkddb database")
-        self.nodes = {}
+        self.entries = {}
 
         valid_lines = 0
         with bz2.open(self.lkddb_file, 'r') as f:
@@ -165,7 +172,7 @@ class Lkddb:
         try:
             subsystem, data_list, entry_data = self._parse_entry(line, line_nr)
             for data in data_list:
-                self._add_node(subsystem, subsystem.create_node(data), entry_data)
+                self._add_entry(subsystem, subsystem.create_node(data), entry_data)
             return True
         except EntryParsingException as e:
             log.warn('Could not parse entry at lkddb:{}: {}'.format(line_nr, str(e)))
@@ -187,13 +194,15 @@ class Lkddb:
         source = m.group('source')
 
         # Validate that each config option starts with CONFIG_
+        opts = set()
         for c in config_options:
             if not c.startswith('CONFIG_'):
                 # Skip entries with invalid options
                 raise EntryParsingException("All config options must start with 'CONFIG_', but '{}' did not.".format(c))
+            opts.add(c[len('CONFIG_'):])
 
         # ... and remove this CONFIG_ prefix
-        config_options = [c[len('CONFIG_'):] for c in config_options]
+        config_options = opts
 
         # Split arguments on space while preserving quoted strings
         arguments = shlex.split(arguments)
@@ -209,14 +218,14 @@ class Lkddb:
         subsystem, entry_parser = Lkddb.entry_types[lkddb_subsystem]
         return subsystem, entry_parser.parse(arguments), entry_data
 
-    def _add_node(self, subsystem, node, entry_data):
+    def _add_entry(self, subsystem, node, entry_data):
         """
-        Adds the given node to all stored nodes (indexed by subsystem)
+        Adds a new entry for the given node and entry_data to the index
         """
         # Add empty list in dictionary if key doesn't exist
-        if subsystem not in self.nodes:
-            self.nodes[subsystem] = []
+        if subsystem not in self.entries:
+            self.entries[subsystem] = []
 
         # Append node to list
-        self.nodes[subsystem].append(Entry(node, entry_data))
+        self.entries[subsystem].append(Entry(node, entry_data))
 

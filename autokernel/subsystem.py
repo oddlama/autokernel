@@ -9,17 +9,11 @@ class WildcardTokenType:
 wildcard_token = WildcardTokenType()
 
 class SubsystemNode:
-    def __init__(self, data):
-        """
-        Initialize node with all data set to None
-        """
-        for param in self._get_parameters():
-            setattr(self, param, None)
-
-    def __init__(self, data):
+    def __init__(self, subsystem, data):
         """
         Initialize node from dictionary with data
         """
+        self.subsystem = subsystem
         for param in self._get_parameters():
             if param in data:
                 setattr(self, param, data[param])
@@ -136,7 +130,7 @@ class Subsystem:
         """
         Creates a node of correct type with given arguments
         """
-        return self.node_type(*args, **kwargs)
+        return self.node_type(self, *args, **kwargs)
 
 Subsystem.acpi     = Subsystem('acpi'    , AcpiNode    )
 Subsystem.fs       = Subsystem('fs'      , FsNode      )

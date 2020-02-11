@@ -26,7 +26,7 @@ class Node:
     @classmethod
     def log_nodes(cls, nodes):
         # Log all nodes, if we are in verbose mode
-        log.info("Found {:2d} {} nodes".format(len(nodes), cls.node_type))
+        log.info("Detected {:2d} {} nodes".format(len(nodes), cls.node_type))
         if log.verbose_output:
             for n in nodes:
                 log.verbose(" - {}".format(n))
@@ -111,7 +111,7 @@ def create_modalias_token_parser(subsystem, subsystem_regex_str, options):
                     raise NodeParserException("Could not match modalias for parser '{}'".format(subsystem_regex_str))
                 data[option[1]] = val
 
-            return subsystem.create_node(data)
+            return [subsystem.create_node(data)]
 
         @staticmethod
         def _get_regex():
@@ -233,7 +233,7 @@ class ModaliasNode(SysfsNode):
         # If a data_type exists, create it to parse the modalias
         if self.modalias_subsystem not in self.modalias_parsers:
             raise NodeParserException("No parser for modalias subsystem '{}'".format(self.modalias_subsystem))
-        self.data = self.modalias_parsers[self.modalias_subsystem].parse(modalias)
+        self.nodes = self.modalias_parsers[self.modalias_subsystem].parse(modalias)
 
     @classmethod
     def get_sysfs_files(cls):
@@ -256,7 +256,7 @@ class PnpNode(SysfsNode):
         """
         Initialize pnp node
         """
-        self.data = Subsystem.pnp.create_node({'id': sysfs_line})
+        self.nodes = [Subsystem.pnp.create_node({'id': sysfs_line})]
 
 class I2cNode(SysfsNode):
     """
@@ -270,7 +270,7 @@ class I2cNode(SysfsNode):
         """
         Initialize i2c node
         """
-        self.data = Subsystem.i2c.create_node({'name': sysfs_line})
+        self.nodes = [Subsystem.i2c.create_node({'name': sysfs_line})]
 
 class FsTypeNode(Node):
     """
@@ -282,7 +282,7 @@ class FsTypeNode(Node):
         """
         Initialize fstype node
         """
-        self.data = Subsystem.fs.create_node({'fstype': fstype})
+        self.nodes = [Subsystem.fs.create_node({'fstype': fstype})]
 
     @classmethod
     def detect_nodes(cls):
