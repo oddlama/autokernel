@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import autokernel
+import argparse
 from autokernel import log, Lkddb, NodeDetector, Kconfig, print_expr_tree
 
 import subprocess
@@ -19,6 +20,7 @@ def load_environment_variables(dir):
     """
     log.info("Loading kernel environment variables for '{}'".format(dir))
 
+    # TODO dont force x86, parse uname instead! (see kernel makefiles
     set_env_default("ARCH", "x86")
     set_env_default("SRCARCH", "x86")
     set_env_default("CC", "gcc")
@@ -42,10 +44,11 @@ def detect_options():
     detected_options = set()
     for detector_node in detector.nodes:
         for node in detector_node.nodes:
-            #print("options for {}:".format(node))
+            log.verbose("Options for {}:".format(node))
             opts = config_db.find_options(node)
-            #for i in opts:
-                #print(" - {}".format(i))
+            if log.verbose_output:
+                for i in opts:
+                    log.verbose(" - {}".format(i))
             detected_options.update(opts)
 
     # Load current kernel config and check against detected options
@@ -53,10 +56,6 @@ def detect_options():
     load_environment_variables(dir=kernel_dir)
     kconfig = Kconfig(dir=kernel_dir)
     kconfig.kconfig.load_config(filename='.config')
-
-    #print("all detected options:")
-    #for i in detected_options:
-    #    print(" - {}".format(i))
 
     # TODO only print summary like 25 options were alreay enabled, 24 are currently modules that can be enabled permanently and 134 are missing
     log.info("The following options were detected:")
@@ -99,7 +98,42 @@ def create_config():
     kconfig.write_config(filename="b")
 
 def main():
-    # TODO argparser
+    #parser = argparse.ArgumentParser(description="TODO")
+
+    ## General options
+    #parser.add_argument('-c', '--config', dest='config_file',
+    #        help="")
+    #parser.add_argument('--no-interactive', dest='no_interative', action='store_true',
+    #        help="Disables all interactive prompts and automatically selects the default answer.")
+
+    ## Operation modes
+    ## TODO en/disables the given option (and dependencies) interactively.
+    ## TODO check for conflicting options in config
+    ## Writes the new config as /etc/autokernel.d/sets/zzz-local
+    #parser.add_argument('-o', '--output', dest='',
+    #        help="Output as /etc/autokernel.d/sets/{{output}}")
+    #parser.add_argument('-s', '--search', dest='',
+    #        help="")
+    #parser.add_argument('-e', '--enable', dest='',
+    #        help="")
+    #parser.add_argument('-d', '--disable', dest='',
+    #        help="")
+    #parser.add_argument('-d', '--detect-local-options', dest='',
+    #        help="Detect kernel options for this host and c")
+
+    ## Kernel related modes
+    #parser.add_argument('-m', '--merge-config', dest='',
+    #        help="")
+    #parser.add_argument('-b', '--build', dest='',
+    #        help="")
+    #parser.add_argument('-i', '--install', dest='',
+    #        help="")
+    #parser.add_argument('-f', '--full-build', dest='', action='store_true',
+    #        help="Merges the ")
+
+    #args = parser.parse_args()
+
+    # TODO umask
     detect_options()
 
 if __name__ == '__main__':
