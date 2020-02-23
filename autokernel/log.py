@@ -1,6 +1,5 @@
 import sys
 
-# TODO set from command line pls
 verbose_output = False
 
 def verbose(msg):

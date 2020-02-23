@@ -35,9 +35,7 @@ class Node:
         """
         Returns a string representation of this object
         """
-        if type(self.data) is list:
-            return '[' + ', '.join([str(i) for i in self.data]) + ']'
-        return str(self.data)
+        return '[' + ', '.join([str(i) for i in self.nodes]) + ']'
 
 class LineParserNode(Node):
     """
@@ -60,7 +58,7 @@ class LineParserNode(Node):
             try:
                 nodes.append(cls(line))
             except NodeParserException as e:
-                log.verbose(repr(e))
+                log.verbose(str(e))
 
         cls.log_nodes(nodes)
         return nodes

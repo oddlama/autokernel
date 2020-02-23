@@ -2,10 +2,11 @@
 
 import autokernel
 import argparse
-from autokernel import log, Lkddb, NodeDetector, Kconfig, print_expr_tree
+from autokernel import log, Lkddb, NodeDetector, Kconfig, print_expr_tree, Config, ConfigParsingException
 
 import subprocess
 import os
+import sys
 
 def set_env_default(var, default_value):
     """
@@ -39,23 +40,26 @@ def detect_options():
     # Inspect the current system
     detector = NodeDetector()
 
-    log.info("Matching detected nodes against database")
-    # Try to find nodes in the database
-    detected_options = set()
-    for detector_node in detector.nodes:
-        for node in detector_node.nodes:
-            log.verbose("Options for {}:".format(node))
-            opts = config_db.find_options(node)
-            if log.verbose_output:
-                for i in opts:
-                    log.verbose(" - {}".format(i))
-            detected_options.update(opts)
-
-    # Load current kernel config and check against detected options
+    # Load current kernel config
     kernel_dir = "/usr/src/linux"
     load_environment_variables(dir=kernel_dir)
     kconfig = Kconfig(dir=kernel_dir)
     kconfig.kconfig.load_config(filename='.config')
+
+    # Try to find detected nodes in the database
+    log.info("Matching detected nodes against database")
+    detected_options = set()
+    for detector_node in detector.nodes:
+        for node in detector_node.nodes:
+            opts = config_db.find_options(node)
+            if len(opts) > 0:
+                log.verbose("Options for {}:".format(node))
+                module_name = ... get from node
+                for i in opts:
+                if log.verbose_output:
+                    for i in opts:
+                        log.verbose(" - {}".format(i))
+            detected_options.update(opts)
 
     # TODO only print summary like 25 options were alreay enabled, 24 are currently modules that can be enabled permanently and 134 are missing
     log.info("The following options were detected:")
@@ -98,13 +102,15 @@ def create_config():
     kconfig.write_config(filename="b")
 
 def main():
-    #parser = argparse.ArgumentParser(description="TODO")
+    parser = argparse.ArgumentParser(description="TODO")
 
     ## General options
     #parser.add_argument('-c', '--config', dest='config_file',
     #        help="")
     #parser.add_argument('--no-interactive', dest='no_interative', action='store_true',
     #        help="Disables all interactive prompts and automatically selects the default answer.")
+    parser.add_argument('-v', '--verbose', dest='verbose', action='store_true',
+            help="Enables verbose output.")
 
     ## Operation modes
     ## TODO en/disables the given option (and dependencies) interactively.
@@ -131,9 +137,14 @@ def main():
     #parser.add_argument('-f', '--full-build', dest='', action='store_true',
     #        help="Merges the ")
 
-    #args = parser.parse_args()
+    args = parser.parse_args()
+    log.verbose_output = args.verbose
 
-    config = autokernel.Config(filename='example_config.conf')
+    try:
+        config = Config(filename='example_config.conf')
+    except ConfigParsingException as e:
+        log.error(str(e))
+        sys.exit(1)
 
     # TODO umask
     detect_options()
