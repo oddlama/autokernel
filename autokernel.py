@@ -133,6 +133,8 @@ def main():
 
     #args = parser.parse_args()
 
+    config = autokernel.Config(filename='example_config.conf')
+
     # TODO umask
     detect_options()
 

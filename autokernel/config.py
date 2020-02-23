@@ -1,114 +1,237 @@
 import os
 import shlex
+import sys
+from . import log
 
-class Statement:
+class ConfigParsingException(Exception):
     pass
 
+class Statement:
+    parser_type = 'statement'
+
+    def __init__(self, arguments):
+        """
+        Creates a new statement
+        """
+        # TODO nope
+        self.arguments = arguments
+
 class Context:
-    subcontexts = {}
+    """
+    A base class for all context classes. Can parse a set of tokens,
+    and creates subcontexts and statements depending on the derived classes keywords.
+    """
+    parser_type = 'context'
+    append = False
+    mixin_contexts = {}
 
-class SingletonContext:
-    def __init__(self, cfg, ctx, tokens):
-        if len(tokens) != 0:
-            raise ParsingException("'{}' context does not take parameters".format(self.name))
+    def __init__(self, parent, arguments=[]):
+        """
+        Creates a new context given the parent context
+        """
+        self.parent = parent
+        self.parse_arguments(arguments)
+        self.items = []
 
-        # If the parent has an existing subcontext of this type, append to it.
-        # Otherwise, set us as the subcontext for this type of the given parent context.
-        if self.__class__ not in ctx.subcontexts:
-            ctx.subcontexts[self.__class__] = self
-        ctx.subcontexts[self.__class__]._parse(cfg, ctx, tokens)
+        # Create mixin context classes with us as parent,
+        # if we have mixin_contexts
+        for attr in self.mixin_contexts:
+            setattr(self, attr, self.mixin_contexts[attr](self))
+
+    def parse_arguments(self, arguments):
+        """
+        Parses given arguments
+        """
+        if len(arguments) != 0:
+            raise ConfigParsingException("'{}' requires no arguments".format(self.keyword))
+
+    def _get_keyword_parser(self, keyword):
+        """
+        Returns the correct parser class for the given keyword
+        """
+        parser = next((i for i in self.keywords if i.keyword == keyword), None)
+        if parser:
+            # We are the context, because the keyword is in our keyword list
+            return (self, parser)
+
+        # Try to find a mixin that accepts the keyword,
+        # if we did not recognize the keyword
+        if not parser:
+            for attr in self.mixin_contexts:
+                subctx = getattr(self, attr)
+                parser = subctx._get_keyword_parser(keyword)
+                if parser:
+                    return (subctx, parser)
+
+        # Unknown keyword
+        return (None, None)
+
+    def parse(self, root, tokens):
+        """
+        Parses all given tokens as statements or subcontexts inside this current context.
+        """
+        while len(tokens) > 0:
+            keyword = tokens[0]
+
+            # Our section got closed
+            if keyword == "}":
+                if self == root:
+                    # You cannot close the root section
+                    raise ConfigParsingException("Unmatched '}'")
+                # Return remaining tokens to the parent context
+                return tokens
+
+            # Get parser by keyword
+            ctx, parser = self._get_keyword_parser(keyword)
+            if not parser:
+                raise ConfigParsingException("Unknown keyword '{}' in context '{}'".format(keyword, self.keyword))
+
+            if parser.parser_type == 'context':
+                # If the keyword opens a new context, begin with finding
+                # the opening brace
+                last_token_idx = next((i for i,x in enumerate(tokens) if x.endswith('{')), 0)
+                if not last_token_idx:
+                    raise ConfigParsingException("Missing opening brace for '{}'".format(parser.keyword))
+
+                if len(tokens[last_token_idx]) == 1:
+                    # Remove the whole token if it is only the brace
+                    arguments = tokens[:last_token_idx]
+                elif len(tokens[last_token_idx]) > 1:
+                    # Remove the opening brace from the last token
+                    arguments = tokens[:last_token_idx+1]
+                    arguments[-1] = arguments[-1][:-1]
+                tokens = tokens[last_token_idx+1:]
+
+                # If the new context is a singleton, try to append to an existing context.
+                pi = None
+                if parser.append:
+                    pi = next((i for i in items if i.__class__ == parser), None)
+
+                # Create a new context, if required
+                if not pi:
+                    pi = parser(self, arguments)
+                    self.items.append(pi)
+
+                # Parse the tokens with the given context from now on, and resume
+                # with all unmatched tokens later.
+                tokens = pi.parse(root, tokens)
+            elif parser.parser_type == 'statement':
+                # If the keyword begins a statement, begin with finding the terminating semicolon
+                last_token_idx = next((i for i,x in enumerate(tokens) if x.endswith(';')), 0)
+                if not last_token_idx:
+                    raise ConfigParsingException("Missing semicolon for '{}'".format(parser.keyword))
+
+                if len(tokens[last_token_idx]) == 1:
+                    # Remove the whole token if it is only the brace
+                    arguments = tokens[:last_token_idx]
+                elif len(tokens[last_token_idx]) > 1:
+                    # Remove the opening brace from the last token
+                    arguments = tokens[:last_token_idx+1]
+                    arguments[-1] = arguments[-1][:-1]
+                tokens = tokens[last_token_idx+1:]
+
+                # Parse the tokens with the given context from now on, and resume
+                # with all unmatched tokens later.
+                self.items.append(parser(arguments))
+            else:
+                raise Exception("Invalid parser type for class {}".format(parser.__class__.__name__))
 
 class SetStatement(Statement):
-    def __init__(self, cfg, ctx, tokens):
+    keyword = "set"
+
+    def parse_arguments(self, arguments):
         pass
 
 class AssertStatement(Statement):
-    def __init__(self, cfg, ctx, tokens):
+    keyword = "assert"
+
+    def parse_arguments(self, arguments):
         pass
 
 class UseStatement(Statement):
-    def __init__(self, cfg, ctx, tokens):
+    keyword = "use"
+
+    def parse_arguments(self, arguments):
         pass
 
 class SymbolContext(Context):
-    keywords = {
-        'set': SetStatement,
-        'assert': AssertStatement,
-        'use': UseStatement,
+    keyword = 'symbol'
+    keywords = [
+        SetStatement,
+        AssertStatement,
+        UseStatement,
+    ]
+
+class ModuleContext(Context):
+    keyword = 'module'
+    keywords = []
+    mixin_contexts = {
+        'symbols': SymbolContext
     }
 
-    def __init__(self, cfg, ctx, tokens):
-        raise Exception("SymbolContext must be used as a mixin!")
-
-class ModuleContext(Context, SymbolContext):
-    name = 'module'
-    def __init__(self, cfg, ctx, tokens):
-        if len(tokens) != 1:
-            raise ParsingException("module definition requires exactly one identifier")
+    def parse_arguments(self, arguments):
+        if len(arguments) != 1:
+            raise ConfigParsingException("module definition requires exactly one identifier")
 
 class BaseStatement(Statement):
-    def __init__(self, cfg, ctx, tokens):
-        if len(tokens) != 1:
-            raise ParsingException("base statement requires exactly one argument")
+    keyword = 'base'
+    def parse_arguments(self, arguments):
+        if len(arguments) != 1:
+            raise ConfigParsingException("base statement requires exactly one argument")
 
 class ModuleDirStatement(Statement):
-    def __init__(self, cfg, ctx, tokens):
-        pass
+    keyword = 'module'
+    def parse_arguments(self, arguments):
+        if len(arguments) != 1:
+            raise ConfigParsingException("module_dir statement requires exactly one argument")
 
-class KernelContext(SingletonContext, SymbolContext):
-    name = 'kernel'
-    keywords = {
-        'base': BaseStatement,
+class KernelContext(Context):
+    keyword = 'kernel'
+    append = True
+    keywords = [
+        BaseStatement,
+    ]
+
+    mixin_contexts = {
+        'symbols': SymbolContext
     }
 
-    def _parse(self, cfg, ctx, tokens):
-        pass
+class GenkernelContext(Context):
+    keyword = 'genkernel'
+    append = True
+    keywords = [
+        #'add_param'
+    ]
 
-class GenkernelContext(SingletonContext):
-    name = 'genkernel'
-    keywords = {
-        'add_param': None,
-    }
-
-    def _parse(self, cfg, ctx, tokens):
-        pass
-
-class InitramfsContext(SingletonContext):
-    name = 'initramfs'
-    keywords = {
-        'add_cmdline': None,
-        'static_cmdline': None,
-        'genkernel': GenkernelContext,
-    }
-
-    def _parse(self, cfg, ctx, tokens):
-        pass
+class InitramfsContext(Context):
+    keyword = 'initramfs'
+    append = True
+    keywords = [
+        #'add_cmdline': None,
+        #'static_cmdline': None,
+        GenkernelContext,
+    ]
 
 class InstallContext(Context):
-    name = 'install'
-    keywords = {
-        'mode': None,
-        'target_dir': None,
-        'target': None,
-        'add_efi_boot_entry': None,
-    }
-
-    def _parse(self, cfg, ctx, tokens):
-        pass
+    keyword = 'install'
+    keywords = [
+        #'mode': None,
+        #'target_dir': None,
+        #'target': None,
+        #'add_efi_boot_entry': None,
+    ]
 
 class RootContext(Context):
-    keywords = {
-        'module_dir': ModuleDirStatement,
-        'module': ModuleContext,
-        'kernel': KernelContext,
-        'initramfs': InitramfsContext,
-        'install': InstallContext,
-    }
+    keyword = 'root'
+    keywords = [
+        ModuleDirStatement,
+        ModuleContext,
+        KernelContext,
+        InitramfsContext,
+        InstallContext,
+    ]
 
-    def __init__(self):
-        pass
-
-class Config:
+class Config(RootContext):
     """
     The configuration class is used to parse a configuration file
     and provide access to the configuration data
@@ -118,27 +241,16 @@ class Config:
         """
         Loads the given configuration file
         """
+        super().__init__(None)
         self._load_config(filename)
 
     def _load_config(self, filename):
         with open(filename, 'r') as f:
             tokens = shlex.split(f.read(), comments=True)
 
-        root_context = RootContext()
-        cur_context = root_context
-        while len(tokens) > 0:
-            keyword = tokens.pop_first()
-            if t in keywords:
-                if context:
-                    find token ending in {
-                    args = tokens.pop[:idx]
-                else if statement
-                    find token ending in ;
-                    args = tokens.pop[:idx]
-            else:
-                if }
-                    go up one lvl
-                elif ;
-                    empty statement
-                else
-                    unknown keywords
+        try:
+            # Parse all tokens inside the root context
+            self.parse(self, tokens)
+        except ConfigParsingException as e:
+            log.error(str(e))
+            sys.exit(1)
