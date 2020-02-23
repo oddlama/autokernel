@@ -257,7 +257,7 @@ class Lkddb:
         # Get best entry by score
         best_entry = matching_entries[0][1]
         # Add all config options to the set
-        return set(best_entry.data.config_options)
+        return best_entry.data.config_options
 
     def _fetch_db(self):
         """
@@ -328,7 +328,7 @@ class Lkddb:
 
         # Validate that each config option starts with CONFIG_,
         # remove the prefix and make a unique set.
-        config_options = set()
+        config_options = list()
         for c in filter(None, m.group('config_options').split(' ')):
             if not c.startswith('CONFIG_'):
                 # Skip entries with invalid options
@@ -339,7 +339,9 @@ class Lkddb:
                 continue
 
             # remove this CONFIG_ prefix and add to set
-            config_options.add(c[len('CONFIG_'):])
+            opt = c[len('CONFIG_'):]
+            if opt not in config_options:
+                config_options.append(opt)
 
         # Split arguments on space while preserving quoted strings
         arguments = shlex.split(arguments)

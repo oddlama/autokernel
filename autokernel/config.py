@@ -1,6 +1,9 @@
 import os
 import shlex
+import sys
+import kconfiglib
 from . import log
+from .constants import NO, MOD, YES
 
 def split_args_from_tokens(tokens, delim):
     """
@@ -125,12 +128,12 @@ class Context:
                 # If the new context is a singleton, try to append to an existing context.
                 pi = None
                 if parser.append:
-                    pi = next((i for i in self.items if i.__class__ == parser), None)
+                    pi = next((i for i in ctx.items if i.__class__ == parser), None)
 
                 # Create a new context, if required
                 if not pi:
-                    pi = parser(self, arguments)
-                    self.items.append(pi)
+                    pi = parser(ctx, arguments)
+                    ctx.items.append(pi)
 
                 # Parse the tokens with the given context from now on, and resume
                 # with all unmatched tokens later.
@@ -143,7 +146,7 @@ class Context:
 
                 # Parse the tokens with the given context from now on, and resume
                 # with all unmatched tokens later.
-                self.items.append(parser(arguments))
+                ctx.items.append(parser(arguments))
             else:
                 raise Exception("Invalid parser type for class {}".format(parser.__class__.__name__))
 
@@ -151,19 +154,33 @@ class SetStatement(Statement):
     keyword = "set"
 
     def parse_arguments(self, arguments):
-        pass
+        if len(arguments) == 1:
+            self.symbol = arguments[0]
+            self.value = YES
+        elif len(arguments) == 3 and arguments[1] == '=':
+            self.symbol = arguments[0]
+            self.value = arguments[2]
+            if self.value in kconfiglib.STR_TO_TRI:
+                self.value = kconfiglib.STR_TO_TRI[self.value]
+        else:
+            raise ConfigParsingException("set statement must be of form 'set SYMBOL [= VALUE];'")
 
 class AssertStatement(Statement):
     keyword = "assert"
 
     def parse_arguments(self, arguments):
-        pass
+        if len(arguments) == 0:
+            raise ConfigParsingException("assert statement requires an expression")
+        # TODO parse expression
+        self.expression = ' '.join(arguments)
 
 class UseStatement(Statement):
     keyword = "use"
 
     def parse_arguments(self, arguments):
-        pass
+        if len(arguments) == 0:
+            raise ConfigParsingException("use statement requires at least one argument, but {} were provided".format(len(arguments)))
+        self.dependencies = arguments
 
 class SymbolContext(Context):
     keyword = 'symbol'
@@ -183,6 +200,7 @@ class ModuleContext(Context):
     def parse_arguments(self, arguments):
         if len(arguments) != 1:
             raise ConfigParsingException("module definition requires exactly one identifier, but {} were provided".format(len(arguments)))
+        self.id = arguments[0]
 
 class BaseStatement(Statement):
     keyword = 'base'
@@ -190,6 +208,7 @@ class BaseStatement(Statement):
     def parse_arguments(self, arguments):
         if len(arguments) != 1:
             raise ConfigParsingException("base statement requires exactly one argument")
+        self.base = arguments[0]
 
 class ModuleDirStatement(Statement):
     keyword = 'module_dir'
@@ -269,12 +288,7 @@ class ModuleFileRootContext(Context):
         ModuleContext,
     ]
 
-class Config(Context):
-    """
-    The configuration class is used to parse a configuration file
-    and provide access to the configuration data
-    """
-
+class ConfigContext(Context):
     keyword = 'config_file'
     keywords = [
         ModuleDirStatement,
@@ -284,29 +298,102 @@ class Config(Context):
         InstallContext,
     ]
 
+class ConfigModule:
+    def __init__(self, id):
+        self.id = id
+        self.dependencies = []
+        self.symbol_values = []
+        self.assertions = []
+
+    def parse_context(self, config, ctx):
+        for i in ctx.items:
+            if i.__class__ == UseStatement:
+                try:
+                    self.dependencies.extend([config.modules[i] for i in i.dependencies])
+                except KeyError as e:
+                    log.error("module '{}' used but never defined".format(e.args[0]))
+                    sys.exit(1)
+            elif i.__class__ == SetStatement:
+                self.symbol_values.append((i.symbol, i.value))
+            elif i.__class__ == AssertStatement:
+                # TODO
+                pass
+
+class ConfigKernel:
+    def __init__(self):
+        self.base = None
+        self.module = ConfigModule(None)
+
+    def parse_context(self, config, ctx):
+        self.module.parse_context(config, ctx.symbols)
+
+        for i in ctx.items:
+            if i.__class__ == BaseStatement:
+                self.base = i.base
+
+class Config(Context):
+    """
+    The configuration class is used to parse a configuration file
+    and provide access to the configuration data
+    """
+
     def __init__(self, filename):
         """
         Loads the given configuration file
         """
-        super().__init__(None)
         log.verbose('Loading configuration file')
         self._load_config(filename)
 
     def _load_config(self, filename):
+        """
+        Loads and parses the given config file
+        """
         with open(filename, 'r') as f:
             tokens = shlex.split(f.read(), comments=True)
 
         # Parse all tokens inside the root context
-        self.parse(self, tokens)
+        root_context = ConfigContext(None)
+        root_context.parse(root_context, tokens)
 
         # For all module_dir statements, load all files inside the mentioned directories,
         # but restrict root-level parsing to modules
         module_file_root_context = ModuleFileRootContext(None)
-        for i in self.items:
+        for i in root_context.items:
             if i.__class__ == ModuleDirStatement:
                 if os.path.isdir(i.directory):
                     for file in os.listdir(i.directory):
-                        if os.path.isfile(file):
-                            with open(file, 'r') as f:
+                        filename = os.path.join(i.directory, file)
+                        if os.path.isfile(filename):
+                            with open(filename, 'r') as f:
                                 tokens = shlex.split(f.read(), comments=True)
-                                module_file_root_context.parse(self, tokens)
+                                module_file_root_context.parse(module_file_root_context, tokens)
+
+        self.modules = {}
+
+        # Create empty modules for each parsed module
+        for c in [root_context, module_file_root_context]:
+            for i in c.items:
+                if i.__class__ == ModuleContext:
+                    if i.id in self.modules:
+                        raise ConfigParsingException("Redefinition of module '{}'".format(i.id))
+                    self.modules[i.id] = ConfigModule(i.id)
+
+        # Fill module information, now that dependencies can be resolved
+        for c in [root_context, module_file_root_context]:
+            for i in c.items:
+                if i.__class__ == ModuleContext:
+                    self.modules[i.id].parse_context(self, i.symbols)
+
+        # Parse everything except modules
+        #self.initramfs = ConfigInitramfs()
+        #self.install = ConfigInstall()
+        self.kernel = ConfigKernel()
+
+        # Parse kernel master module
+        for i in root_context.items:
+            if i.__class__ == KernelContext:
+                self.kernel.parse_context(self, i)
+            # TODO elif i.__class__ == InitramfsContext:
+            # TODO     self.initramfs.parse_context(self, i)
+            # TODO elif i.__class__ == InstallContext:
+            # TODO     self.install.parse_context(self, i)

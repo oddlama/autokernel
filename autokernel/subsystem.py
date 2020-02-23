@@ -1,3 +1,5 @@
+import re
+
 class WildcardTokenType:
     """
     Do not use this class, instead use the wildcard_token instance!
@@ -29,6 +31,17 @@ class SubsystemNode:
                     for param in self._get_parameters()])
         str += '}'
         return str
+
+    def get_canonical_name(self):
+        """
+        Returns a canonical name suitable to be used as a filename
+        """
+        clsname = self.__class__.__name__
+        if clsname.endswith('Node'):
+            clsname = clsname[:-4]
+        str = '_'.join([clsname] + ['{}'.format(self._param_to_str(param)) \
+                    for param in self._get_parameters()])
+        return re.sub(r'[^a-zA-Z0-9_-]+', '', str).lower()
 
     def _parse_parameter(self, param, p):
         if p == wildcard_token:
