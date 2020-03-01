@@ -30,8 +30,8 @@ def load_environment_variables(dir):
     set_env_default("HOSTCC", "gcc")
     set_env_default("HOSTCXX", "g++")
 
-    os.environ["KERNELVERSION"] = subprocess.run(['make', 'kernelversion'], cwd=dir, stdout=subprocess.PIPE).stdout.decode('utf-8').strip().split('\n')[0]
-    os.environ["CC_VERSION_TEXT"] = subprocess.run(['gcc', '--version'], stdout=subprocess.PIPE).stdout.decode('utf-8').strip().split('\n')[0]
+    os.environ["KERNELVERSION"] = subprocess.run(['make', 'kernelversion'], cwd=dir, stdout=subprocess.PIPE).stdout.decode().strip().splitlines()[0]
+    os.environ["CC_VERSION_TEXT"] = subprocess.run(['gcc', '--version'], stdout=subprocess.PIPE).stdout.decode().strip().splitlines()[0]
 
 def write_local_module_file(filename, content):
     """
@@ -87,6 +87,8 @@ def detect_options():
     kconfig = Kconfig(dir=kernel_dir)
     kconfig.kconfig.load_config(filename='.config')
 
+    # TODO dont create file for each module, instead create only a combined file "local".
+
     # Try to find detected nodes in the database
     log.info("Matching detected nodes against database")
     detected_options = set()
@@ -124,65 +126,29 @@ def detect_options():
 
         print("[[{}m{}[m] {}".format(color, TRI_TO_STR[sym.tri_value], sym.name))
 
-def create_config():
-    # Load kconfig file
-    kernel_dir = "/usr/src/linux"
-    load_environment_variables(dir=kernel_dir)
-    kconfig = Kconfig(dir=kernel_dir)
+###############################def create_config():
+###############################    # Load kconfig file
+###############################    kernel_dir = "/usr/src/linux"
+###############################    load_environment_variables(dir=kernel_dir)
+###############################    kconfig = Kconfig(dir=kernel_dir)
+###############################
+###############################    # Begin with allnoconfig
+###############################    kconfig.all_no_config()
+###############################
+###############################    # Load configuration changes from config_dir
+###############################
+###############################    kconfig.write_config(filename="a")
+###############################
+###############################    sym = kconfig.get_symbol("DVB_USB_RTL28XXU")
+###############################    # TODO make autokernel --enable [CONFIG_]SOME_CONF,
+###############################    # which tells you which were enabled why, and asks on optionals
+###############################    kconfig.set_sym_with_deps(sym, autokernel.MOD)
+###############################
+###############################    kconfig.write_config(filename="b")
 
-    # Begin with allnoconfig
-    kconfig.all_no_config()
-
-    # Load configuration changes from config_dir
-
-    kconfig.write_config(filename="a")
-
-    sym = kconfig.get_symbol("DVB_USB_RTL28XXU")
-    # TODO make autokernel --enable [CONFIG_]SOME_CONF,
-    # which tells you which were enabled why, and asks on optionals
-    kconfig.set_sym_with_deps(sym, autokernel.MOD)
-
-    kconfig.write_config(filename="b")
-
-def main():
-    parser = argparse.ArgumentParser(description="TODO")
-
-    ## General options
-    #parser.add_argument('-c', '--config', dest='config_file',
-    #        help="")
-    #parser.add_argument('--no-interactive', dest='no_interative', action='store_true',
-    #        help="Disables all interactive prompts and automatically selects the default answer.")
-    parser.add_argument('-v', '--verbose', dest='verbose', action='store_true',
-            help="Enables verbose output.")
-
-    ## Operation modes
-    ## TODO en/disables the given option (and dependencies) interactively.
-    ## TODO check for conflicting options in config
-    ## Writes the new config as /etc/autokernel.d/sets/zzz-local
-    #parser.add_argument('-o', '--output', dest='',
-    #        help="Output as /etc/autokernel.d/sets/{{output}}")
-    #parser.add_argument('-s', '--search', dest='',
-    #        help="")
-    #parser.add_argument('-e', '--enable', dest='',
-    #        help="")
-    #parser.add_argument('-d', '--disable', dest='',
-    #        help="")
-    #parser.add_argument('-d', '--detect-local-options', dest='',
-    #        help="Detect kernel options for this host and c")
-
-    ## Kernel related modes
-    #parser.add_argument('-m', '--merge-config', dest='',
-    #        help="")
-    #parser.add_argument('-b', '--build', dest='',
-    #        help="")
-    #parser.add_argument('-i', '--install', dest='',
-    #        help="")
-    #parser.add_argument('-f', '--full-build', dest='', action='store_true',
-    #        help="Merges the ")
-
-    args = parser.parse_args()
-    log.verbose_output = args.verbose
-
+def generate_config(args):
+    log.info("Generating .config for kernel")
+    return
     try:
         config = Config(filename='example_config.conf')
     except ConfigParsingException as e:
@@ -235,7 +201,129 @@ def main():
     visit(config.kernel.module)
 
     # TODO umask
-    #detect_options()
+
+def build_kernel(args):
+    log.info("Building kernel")
+
+def build_initramfs(args):
+    # TODO dont build initramfs if not needed
+    log.info("Building initramfs")
+
+def install_kernel(args):
+    log.info("Installing kernel")
+
+def install_initramfs(args):
+    # TODO dont install initramfs if not needed (section not given)
+    log.info("Installing initramfs")
+
+def install(args):
+    # TODO print only kernel if initramfs not needed
+    install_kernel(args)
+    install_initramfs(args)
+
+def build_full(args):
+    log.info("Full build")
+    generate_config(args)
+    build_kernel(args)
+    build_initramfs(args)
+    install(args)
+
+def detect(args):
+    # Add fallbacks for output type and output file.
+    if not args.output_type:
+        args.output_type = 'module'
+        if not args.output:
+            args.output = '/etc/autokernel/modules.d/local'
+
+    # Allow - as an alias for stdout
+    if args.output == '-':
+        args.output = None
+
+    log.info("Detecting kernel configuration for local system")
+    log.info("output to {}".format(args.output))
+    log.info("type {}".format(args.output_type))
+    log.info("modname {}".format(args.output_module_name))
+
+def check_kernel_dir(value):
+    """
+    Checks if the given value is a valid kernel directory path.
+    """
+
+    if not os.path.isdir(value):
+        raise argparse.ArgumentTypeError("'{}' is not a directory".format(value))
+
+    if not os.path.exists(os.path.join(value, 'Kconfig')):
+        raise argparse.ArgumentTypeError("'{}' is not a valid kernel directory, as it does not contain a Kconfig file".format(value))
+
+    return value
+
+def main():
+    parser = argparse.ArgumentParser(description="TODO. If no mode is given, 'autokernel full' will be executed.")
+    subparsers = parser.add_subparsers(title="commands",
+            description="Use 'autokernel command --help' to view the help for any command.",
+            metavar='Valid commands:')
+
+    # General options
+    parser.add_argument('-k', '--kernel-dir', dest='kernel_dir', default='/usr/src/linux', type=check_kernel_dir,
+            help="The kernel directory to operate on.")
+
+    # Output options
+    output_options = parser.add_mutually_exclusive_group()
+    output_options.add_argument('-q', '--quiet', dest='quiet', action='store_true',
+            help="Disables any additional output except for errors.")
+    output_options.add_argument('-v', '--verbose', dest='verbose', action='store_true',
+            help="Enables verbose output.")
+
+    # Config generation options
+    parser_generate_config = subparsers.add_parser('generate-config', help='TODO')
+    parser_generate_config.set_defaults(func=generate_config)
+
+    # Kernel build options
+    parser_build_kernel = subparsers.add_parser('build-kernel', help='TODO')
+    parser_build_kernel.set_defaults(func=build_kernel)
+
+    # Initramfs build options
+    parser_build_initramfs = subparsers.add_parser('build-initramfs', help='TODO')
+    parser_build_initramfs.set_defaults(func=build_initramfs)
+
+    # Installation options
+    parser_install = subparsers.add_parser('install', help='TODO')
+    parser_install.set_defaults(func=install)
+
+    # Full build options
+    parser_full = subparsers.add_parser('full', help='TODO')
+    parser_full.set_defaults(func=build_full)
+
+    # TODO
+    #parser_search = subparsers.add_parser('search', help='TODO')
+
+    # Config detection options
+    parser_detect = subparsers.add_parser('detect', help='TODO')
+    parser_detect.add_argument('-t', '--type', choices=['module', 'plain'], dest='output_type',
+            help="Selects the output type. 'plain' will output an easily parsable list of all required configuration options and their origin. 'module' will output a ready-to-use autokernel module ")
+    parser_detect.add_argument('-m', '--module-name', dest='output_module_name', default='local',
+            help="The name of the module which enables all detected options (default: 'local').")
+    parser_detect.add_argument('-o', '--output', dest='output',
+            help="Writes the output to the given file instead of stdout. If the type is not explicitly set, this defaults to /etc/autokernel/modules.d/<module_name>.")
+    parser_detect.set_defaults(func=detect)
+
+    ## TODO en/disables the given option (and dependencies) interactively.
+    ## TODO check for conflicting options in config
+# TODO static paths as global variable
+
+
+    args = parser.parse_args()
+
+    # Enable verbose logging if desired
+    log.verbose_output = args.verbose
+    log.quiet_output = args.quiet
+
+    # Fallback to build_full() if no mode is given
+    if 'func' not in args:
+        build_full(args)
+    else:
+        # Execute the mode's function
+        args.func(args)
 
 if __name__ == '__main__':
     main()

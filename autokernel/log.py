@@ -1,16 +1,19 @@
 import sys
 
 verbose_output = False
+quiet_output = False
 
 def verbose(msg):
-    if verbose_output:
+    if not quiet_output and verbose_output:
         print(" * [2;37m{}[m".format(msg))
 
 def info(msg):
-    print("[1;32m *[m {}".format(msg))
+    if not quiet_output:
+        print("[1;32m *[m {}".format(msg))
 
 def warn(msg):
-    print("[1;33m *[m {}".format(msg))
+    if not quiet_output:
+        print("[1;33m *[m {}".format(msg))
 
 def error(msg):
     print("[1;31m * ERROR:[m {}".format(msg), file=sys.stderr)

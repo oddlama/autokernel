@@ -50,7 +50,7 @@ class LineParserNode(Node):
 
     @classmethod
     def detect_nodes(cls):
-        fstypes = subprocess.run(['findmnt', '-A', '-n', '-o', 'FSTYPE'], stdout=subprocess.PIPE).stdout.decode('utf-8').strip().split('\n')
+        fstypes = subprocess.run(['findmnt', '-A', '-n', '-o', 'FSTYPE'], stdout=subprocess.PIPE).stdout.decode().strip().splitlines()
 
         # Create list of nodes from lines
         nodes = []
@@ -252,7 +252,7 @@ class ModaliasNode(SysfsNode):
         """
 
         # We use find here, because python raises an OSError when it reaches efivars directory. Probably
-        return filter(None, [i.decode('utf-8') for i in subprocess.run(['find', '/sys', '-type', 'f', '-name', 'modalias', '-print0'], stdout=subprocess.PIPE, stderr=subprocess.PIPE).stdout.split(b'\0')])
+        return filter(None, [i.decode() for i in subprocess.run(['find', '/sys', '-type', 'f', '-name', 'modalias', '-print0'], stdout=subprocess.PIPE, stderr=subprocess.PIPE).stdout.split(b'\0')])
 
 class PnpNode(SysfsNode):
     """
@@ -296,7 +296,7 @@ class FsTypeNode(LineParserNode):
 
     @classmethod
     def get_lines(cls):
-        fstypes = subprocess.run(['findmnt', '-A', '-n', '-o', 'FSTYPE'], stdout=subprocess.PIPE).stdout.decode('utf-8').strip().split('\n')
+        fstypes = subprocess.run(['findmnt', '-A', '-n', '-o', 'FSTYPE'], stdout=subprocess.PIPE).stdout.decode().strip().splitlines()
         return set(fstypes)
 
 class ModuleNode(LineParserNode):

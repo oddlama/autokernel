@@ -367,6 +367,11 @@ class Config(Context):
                             with open(filename, 'r') as f:
                                 tokens = shlex.split(f.read(), comments=True)
                                 module_file_root_context.parse(module_file_root_context, tokens)
+                else:
+                    if not os.path.exists(i.directory):
+                        log.warn("Module directory '{}' does not exist".format(i.directory))
+                    else:
+                        log.warn("Module directory '{}' is not a directory".format(i.directory))
 
         self.modules = {}
 
