@@ -146,6 +146,12 @@ def detect_options():
 ###############################
 ###############################    kconfig.write_config(filename="b")
 
+def check_config(args):
+    if args.config:
+        log.info("Checking generated config against '{}'".format(args.config))
+    else:
+        log.info("Checking generated config against current kernel")
+
 def generate_config(args):
     log.info("Generating .config for kernel")
     return
@@ -261,7 +267,7 @@ def main():
     parser = argparse.ArgumentParser(description="TODO. If no mode is given, 'autokernel full' will be executed.")
     subparsers = parser.add_subparsers(title="commands",
             description="Use 'autokernel command --help' to view the help for any command.",
-            metavar='Valid commands:')
+            metavar='command')
 
     # General options
     parser.add_argument('-k', '--kernel-dir', dest='kernel_dir', default='/usr/src/linux', type=check_kernel_dir,
@@ -273,6 +279,12 @@ def main():
             help="Disables any additional output except for errors.")
     output_options.add_argument('-v', '--verbose', dest='verbose', action='store_true',
             help="Enables verbose output.")
+
+    # Check
+    parser_check = subparsers.add_parser('check', help="Checks the currently running kernel's TODO")
+    parser_check.add_argument('config', nargs='?',
+            help="Compare the generated configuration against the given kernel configuration and report the status of each option. If no config file is given, the script will try to use the current kernel's configuration from /proc/config{,.gz}.")
+    parser_check.set_defaults(func=check_config)
 
     # Config generation options
     parser_generate_config = subparsers.add_parser('generate-config', help='TODO')
@@ -302,9 +314,11 @@ def main():
     parser_detect.add_argument('-t', '--type', choices=['module', 'plain'], dest='output_type',
             help="Selects the output type. 'plain' will output an easily parsable list of all required configuration options and their origin. 'module' will output a ready-to-use autokernel module ")
     parser_detect.add_argument('-m', '--module-name', dest='output_module_name', default='local',
-            help="The name of the module which enables all detected options (default: 'local').")
+            help="The name of the generated module, which will enable all detected options (default: 'local').")
+    parser_detect.add_argument('-c', '--check', nargs='?', dest='check_config',
+            help="Instead of outputting the required configuration values, compare the detected options against the given kernel configuration and report the status of each option. If no config file is given, the script will try to use the current kernel's configuration from /proc/config{,.gz}.")
     parser_detect.add_argument('-o', '--output', dest='output',
-            help="Writes the output to the given file instead of stdout. If the type is not explicitly set, this defaults to /etc/autokernel/modules.d/<module_name>.")
+            help="Writes the output to the given file. Use - for stdout. If the type is not explicitly set, this defaults to /etc/autokernel/modules.d/<module_name>.")
     parser_detect.set_defaults(func=detect)
 
     ## TODO en/disables the given option (and dependencies) interactively.
