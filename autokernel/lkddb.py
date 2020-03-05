@@ -264,9 +264,9 @@ class Lkddb:
         Downloads the newest lkddb file.
         """
 
-        log.info("Downloading lkddb database")
         # TODO only when upstream version is newer
         if not os.path.exists(self.lkddb_file):
+            log.info("Downloading lkddb database")
             urllib.request.urlretrieve(self.lkddb_url, self.lkddb_file)
 
     def _load_db(self):
@@ -275,7 +275,7 @@ class Lkddb:
         loads the contained information.
         """
 
-        log.info("Parsing lkddb database")
+        log.verbose("Parsing lkddb database")
         self.entries = {}
 
         valid_lines = 0

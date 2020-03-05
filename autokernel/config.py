@@ -2,6 +2,7 @@ import os
 import shlex
 import sys
 import kconfiglib
+
 from . import log
 from .constants import NO, MOD, YES
 

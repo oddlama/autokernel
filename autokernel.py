@@ -1,37 +1,18 @@
 #!/usr/bin/env python3
 
-import autokernel
 import argparse
-from autokernel import log, Lkddb, NodeDetector, Kconfig, print_expr_tree, Config, ConfigParsingException
+import kconfiglib
 from kconfiglib import TRI_TO_STR
 
-import subprocess
+from autokernel.kconfig import *
+from autokernel.node_detector import NodeDetector
+from autokernel.lkddb import Lkddb
+from autokernel.config import Config, ConfigParsingException
+from autokernel import log
+
 import os
 import sys
 from pathlib import Path
-
-def set_env_default(var, default_value):
-    """
-    Sets an environment variable to the given default_value if it is currently unset.
-    """
-    if var not in os.environ:
-        os.environ[var] = default_value
-
-def load_environment_variables(dir):
-    """
-    Loads important environment variables from the given kernel source tree.
-    """
-    log.info("Loading kernel environment variables for '{}'".format(dir))
-
-    # TODO dont force x86, parse uname instead! (see kernel makefiles
-    set_env_default("ARCH", "x86")
-    set_env_default("SRCARCH", "x86")
-    set_env_default("CC", "gcc")
-    set_env_default("HOSTCC", "gcc")
-    set_env_default("HOSTCXX", "g++")
-
-    os.environ["KERNELVERSION"] = subprocess.run(['make', 'kernelversion'], cwd=dir, stdout=subprocess.PIPE).stdout.decode().strip().splitlines()[0]
-    os.environ["CC_VERSION_TEXT"] = subprocess.run(['gcc', '--version'], stdout=subprocess.PIPE).stdout.decode().strip().splitlines()[0]
 
 def write_local_module_file(filename, content):
     """
@@ -72,59 +53,59 @@ def write_local_module_selector(identifiers):
     content += "}\n"
     write_local_module_file("local", content)
 
-def detect_options():
-    # TODO ensure that the running kernel can inspect all subsystems....
-    # TODO what if we run on a minimal kernel?
-
-    # Load the configuration database
-    config_db = Lkddb()
-    # Inspect the current system
-    detector = NodeDetector()
-
-    # Load current kernel config
-    kernel_dir = "/usr/src/linux"
-    load_environment_variables(dir=kernel_dir)
-    kconfig = Kconfig(dir=kernel_dir)
-    kconfig.kconfig.load_config(filename='.config')
-
-    # TODO dont create file for each module, instead create only a combined file "local".
-
-    # Try to find detected nodes in the database
-    log.info("Matching detected nodes against database")
-    detected_options = set()
-    local_module_identifiers = []
-    for detector_node in detector.nodes:
-        for node in detector_node.nodes:
-            opts = config_db.find_options(node)
-            if len(opts) > 0:
-                ident = "{:04d}_{}".format(len(local_module_identifiers), node.get_canonical_name())
-                local_module_identifiers.append(ident)
-
-                # Write module file for this node
-                write_local_module_for_node(ident, node, opts)
-            detected_options.update(opts)
-
-    # Create a combined 'local' module which selects all previously written modules
-    write_local_module_selector(sorted(local_module_identifiers))
-
-    # TODO only print summary like 25 options were alreay enabled, 24 are currently modules that can be enabled permanently and 134 are missing
-    log.info("The following options were detected:")
-
-    # Resolve symbols
-    syms = []
-    for i in detected_options:
-        syms.append(kconfig.get_symbol(i))
-
-    for sym in sorted(syms, key=lambda s: (-s.tri_value, s.name)):
-        color = ""
-        if sym.tri_value == autokernel.NO:
-            color = "1;31"
-        elif sym.tri_value == autokernel.MOD:
-            color = "1;33"
-        elif sym.tri_value == autokernel.YES:
-            color = "1;32"
-
-        print("[[{}m{}[m] {}".format(color, TRI_TO_STR[sym.tri_value], sym.name))
+#def detect_options():
+#    # TODO ensure that the running kernel can inspect all subsystems....
+#    # TODO what if we run on a minimal kernel?
+#
+#    # Load the configuration database
+#    config_db = Lkddb()
+#    # Inspect the current system
+#    detector = NodeDetector()
+#
+#    # Load current kernel config
+#    kernel_dir = "/usr/src/linux"
+#    load_environment_variables(dir=kernel_dir)
+#    kconfig = Kconfig(dir=kernel_dir)
+#    kconfig.kconfig.load_config(filename='.config')
+#
+#    # TODO dont create file for each module, instead create only a combined file "local".
+#
+#    # Try to find detected nodes in the database
+#    log.info("Matching detected nodes against database")
+#    detected_options = set()
+#    local_module_identifiers = []
+#    for detector_node in detector.nodes:
+#        for node in detector_node.nodes:
+#            opts = config_db.find_options(node)
+#            if len(opts) > 0:
+#                ident = "{:04d}_{}".format(len(local_module_identifiers), node.get_canonical_name())
+#                local_module_identifiers.append(ident)
+#
+#                # Write module file for this node
+#                write_local_module_for_node(ident, node, opts)
+#            detected_options.update(opts)
+#
+#    # Create a combined 'local' module which selects all previously written modules
+#    write_local_module_selector(sorted(local_module_identifiers))
+#
+#    # TODO only print summary like 25 options were alreay enabled, 24 are currently modules that can be enabled permanently and 134 are missing
+#    log.info("The following options were detected:")
+#
+#    # Resolve symbols
+#    syms = []
+#    for i in detected_options:
+#        syms.append(kconfig.syms[i])
+#
+#    for sym in sorted(syms, key=lambda s: (-s.tri_value, s.name)):
+#        color = ""
+#        if sym.tri_value == autokernel.NO:
+#            color = "1;31"
+#        elif sym.tri_value == autokernel.MOD:
+#            color = "1;33"
+#        elif sym.tri_value == autokernel.YES:
+#            color = "1;32"
+#
+#        print("[[{}m{}[m] {}".format(color, TRI_TO_STR[sym.tri_value], sym.name))
 
 ###############################def create_config():
 ###############################    # Load kconfig file
@@ -133,7 +114,7 @@ def detect_options():
 ###############################    kconfig = Kconfig(dir=kernel_dir)
 ###############################
 ###############################    # Begin with allnoconfig
-###############################    kconfig.all_no_config()
+###############################    kconfig.allnoconfig()
 ###############################
 ###############################    # Load configuration changes from config_dir
 ###############################
@@ -150,7 +131,7 @@ def check_config(args):
     if args.config:
         log.info("Checking generated config against '{}'".format(args.config))
     else:
-        log.info("Checking generated config against current kernel")
+        log.info("Checking generated config against currently running kernel")
 
 def generate_config(args):
     log.info("Generating .config for kernel")
@@ -163,11 +144,7 @@ def generate_config(args):
 
     # Load kconfig file
     kernel_dir = "/usr/src/linux"
-    load_environment_variables(dir=kernel_dir)
     kconfig = Kconfig(dir=kernel_dir)
-
-    # Begin with allnoconfig
-    kconfig.all_no_config()
 
     # Track all changed symbols and values.
     changed_symbols = {}
@@ -194,7 +171,7 @@ def generate_config(args):
                 continue
 
             # Get the kconfig symbol, and change the value
-            sym = kconfig.get_symbol(symbol)
+            sym = kconfig.syms[symbol]
             if not sym.set_value(value):
                 log.error("Invalid value '{}' for symbol '{}'".format(value, symbol))
                 sys.exit(1)
@@ -245,16 +222,71 @@ def detect(args):
     if args.output == '-':
         args.output = None
 
+    # Check if we should write a config or report differences
+    if args.check_config is not 0:
+        check_only = True
+        if args.check_config is not None:
+            check_config = args.check_config
+            log.info("Checking generated config against '{}'".format(check_config))
+        else:
+            log.info("Checking generated config against currently running kernel")
+    else:
+        check_only = False
+
     log.info("Detecting kernel configuration for local system")
-    log.info("output to {}".format(args.output))
-    log.info("type {}".format(args.output_type))
-    log.info("modname {}".format(args.output_module_name))
+    log.info("HINT: It might be beneficial to run this while using a very generic")
+    log.info("      and modular kernel such as the default kernel on Arch Linux.")
+
+    # Load the configuration database
+    config_db = Lkddb()
+    # Inspect the current system
+    detector = NodeDetector()
+
+    kconfig = load_kconfig(args.kernel_dir)
+
+    # Function to process nodes and their options
+    def process_module_and_options(ident, node, opts):
+        for o in opts:
+            required_deps(kconfig.syms[o])
+
+        content = "module {} {{\n".format(ident)
+        for o in opts:
+            content += "\tset {};\n".format(o)
+        content += "}\n"
+        print(content)
+        detected_options.update(opts)
+
+    # Try to find detected nodes in the database
+    log.info("Matching detected nodes against database")
+    detected_options = set()
+
+    local_module_identifiers = []
+    for detector_node in detector.nodes:
+        for node in detector_node.nodes:
+            opts = config_db.find_options(node)
+            if len(opts) > 0:
+                ident = "{:04d}_{}".format(len(local_module_identifiers), node.get_canonical_name())
+                local_module_identifiers.append(ident)
+
+                # Process node and options
+                process_module_and_options(ident, node, opts)
+
+    if check_only:
+        kconfig = load_kconfig(args.kernel_dir)
+    else:
+        pass
+
+    # Create a combined 'local' module which selects all previously written modules
+    #write_local_module_selector(sorted(local_module_identifiers))
+
+    #log.info("output to {}".format(args.output))
+    #log.info("type {}".format(args.output_type))
+    #log.info("modname {}".format(args.output_module_name))
 
 def check_kernel_dir(value):
     """
     Checks if the given value is a valid kernel directory path.
     """
-
     if not os.path.isdir(value):
         raise argparse.ArgumentTypeError("'{}' is not a directory".format(value))
 
@@ -315,8 +347,12 @@ def main():
             help="Selects the output type. 'plain' will output an easily parsable list of all required configuration options and their origin. 'module' will output a ready-to-use autokernel module ")
     parser_detect.add_argument('-m', '--module-name', dest='output_module_name', default='local',
             help="The name of the generated module, which will enable all detected options (default: 'local').")
-    parser_detect.add_argument('-c', '--check', nargs='?', dest='check_config',
+    parser_detect.add_argument('-c', '--check', nargs='?', default=0, dest='check_config',
             help="Instead of outputting the required configuration values, compare the detected options against the given kernel configuration and report the status of each option. If no config file is given, the script will try to use the current kernel's configuration from /proc/config{,.gz}.")
+    parser_detect.add_argument('-s', '--short', dest='check_short', action='store_true',
+            help="When using --check, only output a short summary of all options instead of showing options per detected node.")
+    parser_detect.add_argument('-d', '--no-deps', dest='enable_dependencies', action='store_true',
+            help="Do not pull in dependencies of detected options. While this will only output absolutely necesary options, it can result in configurations that cannot be applied because of missing dependecies. Therefore, this will require manual intervention and is not recommended.")
     parser_detect.add_argument('-o', '--output', dest='output',
             help="Writes the output to the given file. Use - for stdout. If the type is not explicitly set, this defaults to /etc/autokernel/modules.d/<module_name>.")
     parser_detect.set_defaults(func=detect)
