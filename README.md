@@ -10,11 +10,14 @@ automate the build process, but this is entirely optional.
 ## Detecting configuration options
 
 This tool can automatically detect kernel configuration options for your system.
-It does this by inspecting the `/sys/bus` tree exposed by the currently running kernel.
+It does this by collecting bus and device information from the `/sys/bus` tree exposed
+by the currently running kernel. It then relates this information to a configuration option database (lkddb),
+and also selects required dependencies by finding a solution to the dependency graph for each option.
 
-TODO it can be beneficial to detect a configuration on a very modular kernel, to increase
-the likelihood of having all necessary features to detect the device in the first place.
-(e.g. if usb support is disabled, we cannot detect any devices on that bus, same goes for all other subsystems)
+It might be beneficial to run detection while using a very generic and modular kernel,
+such as the default kernel on Arch Linux. This increases the likelihood of having all necessary buses and features
+enabled to actually detect connected devices. Basically we cannot detect usb devices, if the current kernel does
+not support the bus in the first place.
 
 ## Managing the kernel config
 
