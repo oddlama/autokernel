@@ -8,6 +8,7 @@ from kconfiglib import expr_value
 
 from sympy import pretty, Symbol, true, false, Or, And, Not
 from sympy.logic.boolalg import to_cnf, simplify_logic
+from sympy.logic.inference import satisfiable
 
 
 def tri_to_bool(tri):
@@ -22,42 +23,6 @@ def expr_value_bool(expr):
     the result to a boolean value using tri_to_bool().
     """
     return tri_to_bool(expr_value(expr))
-
-def print_expr_tree(expr, recursive=True, indent=0, chaining_op=None):
-    """
-    Prints a color coded tree of the given expression.
-    Intended for debugging purposes only.
-    """
-    def print_node(name, indent, satisfied):
-        if satisfied:
-            print("[32m" + "  " * indent + name + "[m")
-        else:
-            print("[31m" + "  " * indent + name + "[m")
-
-    if expr.__class__ is not tuple:
-        if not recursive or (expr.__class__ is kconfiglib.Symbol and expr.is_constant):
-            print_node(expr.name, indent, tri_to_bool(expr.tri_value))
-        else:
-            # Recurse into dependencies of the symbol, if dependencies are not a constant
-            print_node(expr.name, indent, tri_to_bool(expr.tri_value))
-            if not (expr.direct_dep.__class__ is  kconfiglib.Symbol and expr.direct_dep.is_constant):
-                print_expr_tree(expr.direct_dep, recursive, indent + 1)
-    else:
-        if expr[0] is kconfiglib.AND:
-            if chaining_op is not kconfiglib.AND:
-                print_node("AND", indent, expr_value_bool(expr))
-                indent += 1
-            print_expr_tree(expr[1], recursive, indent, chaining_op=kconfiglib.AND)
-            print_expr_tree(expr[2], recursive, indent, chaining_op=kconfiglib.AND)
-        elif expr[0] is kconfiglib.OR:
-            if chaining_op is not kconfiglib.OR:
-                print_node("OR", indent, expr_value_bool(expr))
-                indent += 1
-            print_expr_tree(expr[1], recursive, indent, chaining_op=kconfiglib.OR)
-            print_expr_tree(expr[2], recursive, indent, chaining_op=kconfiglib.OR)
-        elif expr[0] is kconfiglib.NOT:
-            print_node("NOT", indent, expr_value_bool(expr))
-            print_expr_tree(expr[1], recursive, indent + 1, chaining_op=kconfiglib.NOT)
 
 def set_env_default(var, default_value):
     """
@@ -116,67 +81,12 @@ def allnoconfig(kconfig):
     kconfig.warn = warn_save
     kconfig.load_allconfig("allno.config")
 
-def set_sym_with_deps(sym, target_value):
-    """
-    Sets the given symbol to target_value, while ensuring that
-    all dependencies (and indirect dependencies) are satisfied.
-    """
-    def sym_has_value(sym, val):
-        if sym.type == kconfiglib.BOOL:
-            if tri_to_bool(sym.tri_value) == tri_to_bool(val):
-                return True
-        else:
-            if sym.tri_value == val:
-                return True
-        return False
+class ExprSymbol:
+    def __init__(self, sym):
+        self.sym = sym
 
-    if sym.type not in [kconfiglib.BOOL, kconfiglib.TRISTATE]:
-        raise Exception("cannot enable symbol of type '{}'".format(sym.type))
-
-    # Check if symbol already has target value
-    if sym_has_value(sym, target_value):
-        return
-
-    # If the direct dependencies are not satisfied yet,
-    # try to satisfy them now.
-    expr = sym.direct_dep
-    if not expr_value(expr):
-        satisfy_expr(expr, target_value)
-
-        # Recheck symbol value after dependency evaluation
-        if sym_has_value(sym, target_value):
-            return
-
-    # Finally set the desired value
-    val = YES if sym.type == kconfiglib.BOOL and target_value == MOD else target_value
-    print("{} = {}".format(sym.name, kconfiglib.TRI_TO_STR[val]))
-    if not sym.set_value(val):
-        raise Exception("Could set {} to {}".format(sym.name, kconfiglib.TRI_TO_STR[val]))
-
-def satisfy_expr(expr, target_value):
-    """
-    Parses the given expression and applies necessary changes to
-    the current options to satisfy the expression.
-    """
-    if expr_value_bool(expr) == tri_to_bool(target_value):
-        return
-
-    if expr.__class__ is not tuple:
-        # If the expression is a symbol, enable or disable it
-        # based on the target value.
-        set_sym_with_deps(expr, target_value)
-    else:
-        # If the expression is an operator, resolve the operator.
-        if expr[0] is kconfiglib.AND:
-            # TODO when in not OR and AND behave differently...
-            satisfy_expr(expr[1], target_value)
-            satisfy_expr(expr[2], target_value)
-        elif expr[0] is kconfiglib.OR:
-            # TODO which of these to satisfy?
-            satisfy_expr(expr[1], target_value)
-            satisfy_expr(expr[2], target_value)
-        elif expr[0] is kconfiglib.NOT:
-            satisfy_expr(expr[1], not target_value)
+    def is_satisfied(self):
+        return tri_to_bool(self.sym.tri_value)
 
 class ExprCompare:
     def __init__(self, cmp_type, lhs, rhs):
@@ -184,41 +94,125 @@ class ExprCompare:
         self.lhs = lhs
         self.rhs = rhs
 
-def parse_expr(expr):
-    """
-    Parses the given expression and converts it into a sympy expression.
-    """
-    symbols = []
-    # TODO return these ..... also make recursive....
+    def is_satisfied(self):
+        if self.cmp_type == kconfiglib.EQUAL:
+            return self.lhs == self.rhs
+        elif self.cmp_type == kconfiglib.UNEQUAL:
+            return self.lhs != self.rhs
+        elif self.cmp_type == kconfiglib.LESS:
+            return self.lhs < self.rhs
+        elif self.cmp_type == kconfiglib.LESS_EQUAL:
+            return self.lhs <= self.rhs
+        elif self.cmp_type == kconfiglib.GREATER:
+            return self.lhs > self.rhs
+        elif self.cmp_type == kconfiglib.GREATER_EQUAL:
+            return self.lhs >= self.rhs
 
-    def add_symbol(sym):
-        i = len(symbols)
-        symbols.append(sym)
-        return "x" + str(i)
+    def __str__(self):
+        return "{} {} {}".format(self.lhs.name, kconfiglib.REL_TO_STR[self.cmp_type], self.rhs.name)
 
-    if expr.__class__ is not tuple:
-        if expr.__class__ is kconfiglib.Symbol and expr.is_constant:
-            return true if tri_to_bool(expr) else false
+class ExprIgnore:
+    def is_satisfied(self):
+        return False
+
+class Expr:
+    def __init__(self, expr):
+        self.symbols = []
+        self.expr_ignore_sym = None
+
+        self.expr = self._parse(expr)
+
+    def _add_symbol_if_nontrivial(self, sym):
+        # If the symbol is aleady satisfied in the current config,
+        # skip it.
+        if sym.is_satisfied():
+            return true
+
+        # Return existing symbol if possible
+        for s, sympy_s in self.symbols:
+            if s.__class__ is sym.__class__ is ExprSymbol:
+                if s.sym == sym.sym:
+                    return sympy_s
+
+        # Create new symbol
+        i = len(self.symbols)
+        s = Symbol(str(i))
+        self.symbols.append((sym, s))
+        return s
+
+    def _parse(self, expr):
+        def add_sym(expr):
+            return self._add_symbol_if_nontrivial(ExprSymbol(expr))
+
+        if expr.__class__ is not tuple:
+            if expr.__class__ is kconfiglib.Symbol:
+                if expr.is_constant:
+                    return true if tri_to_bool(expr) else false
+                elif expr.type in [kconfiglib.BOOL, kconfiglib.TRISTATE]:
+                    return add_sym(expr)
+                else:
+                    # Ignore unknown symbol types
+                    return self.expr_ignore()
+            elif expr.__class__ is kconfiglib.Choice:
+                return self.expr_ignore()
+            else:
+                raise Exception("Unexpected expression type '{}'".format(expr.__class__.__name__))
         else:
-            return And(add_symbol(expr), parse_expr(expr.direct_dep))
-    else:
-        # If the expression is an operator, resolve the operator.
-        if expr[0] is kconfiglib.AND:
-            return And(parse_expr(expr[1]), parse_expr(expr[2]))
-        elif expr[0] is kconfiglib.OR:
-            return Or(parse_expr(expr[1]), parse_expr(expr[2]))
-        elif expr[0] is kconfiglib.NOT:
-            return Not(parse_expr(expr[1]))
-        elif expr[0] in [kconfiglib.EQUAL, kconfiglib.UNEQUAL, kconfiglib.LESS, kconfiglib.LESS_EQUAL, kconfiglib.GREATER, kconfiglib.GREATER_EQUAL]:
-            if expr[1].__class__ is tuple or expr[2].__class__ is tuple:
-                raise Exception("Cannot compare expressions")
-            return ExprCompare(expr[0], expr[1], expr[2])
-        else:
-            raise Exception("Unknown expression type: '{}'".format(expr[0]))
+            # If the expression is an operator, resolve the operator.
+            if expr[0] is kconfiglib.AND:
+                return And(self._parse(expr[1]), self._parse(expr[2]))
+            elif expr[0] is kconfiglib.OR:
+                return Or(self._parse(expr[1]), self._parse(expr[2]))
+            elif expr[0] is kconfiglib.NOT:
+                return Not(self._parse(expr[1]))
+            elif expr[0] is kconfiglib.EQUAL and expr[2].is_constant:
+                if tri_to_bool(expr[2]):
+                    return add_sym(expr[1])
+                else:
+                    return Not(add_sym(expr[1]))
+            elif expr[0] in [kconfiglib.UNEQUAL, kconfiglib.LESS, kconfiglib.LESS_EQUAL, kconfiglib.GREATER, kconfiglib.GREATER_EQUAL]:
+                if expr[1].__class__ is tuple or expr[2].__class__ is tuple:
+                    raise Exception("Cannot compare expressions")
+                return self._add_symbol_if_nontrivial(ExprCompare(expr[0], expr[1], expr[2]))
+            else:
+                raise Exception("Unknown expression type: '{}'".format(expr[0]))
+
+    def expr_ignore(self):
+        if not self.expr_ignore_sym:
+            self.expr_ignore_sym = self._add_symbol_if_nontrivial(ExprIgnore())
+        return self.expr_ignore_sym
+
+    def simplify(self):
+        self.expr = simplify_logic(self.expr)
+        #self.expr = simplify_logic(to_cnf(self.expr), form='cnf')
+
+    def unsatisfied_deps(self):
+        configuration = satisfiable(self.expr)
+        if not configuration:
+            raise Exception("Cannot satisfy dependencies.")
+
+        if configuration.get(True, False):
+            return []
+
+        deps = []
+        for k in configuration:
+            idx = int(k.name)
+            deps.append((idx, self.symbols[idx][0], configuration[k]))
+
+        deps.sort(key=lambda x: x[0], reverse=True)
+        return deps
 
 def required_deps(sym):
-    expr = parse_expr(sym.direct_dep)
-    expr = to_cnf(expr)
-    expr = simplify_logic(expr, form='cnf')
-    #expr = simplify_expr(parse_expr(kconfig.syms[o].direct_dep))
-    print(pretty(expr))
+    expr = Expr(sym.direct_dep)
+    expr.simplify()
+    #print(pretty(expr.expr))
+
+    deps = []
+    for k, s, v in expr.unsatisfied_deps():
+        if s.__class__ is ExprIgnore:
+            pass
+        elif s.__class__ is ExprSymbol:
+            deps.append((s.sym, v))
+        else:
+            raise Exception("Cannot automatically satisfy inequality: '{}'".format(s))
+    return deps

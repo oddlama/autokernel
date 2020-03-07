@@ -2,7 +2,7 @@
 
 import argparse
 import kconfiglib
-from kconfiglib import TRI_TO_STR
+from kconfiglib import STR_TO_TRI, TRI_TO_STR
 
 from autokernel.kconfig import *
 from autokernel.node_detector import NodeDetector
@@ -11,8 +11,27 @@ from autokernel.config import Config, ConfigParsingException
 from autokernel import log
 
 import os
+import gzip
+import shutil
 import sys
+import tempfile
 from pathlib import Path
+
+def has_proc_config_gz():
+    return os.path.isfile("/proc/config.gz")
+
+def unpack_proc_config_gz():
+    tmp = tempfile.NamedTemporaryFile()
+    with gzip.open("/proc/config.gz", "rb") as f:
+        shutil.copyfileobj(f, tmp)
+    return tmp
+
+def kconfig_load_file_or_current_config(kconfig, config_file):
+    if config_file:
+        kconfig.load_config(config_file)
+    else:
+        with unpack_proc_config_gz() as tmp:
+            kconfig.load_config(tmp.name)
 
 def write_local_module_file(filename, content):
     """
@@ -211,7 +230,177 @@ def build_full(args):
     build_initramfs(args)
     install(args)
 
+class Module():
+    """
+    A module consists of dependencies (other modules) and option assignments.
+    """
+    def __init__(self, name):
+        self.name = name
+        self.deps = []
+        self.assignments = []
+
+def check_config_against_detected_modules(kconfig, modules):
+    log.info("Here are the detected options with both current and desired value.")
+    log.info("The output format is: [current] OPTION_NAME = desired")
+    log.info("HINT: Options are ordered by dependencies, i.e. applying")
+    log.info("      them from top to buttom will work")
+    log.info("Detected options:")
+
+    visited = set()
+    visited_opts = set()
+    color = {
+        NO: "[1;31m",
+        MOD: "[1;33m",
+        YES: "[1;32m",
+    }
+
+    def visit_opt(opt, v):
+        from autokernel.constants import NO, MOD, YES
+
+        # Ensure we visit only once
+        if opt in visited_opts:
+            return
+        visited_opts.add(opt)
+
+        sym = kconfig.syms[opt]
+        if v in STR_TO_TRI:
+            sym_v = sym.tri_value
+            tri_v = STR_TO_TRI[v]
+
+            if tri_v == sym_v:
+                # Match
+                v_color = color[YES]
+            elif tri_to_bool(tri_v) == tri_to_bool(sym_v):
+                # Match, but mixed y and m
+                v_color = color[MOD]
+            else:
+                # Mismatch
+                v_color = color[NO]
+
+            # Print option value
+            print("[{}{}[m] {} = {}".format(v_color, TRI_TO_STR[sym_v], sym.name, v))
+        else:
+            # Print option assignment
+            print("{} = {}{}[m".format(sym.name, color[YES] if sym.str_value == v else color[NO], sym.str_value))
+
+    def visit(m):
+        # Ensure we visit only once
+        if m in visited:
+            return
+        visited.add(m.name)
+
+        # First visit all dependencies
+        for d in m.deps:
+            visit(d)
+        # Then print all assignments
+        for a, v in m.assignments:
+            visit_opt(a, v)
+
+    # Visit all modules
+    for m in modules:
+        visit(modules[m])
+
+def detect_modules(kconfig):
+    """
+    Detects required options for the current system organized into modules. It returns
+    a dict which maps module names to the module objects. Any option with dependencies
+    will also be represented as a module. The special module 'local' selects all detected
+    modules as dependencies.
+    """
+    log.info("Detecting kernel configuration for local system")
+    log.info("HINT: It might be beneficial to run this while using a very generic")
+    log.info("      and modular kernel such as the default kernel on Arch Linux.")
+
+    modules = {}
+    module_for_sym = {}
+    local_module_count = 0
+
+    def next_local_module_id():
+        """
+        Returns the next id for a local module
+        """
+        nonlocal local_module_count
+        i = local_module_count
+        local_module_count += 1
+        return i
+
+    def add_module_for_option(sym):
+        """
+        Recursively adds a module for the given option,
+        until all dependencies are satisfied.
+        """
+        mod = Module("dep_{}".format(sym.name.lower()))
+        mod.assignments.append((sym.name, 'y'))
+        for d, v in required_deps(sym):
+            if v:
+                dm = add_module_for_sym(d)
+                if dm:
+                    mod.deps.append(dm)
+            else:
+                mod.assignments.append((d.name, 'n'))
+        modules[mod.name] = mod
+        return mod
+
+    def add_module_for_sym(sym):
+        """
+        Adds a module for the given symbol (and its dependencies).
+        """
+        if sym in module_for_sym:
+            return module_for_sym[sym]
+
+        # If dependencies are already satisfied, return none
+        if expr_value(sym.direct_dep):
+            return None
+
+        # Otherwise, create a module for the dep
+        mod = add_module_for_option(sym)
+        module_for_sym[sym] = mod
+        return mod
+
+    def add_module_for_detected_node(node, opts):
+        """
+        Adds a module for the given detected node
+        """
+        mod = Module("{:04d}_{}".format(next_local_module_id(), node.get_canonical_name()))
+        for o in opts:
+            m = add_module_for_option(kconfig.syms[o])
+            mod.deps.append(m)
+        modules[mod.name] = mod
+        return mod
+
+    # Load the configuration database
+    config_db = Lkddb()
+    # Inspect the current system
+    detector = NodeDetector()
+
+    # Try to find detected nodes in the database
+    log.info("Matching detected nodes against database")
+
+    # A list of all modules that directly correspond to a detected node
+    detected_node_modules = []
+
+    # Find options in database for each detected node
+    for detector_node in detector.nodes:
+        for node in detector_node.nodes:
+            opts = config_db.find_options(node)
+            if len(opts) > 0:
+                # If there are options for the node in the database,
+                # add a module for the detected node and its options
+                mod = add_module_for_detected_node(node, opts)
+                # Remember the module name for the combined local module
+                detected_node_modules.append(mod)
+
+    # Create a local module that selects all detected modules
+    local_mod = Module('local')
+    local_mod.deps = detected_node_modules
+    modules[local_mod.name] = local_mod
+    return modules
+
 def detect(args):
+    """
+    Main function for the 'detect' command.
+    """
+
     # Add fallbacks for output type and output file.
     if not args.output_type:
         args.output_type = 'module'
@@ -226,55 +415,66 @@ def detect(args):
     if args.check_config is not 0:
         check_only = True
         if args.check_config is not None:
-            check_config = args.check_config
-            log.info("Checking generated config against '{}'".format(check_config))
+            check_config_file = args.check_config
+            log.info("Checking generated config against '{}'".format(check_config_file))
         else:
+            check_config_file = None
+            if not has_proc_config_gz():
+                log.error("This kernel does not expose /proc/config.gz. Please provide the path to a valid config file manually.")
+                sys.exit(1)
             log.info("Checking generated config against currently running kernel")
     else:
         check_only = False
 
-    log.info("Detecting kernel configuration for local system")
-    log.info("HINT: It might be beneficial to run this while using a very generic")
-    log.info("      and modular kernel such as the default kernel on Arch Linux.")
-
-    # Load the configuration database
-    config_db = Lkddb()
-    # Inspect the current system
-    detector = NodeDetector()
-
     kconfig = load_kconfig(args.kernel_dir)
-
-    # Function to process nodes and their options
-    def process_module_and_options(ident, node, opts):
-        for o in opts:
-            required_deps(kconfig.syms[o])
-
-        content = "module {} {{\n".format(ident)
-        for o in opts:
-            content += "\tset {};\n".format(o)
-        content += "}\n"
-        print(content)
-        detected_options.update(opts)
-
-    # Try to find detected nodes in the database
-    log.info("Matching detected nodes against database")
-    detected_options = set()
-
-    local_module_identifiers = []
-    for detector_node in detector.nodes:
-        for node in detector_node.nodes:
-            opts = config_db.find_options(node)
-            if len(opts) > 0:
-                ident = "{:04d}_{}".format(len(local_module_identifiers), node.get_canonical_name())
-                local_module_identifiers.append(ident)
-
-                # Process node and options
-                process_module_and_options(ident, node, opts)
+    modules = detect_modules(kconfig)
 
     if check_only:
-        kconfig = load_kconfig(args.kernel_dir)
+        # Load the given config file or the current kernel's config
+        kconfig_load_file_or_current_config(kconfig, check_config_file)
+        # Check all detected symbols' values and report them
+        check_config_against_detected_modules(kconfig, modules)
     else:
         pass
+
+    #modules_for_deps = {}
+
+    #def process_module_deps(ident, sym):
+    #    content = "module {} {{\n".format(ident)
+    #    for d, v in required_deps(sym):
+    #        dm = add_module_for_dep(d)
+    #        if dm:
+    #            content += "\tuse {};\n".format(dm)
+    #        content += "\tset {} = {};\n".format(d.name, 'y' if v else 'n')
+    #    content += "}\n"
+    #    print(content)
+
+    #def add_module_for_dep(sym):
+    #    if sym in modules_for_deps:
+    #        return modules_for_deps[sym]
+
+    #    # If dependencies are already satisfied, return none
+    #    if expr_value(sym.direct_dep):
+    #        return None
+
+    #    # Otherwise, create a module for the dep
+    #    modname = "dep_{}".format(sym.name.lower())
+    #    process_module_deps(modname, sym)
+    #    modules_for_deps[sym] = modname
+    #    return modname
+
+    ## Function to process nodes and their options
+    #def process_module_and_options(ident, opts):
+    #    content = "module {} {{\n".format(ident)
+    #    for o in opts:
+    #        for d, v in required_deps(kconfig.syms[o]):
+    #            dm = add_module_for_dep(d)
+    #            if dm:
+    #                content += "\tuse {};\n".format(dm)
+    #            content += "\tset {} = {};\n".format(d.name, 'y' if v else 'n')
+    #        content += "\tset {} = y;\n".format(o)
+    #    content += "}\n"
+    #    print(content)
 
     # Create a combined 'local' module which selects all previously written modules
     #write_local_module_selector(sorted(local_module_identifiers))
@@ -315,7 +515,7 @@ def main():
     # Check
     parser_check = subparsers.add_parser('check', help="Checks the currently running kernel's TODO")
     parser_check.add_argument('config', nargs='?',
-            help="Compare the generated configuration against the given kernel configuration and report the status of each option. If no config file is given, the script will try to use the current kernel's configuration from /proc/config{,.gz}.")
+            help="Compare the generated configuration against the given kernel configuration and report the status of each option. If no config file is given, the script will try to use the current kernel's configuration from '/proc/config.gz'.")
     parser_check.set_defaults(func=check_config)
 
     # Config generation options
@@ -348,9 +548,7 @@ def main():
     parser_detect.add_argument('-m', '--module-name', dest='output_module_name', default='local',
             help="The name of the generated module, which will enable all detected options (default: 'local').")
     parser_detect.add_argument('-c', '--check', nargs='?', default=0, dest='check_config',
-            help="Instead of outputting the required configuration values, compare the detected options against the given kernel configuration and report the status of each option. If no config file is given, the script will try to use the current kernel's configuration from /proc/config{,.gz}.")
-    parser_detect.add_argument('-s', '--short', dest='check_short', action='store_true',
-            help="When using --check, only output a short summary of all options instead of showing options per detected node.")
+            help="Instead of outputting the required configuration values, compare the detected options against the given kernel configuration and report the status of each option. If no config file is given, the script will try to use the current kernel's configuration from '/proc/config.gz'.")
     parser_detect.add_argument('-d', '--no-deps', dest='enable_dependencies', action='store_true',
             help="Do not pull in dependencies of detected options. While this will only output absolutely necesary options, it can result in configurations that cannot be applied because of missing dependecies. Therefore, this will require manual intervention and is not recommended.")
     parser_detect.add_argument('-o', '--output', dest='output',
