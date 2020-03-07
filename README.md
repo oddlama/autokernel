@@ -35,3 +35,20 @@ when you update your kernel, you can generate a new `.config` from the known def
 
 Lastly, this tool can be used to build the kernel.
 TODO not currently.
+
+
+
+
+
+
+
+
+
+COMMANDS TO EXPLAIN:
+
+> Quickly check which options are detected and what the current values are for the running kernel
+./autokernel.py detect -c
+
+> Write only the suggested configuration changes to stdout in kconf format, so that you could
+> theoretically merge them into a kernel .config file
+./autokernel.py detect -q -t kconf

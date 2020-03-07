@@ -18,141 +18,34 @@ import tempfile
 from pathlib import Path
 
 def has_proc_config_gz():
+    """
+    Checks if /proc/config.gz exists
+    """
     return os.path.isfile("/proc/config.gz")
 
 def unpack_proc_config_gz():
+    """
+    Unpacks /proc/config.gz into a temporary file
+    """
     tmp = tempfile.NamedTemporaryFile()
     with gzip.open("/proc/config.gz", "rb") as f:
         shutil.copyfileobj(f, tmp)
     return tmp
 
 def kconfig_load_file_or_current_config(kconfig, config_file):
+    """
+    Applies the given kernel config file to kconfig, or uses /proc/config.gz if config_file is None.
+    """
     if config_file:
         kconfig.load_config(config_file)
     else:
         with unpack_proc_config_gz() as tmp:
             kconfig.load_config(tmp.name)
 
-def write_local_module_file(filename, content):
-    """
-    Writes the given module file content to a module file.
-    """
-    outdir = "local"
-
-    # Create path if it doesn't exist
-    p = Path(outdir)
-    p.mkdir(parents=True, exist_ok=True)
-    # TODO permissions
-
-    # Write to file
-    with (p / filename).open('w') as f:
-        f.write(content)
-
-def write_local_module_for_node(ident, node, opts):
-    """
-    Writes a module for the given node and the detected options.
-    """
-    log.info("Creating module for {} with {} options".format(ident, len(opts)))
-    content = "module {} {{\n".format(ident)
-    for o in opts:
-        content += "\tset {};\n".format(o)
-    content += "}\n"
-    write_local_module_file(ident, content)
-
-def write_local_module_selector(identifiers):
-    """
-    Writes a module named 'local', which depends on all previously written
-    local modules. This allows easy inclusion of all local options by depending
-    on this selector.
-    """
-    log.info("Creating local module selector")
-    content = "module local {\n"
-    for i in identifiers:
-        content += "\tuse {};\n".format(i)
-    content += "}\n"
-    write_local_module_file("local", content)
-
-#def detect_options():
-#    # TODO ensure that the running kernel can inspect all subsystems....
-#    # TODO what if we run on a minimal kernel?
-#
-#    # Load the configuration database
-#    config_db = Lkddb()
-#    # Inspect the current system
-#    detector = NodeDetector()
-#
-#    # Load current kernel config
-#    kernel_dir = "/usr/src/linux"
-#    load_environment_variables(dir=kernel_dir)
-#    kconfig = Kconfig(dir=kernel_dir)
-#    kconfig.kconfig.load_config(filename='.config')
-#
-#    # TODO dont create file for each module, instead create only a combined file "local".
-#
-#    # Try to find detected nodes in the database
-#    log.info("Matching detected nodes against database")
-#    detected_options = set()
-#    local_module_identifiers = []
-#    for detector_node in detector.nodes:
-#        for node in detector_node.nodes:
-#            opts = config_db.find_options(node)
-#            if len(opts) > 0:
-#                ident = "{:04d}_{}".format(len(local_module_identifiers), node.get_canonical_name())
-#                local_module_identifiers.append(ident)
-#
-#                # Write module file for this node
-#                write_local_module_for_node(ident, node, opts)
-#            detected_options.update(opts)
-#
-#    # Create a combined 'local' module which selects all previously written modules
-#    write_local_module_selector(sorted(local_module_identifiers))
-#
-#    # TODO only print summary like 25 options were alreay enabled, 24 are currently modules that can be enabled permanently and 134 are missing
-#    log.info("The following options were detected:")
-#
-#    # Resolve symbols
-#    syms = []
-#    for i in detected_options:
-#        syms.append(kconfig.syms[i])
-#
-#    for sym in sorted(syms, key=lambda s: (-s.tri_value, s.name)):
-#        color = ""
-#        if sym.tri_value == autokernel.NO:
-#            color = "1;31"
-#        elif sym.tri_value == autokernel.MOD:
-#            color = "1;33"
-#        elif sym.tri_value == autokernel.YES:
-#            color = "1;32"
-#
-#        print("[[{}m{}[m] {}".format(color, TRI_TO_STR[sym.tri_value], sym.name))
-
-###############################def create_config():
-###############################    # Load kconfig file
-###############################    kernel_dir = "/usr/src/linux"
-###############################    load_environment_variables(dir=kernel_dir)
-###############################    kconfig = Kconfig(dir=kernel_dir)
-###############################
-###############################    # Begin with allnoconfig
-###############################    kconfig.allnoconfig()
-###############################
-###############################    # Load configuration changes from config_dir
-###############################
-###############################    kconfig.write_config(filename="a")
-###############################
-###############################    sym = kconfig.get_symbol("DVB_USB_RTL28XXU")
-###############################    # TODO make autokernel --enable [CONFIG_]SOME_CONF,
-###############################    # which tells you which were enabled why, and asks on optionals
-###############################    kconfig.set_sym_with_deps(sym, autokernel.MOD)
-###############################
-###############################    kconfig.write_config(filename="b")
-
-def check_config(args):
-    if args.config:
-        log.info("Checking generated config against '{}'".format(args.config))
-    else:
-        log.info("Checking generated config against currently running kernel")
-
 def generate_config(args):
+    """
+    Main function for the 'generate_config' command.
+    """
     log.info("Generating .config for kernel")
     return
     try:
@@ -238,6 +131,7 @@ class Module():
         self.name = name
         self.deps = []
         self.assignments = []
+        self.rev_deps = []
 
 def check_config_against_detected_modules(kconfig, modules):
     log.info("Here are the detected options with both current and desired value.")
@@ -287,7 +181,7 @@ def check_config_against_detected_modules(kconfig, modules):
         # Ensure we visit only once
         if m in visited:
             return
-        visited.add(m.name)
+        visited.add(m)
 
         # First visit all dependencies
         for d in m.deps:
@@ -302,10 +196,10 @@ def check_config_against_detected_modules(kconfig, modules):
 
 def detect_modules(kconfig):
     """
-    Detects required options for the current system organized into modules. It returns
-    a dict which maps module names to the module objects. Any option with dependencies
-    will also be represented as a module. The special module 'local' selects all detected
-    modules as dependencies.
+    Detects required options for the current system organized into modules.
+    Any option with dependencies will also be represented as a module. It returns
+    a dict which maps module names to the module objects. The special module returned
+    additionaly is the module which selects all detected modules as dependencies.
     """
     log.info("Detecting kernel configuration for local system")
     log.info("HINT: It might be beneficial to run this while using a very generic")
@@ -378,7 +272,6 @@ def detect_modules(kconfig):
 
     # A list of all modules that directly correspond to a detected node
     detected_node_modules = []
-
     # Find options in database for each detected node
     for detector_node in detector.nodes:
         for node in detector_node.nodes:
@@ -390,16 +283,103 @@ def detect_modules(kconfig):
                 # Remember the module name for the combined local module
                 detected_node_modules.append(mod)
 
+    # Fill in reverse dependencies for all modules
+    for m in modules:
+        for d in modules[m].deps:
+            d.rev_deps.append(modules[m])
+
     # Create a local module that selects all detected modules
-    local_mod = Module('local')
-    local_mod.deps = detected_node_modules
-    modules[local_mod.name] = local_mod
-    return modules
+    module_select_all = Module('module_select_all')
+    module_select_all.deps = detected_node_modules
+
+    # Fill in reverse dependencies for select_all module
+    for d in module_select_all.deps:
+        d.rev_deps.append(module_select_all)
+
+    return modules, module_select_all
+
+class KernelConfigWriter:
+    """
+    Writes modules to the given file in kernel config format.
+    """
+    def __init__(self, file):
+        self.file = file
+
+    def write_module(self, module):
+        if len(module.assignments) == 0:
+            return
+
+        content = ""
+        for d in module.rev_deps:
+            content += "# required by {}\n".format(d.name)
+        content += "# module {}\n".format(module.name)
+        for a, v in module.assignments:
+            if v in "nmy":
+                content += "{}={}\n".format(a, v)
+            else:
+                content += "{}=\"{}\"\n".format(a, v)
+        self.file.write(content)
+
+class ModuleConfigWriter:
+    """
+    Writes modules to the given file in the module config format.
+    """
+    def __init__(self, file):
+        self.file = file
+
+    def write_module(self, module):
+        content = ""
+        for d in module.rev_deps:
+            content += "# required by {}\n".format(d.name)
+        content += "module {} {{\n".format(module.name)
+        for d in module.deps:
+            content += "\tuse {};\n".format(d.name)
+        for a, v in module.assignments:
+            content += "\tset {} = {};\n".format(a, v)
+        content += "}\n\n"
+        self.file.write(content)
+
+def write_detected_modules(modules, module_select_all, f, output_type, output_module_name):
+    """
+    Writes the detected modules to a file / stdout, in the requested output format.
+    """
+    if output_type == 'kconf':
+        writer = KernelConfigWriter(f)
+    elif output_type == 'module':
+        writer = ModuleConfigWriter(f)
+
+    visited = set()
+    def visit(m):
+        # Ensure we visit only once
+        if m in visited:
+            return
+        visited.add(m)
+        writer.write_module(m)
+
+    # Write all modules in topological order
+    for m in modules:
+        visit(modules[m])
+
+    # Lastly, write "select_all" module
+    module_select_all.name = output_module_name
+    writer.write_module(module_select_all)
 
 def detect(args):
     """
     Main function for the 'detect' command.
     """
+    # Check if we should write a config or report differences
+    check_only = args.check_config is not 0
+
+    # Assert that --check is not used together with --type
+    if check_only and args.output_type:
+        log.error("--check and --type are mutually exclusive")
+        sys.exit(1)
+
+    # Assert that --check is not used together with --output
+    if check_only and args.output:
+        log.error("--check and --output are mutually exclusive")
+        sys.exit(1)
 
     # Add fallbacks for output type and output file.
     if not args.output_type:
@@ -411,9 +391,8 @@ def detect(args):
     if args.output == '-':
         args.output = None
 
-    # Check if we should write a config or report differences
-    if args.check_config is not 0:
-        check_only = True
+    # Determine the config file to check against, if applicable.
+    if check_only:
         if args.check_config is not None:
             check_config_file = args.check_config
             log.info("Checking generated config against '{}'".format(check_config_file))
@@ -423,11 +402,11 @@ def detect(args):
                 log.error("This kernel does not expose /proc/config.gz. Please provide the path to a valid config file manually.")
                 sys.exit(1)
             log.info("Checking generated config against currently running kernel")
-    else:
-        check_only = False
 
+    # Load symbols from Kconfig
     kconfig = load_kconfig(args.kernel_dir)
-    modules = detect_modules(kconfig)
+    # Detect system nodes and create modules
+    modules, module_select_all = detect_modules(kconfig)
 
     if check_only:
         # Load the given config file or the current kernel's config
@@ -435,53 +414,16 @@ def detect(args):
         # Check all detected symbols' values and report them
         check_config_against_detected_modules(kconfig, modules)
     else:
-        pass
-
-    #modules_for_deps = {}
-
-    #def process_module_deps(ident, sym):
-    #    content = "module {} {{\n".format(ident)
-    #    for d, v in required_deps(sym):
-    #        dm = add_module_for_dep(d)
-    #        if dm:
-    #            content += "\tuse {};\n".format(dm)
-    #        content += "\tset {} = {};\n".format(d.name, 'y' if v else 'n')
-    #    content += "}\n"
-    #    print(content)
-
-    #def add_module_for_dep(sym):
-    #    if sym in modules_for_deps:
-    #        return modules_for_deps[sym]
-
-    #    # If dependencies are already satisfied, return none
-    #    if expr_value(sym.direct_dep):
-    #        return None
-
-    #    # Otherwise, create a module for the dep
-    #    modname = "dep_{}".format(sym.name.lower())
-    #    process_module_deps(modname, sym)
-    #    modules_for_deps[sym] = modname
-    #    return modname
-
-    ## Function to process nodes and their options
-    #def process_module_and_options(ident, opts):
-    #    content = "module {} {{\n".format(ident)
-    #    for o in opts:
-    #        for d, v in required_deps(kconfig.syms[o]):
-    #            dm = add_module_for_dep(d)
-    #            if dm:
-    #                content += "\tuse {};\n".format(dm)
-    #            content += "\tset {} = {};\n".format(d.name, 'y' if v else 'n')
-    #        content += "\tset {} = y;\n".format(o)
-    #    content += "}\n"
-    #    print(content)
-
-    # Create a combined 'local' module which selects all previously written modules
-    #write_local_module_selector(sorted(local_module_identifiers))
-
-    #log.info("output to {}".format(args.output))
-    #log.info("type {}".format(args.output_type))
-    #log.info("modname {}".format(args.output_module_name))
+        # Write all modules in the given format to the given output
+        if args.output:
+            try:
+                with open(args.output, 'w') as f:
+                    write_detected_modules(modules, module_select_all, f, args.output_type, args.output_module_name)
+            except IOError as e:
+                log.error(str(e))
+                sys.exit(1)
+        else:
+            write_detected_modules(modules, module_select_all, sys.stdout, args.output_type, args.output_module_name)
 
 def check_kernel_dir(value):
     """
@@ -543,8 +485,8 @@ def main():
 
     # Config detection options
     parser_detect = subparsers.add_parser('detect', help='TODO')
-    parser_detect.add_argument('-t', '--type', choices=['module', 'plain'], dest='output_type',
-            help="Selects the output type. 'plain' will output an easily parsable list of all required configuration options and their origin. 'module' will output a ready-to-use autokernel module ")
+    parser_detect.add_argument('-t', '--type', choices=['module', 'kconf'], dest='output_type',
+            help="Selects the output type. 'kconf' will output options in the kernel configuration format. 'module' will output a list of autokernel modules to reflect the necessary configuration.")
     parser_detect.add_argument('-m', '--module-name', dest='output_module_name', default='local',
             help="The name of the generated module, which will enable all detected options (default: 'local').")
     parser_detect.add_argument('-c', '--check', nargs='?', default=0, dest='check_config',
