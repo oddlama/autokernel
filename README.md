@@ -1,7 +1,12 @@
 # autokernel
 
-Have you ever though *Which kernel options do I need to enable to use this USB device?*,
-or did you ever wonder *Why have I enabled this kernel option?*, or *Which kernel options did I even change..*?
+> *Which kernel options do I need to enable to use this USB device?*
+
+> *Why have I enabled this kernel option again?*
+
+> *Which kernel options did I even change when compared to the default?*
+
+Does any of these question sound familiar? Then this tool might solve a problem for you.
 
 This tool allows to both detect configuration options for the current system, and also
 provides a way to properly manage your configuration changes. It can also be used to
