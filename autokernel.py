@@ -414,7 +414,7 @@ def detect(args):
         # Check all detected symbols' values and report them
         check_config_against_detected_modules(kconfig, modules)
     else:
-        # Write all modules in the given format to the given output
+        # Write all modules in the given format to the given output file / stdout
         if args.output:
             try:
                 with open(args.output, 'w') as f:
@@ -438,6 +438,9 @@ def check_kernel_dir(value):
     return value
 
 def main():
+    """
+    Parses options and dispatches control to the correct subcommand function
+    """
     parser = argparse.ArgumentParser(description="TODO. If no mode is given, 'autokernel full' will be executed.")
     subparsers = parser.add_subparsers(title="commands",
             description="Use 'autokernel command --help' to view the help for any command.",
@@ -491,15 +494,12 @@ def main():
             help="The name of the generated module, which will enable all detected options (default: 'local').")
     parser_detect.add_argument('-c', '--check', nargs='?', default=0, dest='check_config',
             help="Instead of outputting the required configuration values, compare the detected options against the given kernel configuration and report the status of each option. If no config file is given, the script will try to use the current kernel's configuration from '/proc/config.gz'.")
-    parser_detect.add_argument('-d', '--no-deps', dest='enable_dependencies', action='store_true',
-            help="Do not pull in dependencies of detected options. While this will only output absolutely necesary options, it can result in configurations that cannot be applied because of missing dependecies. Therefore, this will require manual intervention and is not recommended.")
     parser_detect.add_argument('-o', '--output', dest='output',
-            help="Writes the output to the given file. Use - for stdout. If the type is not explicitly set, this defaults to /etc/autokernel/modules.d/<module_name>.")
+            help="Writes the output to the given file. Use - for stdout (default).")
     parser_detect.set_defaults(func=detect)
 
-    ## TODO en/disables the given option (and dependencies) interactively.
     ## TODO check for conflicting options in config
-# TODO static paths as global variable
+    # TODO static paths as global variable
 
 
     args = parser.parse_args()
