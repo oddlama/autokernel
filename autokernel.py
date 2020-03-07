@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
 
-import argparse
-import kconfiglib
-from kconfiglib import STR_TO_TRI, TRI_TO_STR
-
 from autokernel.kconfig import *
 from autokernel.node_detector import NodeDetector
 from autokernel.lkddb import Lkddb
@@ -15,6 +11,10 @@ import gzip
 import shutil
 import sys
 import tempfile
+import argparse
+import kconfiglib
+from kconfiglib import STR_TO_TRI, TRI_TO_STR
+from datetime import datetime, timezone
 from pathlib import Path
 
 def has_proc_config_gz():
@@ -36,80 +36,142 @@ def kconfig_load_file_or_current_config(kconfig, config_file):
     """
     Applies the given kernel config file to kconfig, or uses /proc/config.gz if config_file is None.
     """
+
     if config_file:
+        log.info("Applying kernel config from '{}'".format(config_file))
         kconfig.load_config(config_file)
     else:
+        log.info("Applying kernel config from '/proc/config.gz'")
         with unpack_proc_config_gz() as tmp:
             kconfig.load_config(tmp.name)
+
+def apply_autokernel_config(kconfig, config):
+    """
+    Applies the given autokernel configuration to a freshly loaded kconfig object,
+    and returns the kconfig and a dictionary of changes
+    """
+    log.info("Applying autokernel configuration")
+
+    def value_to_str(value):
+        if value in STR_TO_TRI:
+            return '[{}]'.format(value)
+        else:
+            return "'{}'".format(value)
+
+    # Track all changed symbols and values.
+    changes = {}
+
+    # Sets a symbols value if and asserts that there are no conflicting double assignments
+    def set_symbol(symbol, value):
+        # If the symbol was changed previously
+        if symbol in changes:
+            # Assert that it is changed to the same value again
+            if changes[symbol][1] != value:
+                log.error("Conflicting change for symbol '{}' (previously set to {}, now {})".format(symbol, value_to_str(changes[symbol][1]), value_to_str(value)))
+                sys.exit(1)
+
+            # And skip the reassignment
+            return
+
+        # Get the kconfig symbol, and change the value
+        sym = kconfig.syms[symbol]
+        original_value = sym.str_value
+        if not sym.set_value(value):
+            log.error("Invalid value {} for symbol '{}'".format(value_to_str(value), symbol))
+            sys.exit(1)
+
+        # Track the change
+        if original_value != sym.str_value:
+            changes[symbol] = (original_value, sym.str_value)
+            log.verbose("{} = {}".format(symbol, value_to_str(sym.str_value)))
+
+    # Visit all module nodes and apply configuration changes
+    visited = set()
+    def visit(module):
+        # Ensure we visit only once
+        if module.id in visited:
+            return
+        visited.add(module.id)
+
+        # Ensure all dependencies are processed first
+        for d in module.dependencies:
+            visit(d)
+
+        # Merge all given kconf files of the module
+        for filename in module.merge_kconf_files:
+            print("TODO: merge {}".format(filename))
+
+        # Process all symbol value changes
+        for symbol, value in module.symbol_values:
+            set_symbol(symbol, value)
+
+    # Visit the root node and apply all symbol changes
+    visit(config.kernel.module)
+    log.info("Changed {} symbols".format(len(changes)))
+
+    return changes
 
 def check_config(args):
     """
     Main function for the 'check' command.
     """
-    if args.config:
-        log.info("Checking generated config against '{}'".format(args.config))
+    if args.compare_config:
+        log.info("Checking generated config against '{}'".format(args.compare_config))
     else:
         if not has_proc_config_gz():
             log.error("This kernel does not expose /proc/config.gz. Please provide the path to a valid config file manually.")
             sys.exit(1)
         log.info("Checking generated config against currently running kernel")
 
-    # TODO kconfig = load... ; apply_autokernel_config(kconfig) ; check....
+    # Load configuration file
+    config = load_autokernel_config(args)
+
+    # Load symbols from Kconfig
+    kconfig_gen = load_kconfig(args.kernel_dir)
+    # Apply autokernel configuration
+    changes = apply_autokernel_config(kconfig_gen, config)
+
+    # Load symbols from Kconfig
+    kconfig_cmp = load_kconfig(args.kernel_dir)
+    # Load the given config file or the current kernel's config
+    kconfig_load_file_or_current_config(kconfig_cmp, args.compare_config)
+
+    for sym in kconfig_gen.syms:
+        sym_gen = kconfig_gen.syms[sym]
+        sym_cmp = kconfig_cmp.syms[sym]
+        if sym_gen.str_value != sym_cmp.str_value:
+            print("{}: {} -> {}".format(sym, sym_cmp.str_value, sym_gen.str_value))
+
+def load_autokernel_config(args):
+    """
+    Loads the autokernel configuration file.
+    """
+    try:
+        return Config(filename=args.autokernel_config)
+    except ConfigParsingException as e:
+        log.error(str(e))
+        sys.exit(1)
 
 def generate_config(args):
     """
     Main function for the 'generate_config' command.
     """
-    log.info("Generating .config for kernel")
-    return
-    try:
-        config = Config(filename='example_config.conf')
-    except ConfigParsingException as e:
-        log.error(str(e))
-        sys.exit(1)
 
-    # Load kconfig file
-    kernel_dir = "/usr/src/linux"
-    kconfig = Kconfig(dir=kernel_dir)
+    # Load configuration file
+    config = load_autokernel_config(args)
+    # Load symbols from Kconfig
+    kconfig = load_kconfig(args.kernel_dir)
+    # Apply autokernel configuration
+    apply_autokernel_config(kconfig, config)
 
-    # Track all changed symbols and values.
-    changed_symbols = {}
+    # Write configuration to file
+    header = "# Generated by autokernel on {}\n".format(datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")),
+    kconfig.write_config(
+            filename=args.output,
+            header=header,
+            save_old=False)
 
-    # Visit all module nodes and apply configuration changes
-    visited = set()
-    def visit(module):
-        # Remember that we visited this module
-        visited.add(module.id)
-        for d in module.dependencies:
-            if d.id not in visited:
-                visit(d)
-
-        # Process all symbol value changes
-        for symbol, value in module.symbol_values:
-            # If the symbol was changed previously
-            if symbol in changed_symbols:
-                # Assert that it is changed to the same value again
-                if changed_symbols[symbol] != value:
-                    log.error("Conflicting change for symbol '{}' (previously set to '{}', now '{}')".format(symbol, changed_symbols[symbol], value))
-                    sys.exit(1)
-
-                # And skip the reassignment
-                continue
-
-            # Get the kconfig symbol, and change the value
-            sym = kconfig.syms[symbol]
-            if not sym.set_value(value):
-                log.error("Invalid value '{}' for symbol '{}'".format(value, symbol))
-                sys.exit(1)
-
-            # Track the change
-            changed_symbols[symbol] = value
-            log.verbose("{} = {}".format(symbol, TRI_TO_STR[value] if value in TRI_TO_STR else "'{}'".format(value)))
-
-    # Visit the root node
-    visit(config.kernel.module)
-
-    # TODO umask
+    log.info("Configuration written to '{}'".format(args.output))
 
 def build_kernel(args):
     log.info("Building kernel")
@@ -329,9 +391,9 @@ class KernelConfigWriter:
         content += "# module {}\n".format(module.name)
         for a, v in module.assignments:
             if v in "nmy":
-                content += "{}={}\n".format(a, v)
+                content += "CONFIG_{}={}\n".format(a, v)
             else:
-                content += "{}=\"{}\"\n".format(a, v)
+                content += "CONFIG_{}=\"{}\"\n".format(a, v)
         self.file.write(content)
 
 class ModuleConfigWriter:
@@ -459,7 +521,9 @@ def main():
 
     # General options
     parser.add_argument('-k', '--kernel-dir', dest='kernel_dir', default='/usr/src/linux', type=check_kernel_dir,
-            help="The kernel directory to operate on.")
+            help="The kernel directory to operate on. The default is /usr/src/linux.")
+    parser.add_argument('-C', '--config', dest='autokernel_config', default='/etc/autokernel/autokernel.conf',
+            help="The autokernel configuration file to use. The default is '/etc/autokernel/autokernel.conf'.")
 
     # Output options
     output_options = parser.add_mutually_exclusive_group()
@@ -470,12 +534,14 @@ def main():
 
     # Check
     parser_check = subparsers.add_parser('check', help="Reports differences between the config that will be generated by autokernel, and the given config file. If no config file is given, the script will try to load the current kernel's configuration from '/proc/config.gz'.")
-    parser_check.add_argument('config', nargs='?',
-            help="The config file to compare the generated config against.")
+    parser_check.add_argument('-c', '--compare-config', nargs='?', dest='compare_config',
+            help="The .config file to compare the generated configuration against.")
     parser_check.set_defaults(func=check_config)
 
     # Config generation options
-    parser_generate_config = subparsers.add_parser('generate-config', help='TODO')
+    parser_generate_config = subparsers.add_parser('generate-config', help='Generates the kernel configuration file from the autokernel configuration.')
+    parser_generate_config.add_argument('-o', '--output', dest='output', default='/usr/src/linux/.config',
+            help="The output filename. An existing configuration file will be overwritten. The default is '/usr/src/linux/.config'.")
     parser_generate_config.set_defaults(func=generate_config)
 
     # Kernel build options
@@ -509,7 +575,6 @@ def main():
             help="Writes the output to the given file. Use - for stdout (default).")
     parser_detect.set_defaults(func=detect)
 
-    ## TODO check for conflicting options in config
     # TODO static paths as global variable
 
     args = parser.parse_args()
@@ -524,6 +589,8 @@ def main():
     else:
         # Execute the mode's function
         args.func(args)
+
+    # TODO umask (probably better as external advice, use umask then execute this.)
 
 if __name__ == '__main__':
     main()

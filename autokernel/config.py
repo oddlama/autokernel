@@ -157,12 +157,10 @@ class SetStatement(Statement):
     def parse_arguments(self, arguments):
         if len(arguments) == 1:
             self.symbol = arguments[0]
-            self.value = YES
+            self.value = "y"
         elif len(arguments) == 3 and arguments[1] == '=':
             self.symbol = arguments[0]
             self.value = arguments[2]
-            if self.value in kconfiglib.STR_TO_TRI:
-                self.value = kconfiglib.STR_TO_TRI[self.value]
         else:
             raise ConfigParsingException("set statement must be of form 'set SYMBOL [= VALUE];'")
 
@@ -183,12 +181,21 @@ class UseStatement(Statement):
             raise ConfigParsingException("use statement requires at least one argument, but {} were provided".format(len(arguments)))
         self.dependencies = arguments
 
+class MergeStatement(Statement):
+    keyword = 'merge'
+
+    def parse_arguments(self, arguments):
+        if len(arguments) != 1:
+            raise ConfigParsingException("merge statement requires exactly one argument")
+        self.filename = arguments[0]
+
 class SymbolContext(Context):
     keyword = 'symbol'
     keywords = [
         UseStatement,
         SetStatement,
         AssertStatement,
+        MergeStatement,
     ]
 
 class ModuleContext(Context):
@@ -203,14 +210,6 @@ class ModuleContext(Context):
             raise ConfigParsingException("module definition requires exactly one identifier, but {} were provided".format(len(arguments)))
         self.id = arguments[0]
 
-class BaseStatement(Statement):
-    keyword = 'base'
-
-    def parse_arguments(self, arguments):
-        if len(arguments) != 1:
-            raise ConfigParsingException("base statement requires exactly one argument")
-        self.base = arguments[0]
-
 class ModuleDirStatement(Statement):
     keyword = 'module_dir'
 
@@ -222,9 +221,7 @@ class ModuleDirStatement(Statement):
 class KernelContext(Context):
     keyword = 'kernel'
     append = True
-    keywords = [
-        BaseStatement,
-    ]
+    keywords = []
 
     mixin_contexts = {
         'symbols': SymbolContext
@@ -305,6 +302,7 @@ class ConfigModule:
         self.dependencies = []
         self.symbol_values = []
         self.assertions = []
+        self.merge_kconf_files = []
 
     def parse_context(self, config, ctx):
         for i in ctx.items:
@@ -319,18 +317,15 @@ class ConfigModule:
             elif i.__class__ == AssertStatement:
                 # TODO
                 pass
+            elif i.__class__ == MergeStatement:
+                self.merge_kconf_files.append(i.filename)
 
 class ConfigKernel:
     def __init__(self):
-        self.base = None
         self.module = ConfigModule(None)
 
     def parse_context(self, config, ctx):
         self.module.parse_context(config, ctx.symbols)
-
-        for i in ctx.items:
-            if i.__class__ == BaseStatement:
-                self.base = i.base
 
 class Config(Context):
     """

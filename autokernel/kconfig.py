@@ -71,7 +71,7 @@ def allnoconfig(kconfig):
     `make allnoconfig` in the kernel source tree.
     """
 
-    log.info("Loading allnoconfig")
+    log.info("Applying allnoconfig")
 
     # Allnoconfig from kconfiglib/allnoconfig.py
     warn_save = kconfig.warn

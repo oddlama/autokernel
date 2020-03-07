@@ -8,8 +8,8 @@
 
 Does any of these question sound familiar? Then this tool might solve a problem for you.
 
-This tool allows to both detect configuration options for the current system, and also
-provides a way to properly manage your configuration changes. It can also be used to
+Autokernel can both detect configuration options for the current system, and also
+provide a way to properly manage your kernel configuration. It may also be used to
 automate the build process, but this is entirely optional.
 
 ## Detecting configuration options
@@ -59,7 +59,7 @@ COMMANDS TO EXPLAIN:
 
 > Write only the suggested configuration changes to stdout in kconf format, so that you could
 > theoretically merge them into a kernel .config file
-./autokernel.py detect -q -t kconf
+./autokernel.py -q detect -t kconf
 
 > Create autokernel modules for the detected options.
 > By default the module to select all configuration options will be named 'local',
