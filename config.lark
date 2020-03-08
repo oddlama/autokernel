@@ -3,13 +3,13 @@
 
 ?kernel_option_value: "n"     -> tri_value
                     | "m"     -> tri_value
-					| "y"     -> tri_value
-					| "no"    -> tri_value
-					| "mod"   -> tri_value
-					| "yes"   -> tri_value
-					| "false" -> tri_value
-					| "true"  -> tri_value
-					| STRING  -> string
+                    | "y"     -> tri_value
+                    | "no"    -> tri_value
+                    | "mod"   -> tri_value
+                    | "yes"   -> tri_value
+                    | "false" -> tri_value
+                    | "true"  -> tri_value
+                    | STRING  -> string
 
 ?tok_ignore: COMMENT
            | ";" -> extra_semicolon
@@ -26,9 +26,9 @@ assert_expression: STRING+
 blck_module: "module" WS IDENTIFIER "{" ctxt_module "}"
 ctxt_module: ( tok_ignore
              | stmt_module_use
-			 | stmt_module_merge
-			 | stmt_module_assert
-			 | stmt_module_set )*
+             | stmt_module_merge
+             | stmt_module_assert
+             | stmt_module_set )*
 stmt_module_use:    "use"    ( WS IDENTIFIER )+   ";"
 stmt_module_merge:  "merge"  WS path              ";"
 stmt_module_assert: "assert" WS assert_expression ";"
@@ -92,10 +92,10 @@ ctxt_build: ( tok_ignore )*
 
 ctxt_root: ( tok_ignore
            | blck_module
-		   | blck_kernel
-		   | blck_initramfs
-		   | blck_install
-		   | blck_build
+           | blck_kernel
+           | blck_initramfs
+           | blck_install
+           | blck_build
            | stmt_include_module_dir
            | stmt_include_module )*
 
@@ -115,8 +115,6 @@ BOOLEAN:       "true" | "false" | "1" | "0" | "yes" | "no" | "y" | "n"
 
 // meta
 // ================
-
-start: ctxt_root
 
 %import common.ESCAPED_STRING
 %import common.CNAME
