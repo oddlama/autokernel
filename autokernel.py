@@ -99,6 +99,7 @@ def apply_autokernel_config(kconfig, config):
 
         # Merge all given kconf files of the module
         for filename in module.merge_kconf_files:
+            # TODO don't count these as changes?
             print("TODO: merge {}".format(filename))
 
         # Process all symbol value changes
@@ -140,7 +141,7 @@ def check_config(args):
         sym_gen = kconfig_gen.syms[sym]
         sym_cmp = kconfig_cmp.syms[sym]
         if sym_gen.str_value != sym_cmp.str_value:
-            print("{}: {} -> {}".format(sym, sym_cmp.str_value, sym_gen.str_value))
+            print("[{} -> {}] {}".format(sym_cmp.str_value, sym_gen.str_value, sym))
 
 def load_autokernel_config(args):
     """

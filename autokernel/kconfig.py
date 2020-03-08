@@ -37,7 +37,7 @@ def load_environment_variables(dir):
     """
     log.info("Loading kernel environment variables for '{}'".format(dir))
 
-    # TODO dont force x86, parse uname instead! (see kernel makefiles
+    # TODO dont force x86, parse uname instead! (see kernel makefiles)
     set_env_default("ARCH", "x86")
     set_env_default("SRCARCH", "x86")
     set_env_default("CC", "gcc")

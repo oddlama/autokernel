@@ -1,0 +1,117 @@
+// general
+// ================
+
+?kernel_option_value: "n"     -> tri_value
+                    | "m"     -> tri_value
+					| "y"     -> tri_value
+					| "no"    -> tri_value
+					| "mod"   -> tri_value
+					| "yes"   -> tri_value
+					| "false" -> tri_value
+					| "true"  -> tri_value
+					| STRING  -> string
+
+?tok_ignore: COMMENT
+           | ";" -> extra_semicolon
+
+path: STRING
+param: STRING
+
+// module
+// ================
+
+// TODO: ...
+assert_expression: STRING -> expr
+
+blck_module: "module" IDENTIFIER "{" ctxt_module "}"
+ctxt_module: ( tok_ignore
+             | stmt_module_use
+			 | stmt_module_merge
+			 | stmt_module_assert
+			 | stmt_module_set )*
+stmt_module_use:    "use"    IDENTIFIER+       ";"
+stmt_module_merge:  "merge"  path              ";"
+stmt_module_assert: "assert" assert_expression ";"
+stmt_module_set:    "set"    KERNEL_OPTION [ "=" kernel_option_value ] ";"
+
+// kernel
+// ================
+
+blck_kernel: "kernel"  "{" ctxt_kernel "}"
+ctxt_kernel: ( tok_ignore
+             | ctxt_module )*
+
+// genkernel
+// ================
+
+blck_genkernel: "genkernel"  "{" ctxt_genkernel "}"
+ctxt_genkernel: ( tok_ignore
+                | stmt_add_params )*
+stmt_add_params: "add_params" param+ ";"
+
+// initramfs
+// ================
+
+blck_initramfs: "initramfs"  "{" ctxt_initramfs "}"
+ctxt_initramfs: ( tok_ignore
+                | blck_genkernel
+                | stmt_add_cmdline
+                | stmt_compile_cmdline )*
+stmt_add_cmdline: "add_cmdline" param+ ";"
+stmt_compile_cmdline: "compile_cmdline" BOOLEAN ";"
+
+// install
+// ================
+
+blck_install: "install"  "{" ctxt_install "}"
+// TODO       | blck_efi
+ctxt_install: ( tok_ignore
+              | stmt_target_dir
+              | stmt_target
+              | stmt_mount
+              | stmt_assert_mounted )*
+stmt_target_dir:     "target_dir"     path ";"
+stmt_target:         "target"         path ";"
+stmt_mount:          "mount"          path ";"
+stmt_assert_mounted: "assert_mounted" path ";"
+
+// build
+// ================
+
+blck_build: "build"  "{" ctxt_build "}"
+ctxt_build: ( tok_ignore )*
+
+// root
+// ================
+
+ctxt_root: ( tok_ignore
+           | blck_module
+		   | blck_kernel
+		   | blck_initramfs
+		   | blck_install
+		   | blck_build
+           | stmt_include_module_dir
+           | stmt_include_module )*
+
+stmt_include_module_dir: "include_module_dir" path ";"
+stmt_include_module:     "include_module"     path ";"
+
+// terminals
+// ================
+
+KERNEL_OPTION: /[_A-Z][_A-Z0-9]*/
+COMMENT:       /#[^\n]*/
+IDENTIFIER:    CNAME
+
+STRING:        (ESCAPED_STRING | /\S+/)
+BOOLEAN:       "true" | "false" | "1" | "0" | "yes" | "no" | "y" | "n"
+
+// meta
+// ================
+
+start: ctxt_root
+
+%import common.ESCAPED_STRING
+%import common.CNAME
+%import common.WS
+%ignore WS
