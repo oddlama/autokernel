@@ -594,4 +594,13 @@ def main():
     # TODO umask (probably better as external advice, use umask then execute this.)
 
 if __name__ == '__main__':
-    main()
+    #main()
+    pass
+
+from lark import Lark
+
+with open('config.lark', 'r') as f:
+    l = Lark(f.read())
+
+with open('./example_config.conf', 'r') as f:
+    print(l.parse(f.read()).pretty())
