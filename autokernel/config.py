@@ -21,6 +21,12 @@ def get_lark_parser():
 
     return _lark
 
+def strip_quotes(s):
+    """
+    Strips leading and trailing quotes from the string, if any.
+    """
+    return s[1:-1] if s[0] == s[-1] == '"' else s
+
 def apply_tree_nodes(nodes, callbacks, ignore_additional=False):
     """
     For each node calls the callback matching its name.
@@ -42,16 +48,42 @@ def apply_tree_nodes(nodes, callbacks, ignore_additional=False):
             elif not ignore_additional:
                 raise ConfigParsingException(n.meta, "unprocessed rule '{}'; this is an bug that should be reported.".format(n.data))
 
-def find_token(tree, token_name):
+def find_token(tree, token_name, ignore_missing=False):
     """
-    Finds a token by name in the children of the given tree. Raises
+    Finds a token by literal name in the children of the given tree. Raises
+    an exception if the token is not found and ignore_missing is not set.
+    """
+    for c in tree.children:
+        if c.__class__ == lark.Token and c.type == token_name:
+            return str(c)
+
+    if not ignore_missing:
+        raise ConfigParsingException(tree.meta, "Missing token '{}'".format(token_name))
+    return None
+
+def find_named_token(tree, token_name, ignore_missing=False):
+    """
+    Finds a token by subrule name in the children of the given tree. Raises
     an exception if the token is not found.
     """
     for c in tree.children:
-        if c.__class__ == lark.Token:
-            if c.type == token_name:
-                return c
-    raise ConfigParsingException(tree.meta, "Missing token '{}'".format(token_name))
+        if c.__class__ == lark.Tree and c.data == token_name:
+            if len(c.children) != 1:
+                raise ConfigParsingException(c.meta, "Subrule token '{}' has too many children".format(token_name))
+            if c.children[0].__class__ == lark.Token:
+                return str(c.children[0])
+            else:
+                raise ConfigParsingException(c.meta, "Subrule token '{}' has no children literal".format(token_name))
+
+    if not ignore_missing:
+        raise ConfigParsingException(tree.meta, "Missing token '{}'".format(token_name))
+    return None
+
+def find_all_tokens(tree, token_name):
+    """
+    Finds all tokens by name in the children of the given tree.
+    """
+    return [str(c) for c in tree.children if c.__class__ == lark.Token and c.type == token_name]
 
 class BlockNode:
     """
@@ -96,10 +128,11 @@ class ConfigModule(BlockNode):
 
     def __init__(self):
         self.name = None
+        self.uses = []
         self.dependencies = []
-        self.assignments = []
-        self.assertions = []
         self.merge_kconf_files = []
+        self.assertions = []
+        self.assignments = []
 
     def parse_block_params(self, blck):
         def module_name(tree):
@@ -109,7 +142,23 @@ class ConfigModule(BlockNode):
         apply_tree_nodes(blck.children, [module_name], ignore_additional=True)
 
     def parse_context(self, ctxt):
-        pass
+        def stmt_module_use(tree):
+            self.uses.extend(find_all_tokens(tree, 'IDENTIFIER'))
+        def stmt_module_merge(tree):
+            self.merge_kconf_files.append(find_named_token(tree, 'path'))
+        def stmt_module_assert(tree):
+            pass
+        def stmt_module_set(tree):
+            key = find_token(tree, 'KERNEL_OPTION')
+            value = strip_quotes(find_named_token(tree, 'kernel_option_value', ignore_missing=True) or 'y')
+            self.assignments.append((key, value))
+
+        apply_tree_nodes(ctxt.children, [
+                stmt_module_use,
+                stmt_module_merge,
+                stmt_module_assert,
+                stmt_module_set,
+            ])
 
 class ConfigKernel(BlockNode):
     node_name = 'kernel'

@@ -1,16 +1,6 @@
 // general
 // ================
 
-?kernel_option_value: "n"     -> tri_value
-                    | "m"     -> tri_value
-                    | "y"     -> tri_value
-                    | "no"    -> tri_value
-                    | "mod"   -> tri_value
-                    | "yes"   -> tri_value
-                    | "false" -> tri_value
-                    | "true"  -> tri_value
-                    | STRING  -> string
-
 ?tok_ignore: COMMENT
            | ";" -> extra_semicolon
 
@@ -23,6 +13,7 @@ param: STRING
 // TODO: ...
 assert_expression: STRING+
 module_name: IDENTIFIER
+kernel_option_value: STRING
 
 blck_module: "module" WS module_name "{" ctxt_module "}"
 ctxt_module: ( tok_ignore
