@@ -22,8 +22,9 @@ param: STRING
 
 // TODO: ...
 assert_expression: STRING+
+module_name: IDENTIFIER
 
-blck_module: "module" WS IDENTIFIER "{" ctxt_module "}"
+blck_module: "module" WS module_name "{" ctxt_module "}"
 ctxt_module: ( tok_ignore
              | stmt_module_use
              | stmt_module_merge
@@ -37,39 +38,39 @@ stmt_module_set:    "set"    WS KERNEL_OPTION [ "=" kernel_option_value ] ";"
 // kernel
 // ================
 
-blck_kernel: "kernel" WS "{" ctxt_kernel "}"
+blck_kernel: "kernel" "{" ctxt_kernel "}"
 ctxt_kernel: ( tok_ignore
              | ctxt_module )*
 
 // genkernel
 // ================
 
-blck_genkernel: "genkernel" WS "{" ctxt_genkernel "}"
+blck_genkernel: "genkernel" "{" ctxt_genkernel "}"
 ctxt_genkernel: ( tok_ignore
                 | stmt_add_params )*
-stmt_add_params: "add_params" WS param+ ";"
+stmt_add_params: "add_params" (WS param)+ ";"
 
 // initramfs
 // ================
 
-blck_initramfs: "initramfs" WS "{" ctxt_initramfs "}"
+blck_initramfs: "initramfs" "{" ctxt_initramfs "}"
 ctxt_initramfs: ( tok_ignore
                 | blck_genkernel
                 | stmt_add_cmdline
                 | stmt_compile_cmdline )*
-stmt_add_cmdline: "add_cmdline" WS param+ ";"
+stmt_add_cmdline: "add_cmdline" (WS param)+ ";"
 stmt_compile_cmdline: "compile_cmdline" WS BOOLEAN ";"
 
 // efi
 // ================
 
-blck_efi: "efi" WS "{" ctxt_efi "}"
+blck_efi: "efi" "{" ctxt_efi "}"
 ctxt_efi: ( tok_ignore )*
 
 // install
 // ================
 
-blck_install: "install" WS "{" ctxt_install "}"
+blck_install: "install" "{" ctxt_install "}"
 ctxt_install: ( tok_ignore
               | blck_efi
               | stmt_target_dir
@@ -84,12 +85,13 @@ stmt_assert_mounted: "assert_mounted" WS path ";"
 // build
 // ================
 
-blck_build: "build" WS "{" ctxt_build "}"
+blck_build: "build" "{" ctxt_build "}"
 ctxt_build: ( tok_ignore )*
 
 // root
 // ================
 
+blck_root: ctxt_root
 ctxt_root: ( tok_ignore
            | blck_module
            | blck_kernel
