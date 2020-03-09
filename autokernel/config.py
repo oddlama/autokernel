@@ -11,6 +11,9 @@ class ConfigParsingException(Exception):
 
 _lark = None
 def get_lark_parser():
+    """
+    Returns the lark parser for config files
+    """
     global _lark
     if _lark is None:
         with open(os.path.join(os.path.dirname(__file__), '../config.lark'), 'r') as f:
@@ -18,7 +21,11 @@ def get_lark_parser():
 
     return _lark
 
-def apply_tree_nodes(nodes, callbacks):
+def apply_tree_nodes(nodes, callbacks, ignore_additional=False):
+    """
+    For each node calls the callback matching its name.
+    Raises an exception for unmatched nodes if ignore_additional is not set.
+    """
     if type(callbacks) == list:
         callback_dict = {}
         for c in callbacks:
@@ -29,8 +36,17 @@ def apply_tree_nodes(nodes, callbacks):
         if n.__class__ == lark.Tree:
             if n.data in callbacks:
                 callbacks[n.data](n)
+            elif n.data == "extra_semicolon":
+                print("extra_semicolon")
+                # TODO print_error_in_file("example_config.conf", "Extra semicolon", c.meta)
+            elif not ignore_additional:
+                raise ConfigParsingException(n.meta, "unprocessed rule '{}'; this is an bug that should be reported.".format(n.data))
 
 def find_token(tree, token_name):
+    """
+    Finds a token by name in the children of the given tree. Raises
+    an exception if the token is not found.
+    """
     for c in tree.children:
         if c.__class__ == lark.Token:
             if c.type == token_name:
@@ -38,17 +54,26 @@ def find_token(tree, token_name):
     raise ConfigParsingException(tree.meta, "Missing token '{}'".format(token_name))
 
 class BlockNode:
-    def matches_tree(self, tree):
-        return tree.data == ('blck_' + self.node_name)
-
+    """
+    A base class for blocks to help with tree parsing.
+    """
     def parse_context(self, ctxt):
+        """
+        Called to parse the related context
+        """
         pass
 
     def parse_block_params(self, blck):
+        """
+        Called to parse additional block parameters
+        """
         pass
 
     def parse_tree(self, tree):
-        if not self.matches_tree(tree):
+        """
+        Parses the given block tree node, and class parse_block_params and parse_context.
+        """
+        if tree.data != ('blck_' + self.node_name):
             raise ConfigParsingException(tree.meta, "{} cannot parse '{}'".format(self.__class__.__name__, tree.data))
 
         self.parse_block_params(tree)
@@ -81,7 +106,7 @@ class ConfigModule(BlockNode):
             token = find_token(tree, 'IDENTIFIER')
             self.name = str(token)
 
-        apply_tree_nodes(blck.children, [module_name])
+        apply_tree_nodes(blck.children, [module_name], ignore_additional=True)
 
     def parse_context(self, ctxt):
         pass
@@ -136,7 +161,9 @@ class ConfigBuild(BlockNode):
 class Config(BlockNode):
     node_name = 'root'
 
-    def __init__(self):
+    def __init__(self, restrict_to_modules=False):
+        self.restrict_to_modules = restrict_to_modules
+
         self.modules = []
         self.kernel = ConfigKernel()
         self.initramfs = ConfigInitramfs()
@@ -176,36 +203,6 @@ class Config(BlockNode):
                 stmt_include_module_dir,
                 stmt_include_module,
             ])
-
-    #def parse_tree(self, tree):
-    #    if tree.data != "ctxt_root":
-    #        raise ConfigParsingException(tree.meta, "Invalid root context")
-
-    #    for c in tree.children:
-    #        if not hasattr(c, 'data'):
-    #            continue
-
-    #        if c.data == "blck_module":
-    #            module = ConfigModule()
-    #            module.parse_tree(c)
-    #            self.modules.append(module)
-    #        elif c.data == "blck_kernel":
-    #            self.kernel.parse_tree(c)
-    #        elif c.data == "blck_initramfs":
-    #            self.initramfs.parse_tree(c)
-    #        elif c.data == "blck_install":
-    #            self.install.parse_tree(c)
-    #        elif c.data == "blck_build":
-    #            self.build.parse_tree(c)
-    #        elif c.data == "stmt_include_module_dir":
-    #            pass
-    #        elif c.data == "stmt_include_module":
-    #            pass
-    #        elif c.data == "extra_semicolon":
-    #            pass
-    #            # TODO print_error_in_file("example_config.conf", "Extra semicolon", c.meta)
-    #        else:
-    #            raise ConfigParsingException(c.meta, "Encountered invalid parsed token. This is an error in the application and should be reported.")
 
 def print_line_with_highlight(line, line_nr, highlight):
     tabs_before = line[:highlight[0]-1].count('\t')
