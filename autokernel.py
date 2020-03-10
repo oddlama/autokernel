@@ -89,9 +89,9 @@ def apply_autokernel_config(kconfig, config):
     visited = set()
     def visit(module):
         # Ensure we visit only once
-        if module.id in visited:
+        if module.name in visited:
             return
-        visited.add(module.id)
+        visited.add(module.name)
 
         # Ensure all dependencies are processed first
         for d in module.dependencies:
@@ -103,7 +103,7 @@ def apply_autokernel_config(kconfig, config):
             print("TODO: merge {}".format(filename))
 
         # Process all symbol value changes
-        for symbol, value in module.symbol_values:
+        for symbol, value in module.assignments:
             set_symbol(symbol, value)
 
     # Visit the root node and apply all symbol changes

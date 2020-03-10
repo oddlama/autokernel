@@ -287,7 +287,7 @@ class Config(BlockNode):
     node_name = 'root'
 
     def __init__(self):
-        self.modules = []
+        self.modules = {}
         self.kernel = ConfigKernel()
         self.initramfs = ConfigInitramfs()
         self.install = ConfigInstall()
@@ -322,10 +322,9 @@ class Config(BlockNode):
         def blck_module(tree):
             module = ConfigModule()
             module.parse_tree(tree)
-            for m in self.modules:
-                if m.name == module.name:
-                    raise ConfigParsingException(tree.meta, "redefinition of module '{}'".format(module.name))
-            self.modules.append(module)
+            if module.name in self.modules:
+                raise ConfigParsingException(tree.meta, "redefinition of module '{}'".format(module.name))
+            self.modules[module.name] = module
         def blck_kernel(tree):
             self.kernel.parse_tree(tree)
         def blck_initramfs(tree):
@@ -406,5 +405,13 @@ def load_config(config_file):
         print_parsing_exception(config_file, e)
         sys.exit(1)
 
-    sys.exit(0)
+    # Resolve module dependencies
+    for m in config.modules:
+        mod = config.modules[m]
+        mod.dependencies = [config.modules[u] for u in mod.uses]
+
+    # Resolve kernel dependencies
+    kmod = config.kernel.module
+    kmod.dependencies = [config.modules[u] for u in kmod.uses]
+
     return config
