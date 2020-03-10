@@ -24,7 +24,7 @@ ctxt_module: ( tok_ignore
 stmt_module_use:    "use"    ( WS IDENTIFIER )+   ";"
 stmt_module_merge:  "merge"  WS path              ";"
 stmt_module_assert: "assert" WS assert_expression ";"
-stmt_module_set:    "set"    WS KERNEL_OPTION [ "=" kernel_option_value ] ";"
+stmt_module_set:    "set"    WS KERNEL_OPTION [ kernel_option_value ] ";"
 
 // kernel
 // ================
@@ -39,7 +39,7 @@ ctxt_kernel: ( tok_ignore
 blck_genkernel: "genkernel" "{" ctxt_genkernel "}"
 ctxt_genkernel: ( tok_ignore
                 | stmt_add_params )*
-stmt_add_params: "add_params" (WS param)+ ";"
+stmt_add_params: "add_params" ( WS param )+ ";"
 
 // initramfs
 // ================
@@ -49,7 +49,7 @@ ctxt_initramfs: ( tok_ignore
                 | blck_genkernel
                 | stmt_add_cmdline
                 | stmt_compile_cmdline )*
-stmt_add_cmdline: "add_cmdline" (WS param)+ ";"
+stmt_add_cmdline: "add_cmdline" ( WS param )+ ";"
 stmt_compile_cmdline: "compile_cmdline" WS BOOLEAN ";"
 
 // efi
@@ -100,17 +100,18 @@ stmt_include_module:     "include_module"     WS path ";"
 
 KERNEL_OPTION: /[_A-Z][_A-Z0-9]*/
 COMMENT:       /#[^\n]*/
-IDENTIFIER:    CNAME
+IDENTIFIER:    ( "_" | "-" | LETTER | DIGIT )+
 
 // The negative lookbehind avoids beeing greedy for the semicolon at the end
-STRING:        (ESCAPED_STRING | /\S+(?<!;)/)
+STRING:        ( ESCAPED_STRING | /\S+(?<!;)/ )
 BOOLEAN:       "true" | "false" | "1" | "0" | "yes" | "no" | "y" | "n"
 
 // meta
 // ================
 
 %import common.ESCAPED_STRING
-%import common.CNAME
+%import common.LETTER
+%import common.DIGIT
 %import common.WS
 %ignore WS
 %ignore COMMENT

@@ -402,7 +402,7 @@ class ModuleConfigWriter:
         for d in module.deps:
             content += "\tuse {};\n".format(d.name)
         for a, v in module.assignments:
-            content += "\tset {} = {};\n".format(a, v)
+            content += "\tset {} {};\n".format(a, v)
         content += "}\n\n"
         self.file.write(content)
 
