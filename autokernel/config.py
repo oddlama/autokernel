@@ -9,6 +9,7 @@ class ConfigParsingException(Exception):
         super().__init__(message)
         self.meta = meta
 
+currently_parsed_filenames = []
 _lark = None
 def get_lark_parser():
     """
@@ -51,8 +52,7 @@ def apply_tree_nodes(nodes, callbacks, on_additional=None, ignore_additional=Fal
             if n.data in callbacks:
                 callbacks[n.data](n)
             elif n.data == "extra_semicolon":
-                print("extra_semicolon")
-                # TODO print_error_in_file("example_config.conf", "Extra semicolon", c.meta)
+                log.verbose("Extra semicolon at {}:{}:{}".format(currently_parsed_filenames[-1], n.line, n.column))
             elif on_additional:
                 on_additional(n)
             elif not ignore_additional:
@@ -223,7 +223,7 @@ class ConfigInitramfs(BlockNode):
         def stmt_add_cmdline(tree):
             self.cmdline.extend(find_all_named_tokens(tree, 'param'))
         def stmt_compile_cmdline(tree):
-            self.compile_cmdline = parse_bool(tree, find_token(tree, 'BOOLEAN'))
+            self.compile_cmdline = parse_bool(tree, find_token(tree, 'STRING'))
 
         apply_tree_nodes(ctxt.children, [
                 blck_genkernel,
@@ -310,7 +310,9 @@ class Config(BlockNode):
                     raise ConfigParsingException(tree.meta, str(e))
 
                 try:
+                    currently_parsed_filenames.append(filename)
                     self.parse_tree(subtree, restrict_to_modules=True)
+                    currently_parsed_filenames.pop()
                 except ConfigParsingException as e:
                     print_parsing_exception(filename, e)
                     sys.exit(1)
@@ -397,7 +399,9 @@ def load_config(config_file):
     tree = load_config_tree(config_file)
     config = Config()
     try:
+        currently_parsed_filenames.append(config_file)
         config.parse_tree(tree)
+        currently_parsed_filenames.pop()
     except ConfigParsingException as e:
         print_parsing_exception(config_file, e)
         sys.exit(1)

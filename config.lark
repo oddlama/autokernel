@@ -50,7 +50,7 @@ ctxt_initramfs: ( tok_ignore
                 | stmt_add_cmdline
                 | stmt_compile_cmdline )*
 stmt_add_cmdline: "add_cmdline" ( WS param )+ ";"
-stmt_compile_cmdline: "compile_cmdline" WS BOOLEAN ";"
+stmt_compile_cmdline: "compile_cmdline" WS STRING ";"
 
 // efi
 // ================
@@ -104,7 +104,6 @@ IDENTIFIER:    ( "_" | "-" | LETTER | DIGIT )+
 
 // The negative lookbehind avoids beeing greedy for the semicolon at the end
 STRING:        ( ESCAPED_STRING | /\S+(?<!;)/ )
-BOOLEAN:       "true" | "false" | "1" | "0" | "yes" | "no" | "y" | "n"
 
 // meta
 // ================
