@@ -185,6 +185,9 @@ def build_initramfs(args, config):
     print("subprocess.run(['genkernel'], cwd={})".format(args.kernel_dir))
 
 def build(args, config=None):
+    """
+    Main function for the 'build' command.
+    """
     if not config:
         # Load configuration file
         config = load_config(args.autokernel_config)
@@ -202,6 +205,9 @@ def install_initramfs(args, config):
     log.info("Installing initramfs")
 
 def install(args, config=None):
+    """
+    Main function for the 'install' command.
+    """
     if not config:
         # Load configuration file
         config = load_config(args.autokernel_config)
@@ -234,7 +240,10 @@ def install(args, config=None):
     install_kernel(args, config)
     install_initramfs(args, config)
 
-def build_full(args):
+def build_all(args):
+    """
+    Main function for the 'all' command.
+    """
     log.info("Started full build")
     # Load configuration file
     config = load_config(args.autokernel_config)
@@ -572,7 +581,7 @@ def main():
     """
     Parses options and dispatches control to the correct subcommand function
     """
-    parser = ThrowingArgumentParser(description="TODO. If no mode is given, 'autokernel full' will be executed.")
+    parser = ThrowingArgumentParser(description="TODO. If no mode is given, 'autokernel all' will be executed.")
     subparsers = parser.add_subparsers(title="commands",
             description="Use 'autokernel command --help' to view the help for any command.",
             metavar='command')
@@ -611,8 +620,8 @@ def main():
     parser_install.set_defaults(func=install)
 
     # Full build options
-    parser_full = subparsers.add_parser('full', help='Successively runs build and then install.')
-    parser_full.set_defaults(func=build_full)
+    parser_all = subparsers.add_parser('all', help='First builds and then installs the kernel.')
+    parser_all.set_defaults(func=build_all)
 
     # TODO
     #parser_search = subparsers.add_parser('search', help='TODO')
@@ -641,9 +650,9 @@ def main():
     log.verbose_output = args.verbose
     log.quiet_output = args.quiet
 
-    # Fallback to build_full() if no mode is given
+    # Fallback to build_all() if no mode is given
     if 'func' not in args:
-        build_full(args)
+        build_all(args)
     else:
         # Execute the mode's function
         args.func(args)
