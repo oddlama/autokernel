@@ -208,6 +208,10 @@ def install(args, config=None):
 
     # Mount
     for i in config.install.mount:
+        if not os.access(i, os.R_OK):
+            log.error("Permission denied on accessing '{}'. Aborting.".format(i))
+            sys.exit(1)
+
         if not os.path.ismount(i):
             if subprocess.run(['mount', '--', i]).returncode != 0:
                 log.error("Could not mount '{}'. Aborting.".format(i))
@@ -215,6 +219,10 @@ def install(args, config=None):
 
     # Check mounts
     for i in config.install.mount + config.install.assert_mounted:
+        if not os.access(i, os.R_OK):
+            log.error("Permission denied on accessing '{}'. Aborting.".format(i))
+            sys.exit(1)
+
         if not os.path.ismount(i):
             log.error("'{}' is not mounted. Aborting.".format(i))
             sys.exit(1)
