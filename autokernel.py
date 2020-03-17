@@ -206,6 +206,19 @@ def install(args, config=None):
         # Load configuration file
         config = load_config(args.autokernel_config)
 
+    # Mount
+    for i in config.install.mount:
+        if not Path(i).is_mount():
+            if subprocess.run(['mount', '--', i]).returncode != 0:
+                log.error("Could not mount '{}'. Aborting.".format(i))
+                sys.exit(1)
+
+    # Check mounts
+    for i in config.install.mount + config.install.assert_mounted:
+        if not Path(i).is_mount():
+            log.error("'{}' is not mounted. Aborting.".format(i))
+            sys.exit(1)
+
     # TODO only kernel if initramfs not needed
     install_kernel(args, config)
     install_initramfs(args, config)

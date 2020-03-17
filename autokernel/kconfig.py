@@ -3,6 +3,7 @@ from .constants import NO, MOD, YES
 
 import subprocess
 import os
+import re
 import kconfiglib
 from kconfiglib import expr_value
 
@@ -31,15 +32,32 @@ def set_env_default(var, default_value):
     if var not in os.environ:
         os.environ[var] = default_value
 
+def detect_arch():
+    arch = subprocess.run(['uname', '-m'], stdout=subprocess.PIPE).stdout.decode().strip().splitlines()[0]
+    arch = re.sub('i.86',      'x86',     arch)
+    arch = re.sub('x86_64',    'x86',     arch)
+    arch = re.sub('sun4u',     'sparc64', arch)
+    arch = re.sub('arm.*',     'arm',     arch)
+    arch = re.sub('sa110',     'arm',     arch)
+    arch = re.sub('s390x',     's390',    arch)
+    arch = re.sub('parisc64',  'parisc',  arch)
+    arch = re.sub('ppc.*',     'powerpc', arch)
+    arch = re.sub('mips.*',    'mips',    arch)
+    arch = re.sub('sh[234].*', 'sh',      arch)
+    arch = re.sub('aarch64.*', 'arm64',   arch)
+    arch = re.sub('riscv.*',   'riscv',   arch)
+    return arch
+
 def load_environment_variables(dir):
     """
     Loads important environment variables from the given kernel source tree.
     """
     log.info("Loading kernel environment variables for '{}'".format(dir))
 
-    # TODO dont force x86, parse uname instead! (see kernel makefiles)
-    set_env_default("ARCH", "x86")
-    set_env_default("SRCARCH", "x86")
+    arch = detect_arch()
+    log.info("Detected ARCH: {}".format(arch))
+    set_env_default("ARCH", arch)
+    set_env_default("SRCARCH", arch)
     set_env_default("CC", "gcc")
     set_env_default("HOSTCC", "gcc")
     set_env_default("HOSTCXX", "g++")
