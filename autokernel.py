@@ -155,7 +155,7 @@ def generate_config(args, config=None):
 
     # Fallback for config output
     if not hasattr(args, 'output') or not args.output:
-        args.output = '/usr/src/linux/.config'
+        args.output = os.path.join(args.kernel_dir, '.config')
 
     # Load symbols from Kconfig
     kconfig = load_kconfig(args.kernel_dir)
@@ -208,16 +208,19 @@ def install(args, config=None):
 
     # Mount
     for i in config.install.mount:
-        if not Path(i).is_mount():
+        if not os.path.ismount(i):
             if subprocess.run(['mount', '--', i]).returncode != 0:
                 log.error("Could not mount '{}'. Aborting.".format(i))
                 sys.exit(1)
 
     # Check mounts
     for i in config.install.mount + config.install.assert_mounted:
-        if not Path(i).is_mount():
+        if not os.path.ismount(i):
             log.error("'{}' is not mounted. Aborting.".format(i))
             sys.exit(1)
+
+    # TODO use this
+    target_dir = config.install.target_dir or '/boot'
 
     # TODO only kernel if initramfs not needed
     install_kernel(args, config)
@@ -588,7 +591,7 @@ def main():
     # Config generation options
     parser_generate_config = subparsers.add_parser('generate-config', help='Generates the kernel configuration file from the autokernel configuration.')
     parser_generate_config.add_argument('-o', '--output', dest='output',
-            help="The output filename. An existing configuration file will be overwritten. The default is '/usr/src/linux/.config'.")
+            help="The output filename. An existing configuration file will be overwritten. The default is '{KERNEL_DIR}/.config'.")
     parser_generate_config.set_defaults(func=generate_config)
 
     # Build options

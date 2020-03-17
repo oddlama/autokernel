@@ -74,7 +74,7 @@ def load_kconfig(kernel_dir):
 
     log.info("Loading '{}'".format(kconfig_file))
     os.environ['srctree'] = kernel_dir
-    kconfig = kconfiglib.Kconfig(kconfig_file, warn_to_stderr=False)
+    kconfig = kconfiglib.Kconfig(os.path.realpath(kconfig_file), warn_to_stderr=False)
 
     for w in kconfig.warnings:
         for line in w.split('\n'):
