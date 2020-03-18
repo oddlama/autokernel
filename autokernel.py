@@ -177,8 +177,13 @@ def generate_config(args, config=None):
 
     log.info("Configuration written to '{}'".format(args.output))
 
-def build_kernel(args, config):
-    log.info("Building kernel")
+def build_kernel(args, config, pass_id):
+    if pass_id == 'initial':
+        log.info("Building kernel")
+    elif pass_id == 'pack':
+        log.info("Rebuilding kernel to pack external resources")
+    else:
+        raise ValueError("pass_id has an invalid value '{}'".format(pass_id))
 
     # TODO cleaning capabilities?
     #subprocess.run(['make'], cwd=args.kernel_dir)
@@ -201,15 +206,15 @@ def build(args, config=None):
     generate_config(args, config)
 
     # Build the kernel
-    build_kernel(args, config)
+    build_kernel(args, config, pass_id='initial')
 
     # Build the initramfs, if enabled
-    if config.build.initramfs_enabled:
+    if config.build.enable_initramfs:
         build_initramfs(args, config)
 
         # Pack the initramfs into the kernel if desired
-        if config.initramfs.pack:
-            build_kernel(args, config, builtin_initramfs=True)
+        if config.build.pack['initramfs']:
+            build_kernel(args, config, pass_id='pack')
 
 def install_kernel(args, config):
     log.info("Installing kernel")

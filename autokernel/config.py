@@ -36,6 +36,9 @@ def parse_bool(tree, s):
     else:
         raise ConfigParsingException(tree.meta, "Invalid value for boolean")
 
+def redefinition_exception(tree, name):
+    return ConfigParsingException(tree.meta, "Duplicate definition of {}".format(name))
+
 def apply_tree_nodes(nodes, callbacks, on_additional=None, ignore_additional=False):
     """
     For each node calls the callback matching its name.
@@ -108,6 +111,40 @@ def find_all_named_tokens(tree, token_name, strip_quotes=True):
                 and len(c.children) == 1
                 and c.children[0].__class__ == lark.Token]
 
+class UniqueBoolProperty:
+    """
+    A property that tracks if it has been changed, stores a default
+    value and raises an error if it is assigned more than once.
+    """
+    def __init__(self, name, default):
+        self.name = name
+        self.default = default
+        self.value = None
+
+    def defined(self):
+        return self.value is not None
+
+    def parse(self, tree, token=None, named_token=None, ignore_missing=None):
+        default_if_ignored = ignore_missing
+        ignore_missing = default_if_ignored is not None
+
+        if self.defined():
+            raise redefinition_exception(tree, self.name)
+        if token:
+            tok = find_token(tree, token, ignore_missing=ignore_missing)
+        elif named_token:
+            tok = find_named_token(tree, named_token, ignore_missing=ignore_missing)
+        else:
+            raise ValueError("Missing token identifier argument; this is a bug that should be reported.")
+
+        if ignore_missing:
+            tok = tok or default_if_ignored
+
+        self.value = parse_bool(tree, tok)
+
+    def __nonzero__(self):
+        return self.default if self.value is None else self.value
+
 class BlockNode:
     """
     A base class for blocks to help with tree parsing.
@@ -159,8 +196,7 @@ class ConfigModule(BlockNode):
 
     def parse_block_params(self, blck):
         def module_name(tree):
-            token = find_token(tree, 'IDENTIFIER')
-            self.name = str(token)
+            self.name = find_token(tree, 'IDENTIFIER')
 
         apply_tree_nodes(blck.children, [module_name], ignore_additional=True)
 
@@ -187,13 +223,17 @@ class ConfigKernel(BlockNode):
 
     def __init__(self):
         self.module = ConfigModule()
+        self.cmdline = []
 
     def parse_context(self, ctxt):
         def ctxt_module(tree):
             self.module.parse_context(tree)
+        def stmt_kernel_add_cmdline(tree):
+            self.cmdline.extend(find_all_named_tokens(tree, 'param'))
 
         apply_tree_nodes(ctxt.children, [
                 ctxt_module,
+                stmt_kernel_add_cmdline,
             ])
 
 class ConfigGenkernel(BlockNode):
@@ -203,11 +243,11 @@ class ConfigGenkernel(BlockNode):
         self.params = []
 
     def parse_context(self, ctxt):
-        def stmt_add_params(tree):
+        def stmt_genkernel_add_params(tree):
             self.params.extend(find_all_named_tokens(tree, 'param'))
 
         apply_tree_nodes(ctxt.children, [
-                stmt_add_params,
+                stmt_genkernel_add_params,
             ])
 
 class ConfigInitramfs(BlockNode):
@@ -216,20 +256,16 @@ class ConfigInitramfs(BlockNode):
     def __init__(self):
         self.genkernel = ConfigGenkernel()
         self.cmdline = []
-        self.compile_cmdline = False
 
     def parse_context(self, ctxt):
         def blck_genkernel(tree):
             self.genkernel.parse_tree(tree)
-        def stmt_add_cmdline(tree):
+        def stmt_initramfs_add_cmdline(tree):
             self.cmdline.extend(find_all_named_tokens(tree, 'param'))
-        def stmt_compile_cmdline(tree):
-            self.compile_cmdline = parse_bool(tree, find_token(tree, 'STRING'))
 
         apply_tree_nodes(ctxt.children, [
                 blck_genkernel,
-                stmt_add_cmdline,
-                stmt_compile_cmdline,
+                stmt_initramfs_add_cmdline,
             ])
 
 class ConfigEfi(BlockNode):
@@ -254,35 +290,50 @@ class ConfigInstall(BlockNode):
     def parse_context(self, ctxt):
         def blck_efi(tree):
             self.efi.parse_tree(tree)
-        def stmt_target_dir(tree):
+        def stmt_install_target_dir(tree):
             if self.target_dir:
-                raise ConfigParsingException(tree.meta, "Duplicate definition of target_dir")
+                raise redefinition_exception(tree, 'target_dir')
             self.target_dir = find_named_token(tree, 'path')
-        def stmt_target(tree):
+        def stmt_install_target(tree):
             if self.target:
-                raise ConfigParsingException(tree.meta, "Duplicate definition of target_dir")
+                raise redefinition_exception(tree, 'target')
             self.target = find_named_token(tree, 'path')
-        def stmt_mount(tree):
+        def stmt_install_mount(tree):
             self.mount.append(find_named_token(tree, 'path'))
-        def stmt_assert_mounted(tree):
+        def stmt_install_assert_mounted(tree):
             self.assert_mounted.append(find_named_token(tree, 'path'))
 
         apply_tree_nodes(ctxt.children, [
                 blck_efi,
-                stmt_target_dir,
-                stmt_target,
-                stmt_mount,
-                stmt_assert_mounted,
+                stmt_install_target_dir,
+                stmt_install_target,
+                stmt_install_mount,
+                stmt_install_assert_mounted,
             ])
 
 class ConfigBuild(BlockNode):
     node_name = 'build'
 
     def __init__(self):
-        pass
+        self.enable_initramfs = UniqueBoolProperty('initramfs', default=False)
+        self.pack = {
+                'initramfs': UniqueBoolProperty('pack initramfs', default=False),
+                'cmdline': UniqueBoolProperty('pack cmdline', default=False),
+            }
 
     def parse_context(self, ctxt):
-        pass
+        def stmt_build_initramfs(tree):
+            self.enable_initramfs.parse(tree, token='STRING')
+        def stmt_build_pack(tree):
+            key = find_token(tree, 'STRING')
+            if key not in self.pack:
+                return ConfigParsingException(tree.meta, "Invalid parameter '{}'".format(key))
+            self.pack[key].parse(tree, named_token='param', ignore_missing='true')
+
+        apply_tree_nodes(ctxt.children, [
+                stmt_build_initramfs,
+                stmt_build_pack,
+            ])
 
 class Config(BlockNode):
     node_name = 'root'
@@ -334,14 +385,14 @@ class Config(BlockNode):
             self.install.parse_tree(tree)
         def blck_build(tree):
             self.build.parse_tree(tree)
-        def stmt_include_module_dir(tree):
+        def stmt_root_include_module_dir(tree):
             dir = find_named_token(tree, 'path')
             if os.path.isdir(dir):
                 for file in os.listdir(dir):
                     _include_module_file(tree, os.path.join(dir, file))
             else:
                 raise ConfigParsingException(tree.meta, "'{}' is not a directory".format(dir))
-        def stmt_include_module(tree):
+        def stmt_root_include_module(tree):
             _include_module_file(tree, find_named_token(tree, 'path'))
 
         if restrict_to_modules:
@@ -358,8 +409,8 @@ class Config(BlockNode):
                     blck_initramfs,
                     blck_install,
                     blck_build,
-                    stmt_include_module_dir,
-                    stmt_include_module,
+                    stmt_root_include_module_dir,
+                    stmt_root_include_module,
                 ])
 
 def print_line_with_highlight(line, line_nr, highlight):

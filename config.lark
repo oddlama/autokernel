@@ -24,22 +24,24 @@ ctxt_module: ( tok_ignore
 stmt_module_use:    "use"    ( WS IDENTIFIER )+   ";"
 stmt_module_merge:  "merge"  WS path              ";"
 stmt_module_assert: "assert" WS assert_expression ";"
-stmt_module_set:    "set"    WS KERNEL_OPTION [ kernel_option_value ] ";"
+stmt_module_set:    "set"    WS KERNEL_OPTION [ WS kernel_option_value ] ";"
 
 // kernel
 // ================
 
 blck_kernel: "kernel" "{" ctxt_kernel "}"
 ctxt_kernel: ( tok_ignore
-             | ctxt_module )*
+             | ctxt_module
+             | stmt_kernel_add_cmdline )*
+stmt_kernel_add_cmdline: "add_cmdline" ( WS param )+ ";"
 
 // genkernel
 // ================
 
 blck_genkernel: "genkernel" "{" ctxt_genkernel "}"
 ctxt_genkernel: ( tok_ignore
-                | stmt_add_params )*
-stmt_add_params: "add_params" ( WS param )+ ";"
+                | stmt_genkernel_add_params )*
+stmt_genkernel_add_params: "add_params" ( WS param )+ ";"
 
 // initramfs
 // ================
@@ -47,10 +49,8 @@ stmt_add_params: "add_params" ( WS param )+ ";"
 blck_initramfs: "initramfs" "{" ctxt_initramfs "}"
 ctxt_initramfs: ( tok_ignore
                 | blck_genkernel
-                | stmt_add_cmdline
-                | stmt_compile_cmdline )*
-stmt_add_cmdline: "add_cmdline" ( WS param )+ ";"
-stmt_compile_cmdline: "compile_cmdline" WS STRING ";"
+                | stmt_initramfs_add_cmdline )*
+stmt_initramfs_add_cmdline: "add_cmdline" ( WS param )+ ";"
 
 // efi
 // ================
@@ -64,20 +64,24 @@ ctxt_efi: ( tok_ignore )*
 blck_install: "install" "{" ctxt_install "}"
 ctxt_install: ( tok_ignore
               | blck_efi
-              | stmt_target_dir
-              | stmt_target
-              | stmt_mount
-              | stmt_assert_mounted )*
-stmt_target_dir:     "target_dir"     WS path ";"
-stmt_target:         "target"         WS path ";"
-stmt_mount:          "mount"          WS path ";"
-stmt_assert_mounted: "assert_mounted" WS path ";"
+              | stmt_install_target_dir
+              | stmt_install_target
+              | stmt_install_mount
+              | stmt_install_assert_mounted )*
+stmt_install_target_dir:     "target_dir"     WS path ";"
+stmt_install_target:         "target"         WS path ";"
+stmt_install_mount:          "mount"          WS path ";"
+stmt_install_assert_mounted: "assert_mounted" WS path ";"
 
 // build
 // ================
 
 blck_build: "build" "{" ctxt_build "}"
-ctxt_build: ( tok_ignore )*
+ctxt_build: ( tok_ignore
+            | stmt_build_initramfs
+            | stmt_build_pack )*
+stmt_build_initramfs: "initramfs" WS STRING ";"
+stmt_build_pack: "pack" WS STRING [ WS param ] ";"
 
 // root
 // ================
@@ -89,11 +93,11 @@ ctxt_root: ( tok_ignore
            | blck_initramfs
            | blck_install
            | blck_build
-           | stmt_include_module_dir
-           | stmt_include_module )*
+           | stmt_root_include_module_dir
+           | stmt_root_include_module )*
 
-stmt_include_module_dir: "include_module_dir" WS path ";"
-stmt_include_module:     "include_module"     WS path ";"
+stmt_root_include_module_dir: "include_module_dir" WS path ";"
+stmt_root_include_module:     "include_module"     WS path ";"
 
 // terminals
 // ================
