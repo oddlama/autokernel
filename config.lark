@@ -30,9 +30,10 @@ stmt_module_set:    "set"    WS KERNEL_OPTION [ WS kernel_option_value ] ";"
 // ================
 
 blck_kernel: "kernel" "{" ctxt_kernel "}"
+// stmt_kernel_add_cmdline has to be before ctxt_module else the parser complains about infinite recursion. Seems to be a bug in lark.
 ctxt_kernel: ( tok_ignore
-             | ctxt_module
-             | stmt_kernel_add_cmdline )*
+             | stmt_kernel_add_cmdline
+             | ctxt_module )*
 stmt_kernel_add_cmdline: "add_cmdline" ( WS param )+ ";"
 
 // genkernel
