@@ -18,6 +18,10 @@ from kconfiglib import STR_TO_TRI, TRI_TO_STR
 from datetime import datetime, timezone
 from pathlib import Path
 
+def die(message):
+    log.error(message)
+    sys.exit(1)
+
 def has_proc_config_gz():
     """
     Checks if /proc/config.gz exists
@@ -74,8 +78,7 @@ def apply_autokernel_config(kconfig, config):
         if symbol in changes:
             # Assert that it is changed to the same value again
             if changes[symbol][1] != value:
-                log.error("Conflicting change for symbol '{}' (previously set to {}, now {})".format(symbol, value_to_str(changes[symbol][1]), value_to_str(value)))
-                sys.exit(1)
+                die("Conflicting change for symbol '{}' (previously set to {}, now {})".format(symbol, value_to_str(changes[symbol][1]), value_to_str(value)))
 
             # And skip the reassignment
             return
@@ -84,13 +87,15 @@ def apply_autokernel_config(kconfig, config):
         sym = kconfig.syms[symbol]
         original_value = sym.str_value
         if not sym.set_value(value):
-            log.error("Invalid value {} for symbol '{}'".format(value_to_str(value), symbol))
-            sys.exit(1)
+            die("Invalid value {} for symbol {}".format(value_to_str(value), symbol))
+
+        if sym.str_value != value:
+            log.warn("Symbol assignment failed: {} from {} -> {}".format(symbol, value_to_str(sym.str_value), value_to_str(value)))
 
         # Track the change
         if original_value != sym.str_value:
             changes[symbol] = (original_value, sym.str_value)
-            log.verbose("{} = {}".format(symbol, value_to_str(sym.str_value)))
+            log.verbose("{} : {}".format(value_to_str(sym.str_value), symbol))
 
     # Visit all module nodes and apply configuration changes
     visited = set()
@@ -127,8 +132,7 @@ def check_config(args):
         log.info("Checking generated config against '{}'".format(args.compare_config))
     else:
         if not has_proc_config_gz():
-            log.error("This kernel does not expose /proc/config.gz. Please provide the path to a valid config file manually.")
-            sys.exit(1)
+            die("This kernel does not expose /proc/config.gz. Please provide the path to a valid config file manually.")
         log.info("Checking generated config against currently running kernel")
 
     # Load configuration file
@@ -186,8 +190,8 @@ def build_kernel(args, config, pass_id):
         raise ValueError("pass_id has an invalid value '{}'".format(pass_id))
 
     # TODO cleaning capabilities?
-    #subprocess.run(['make'], cwd=args.kernel_dir)
-    print("subprocess.run(['make'], cwd={})".format(args.kernel_dir))
+    if subprocess.run(['make'], cwd=args.kernel_dir).returncode != 0:
+        die("make failed in {}".format(args.kernel_dir))
 
 def build_initramfs(args, config):
     log.info("Building initramfs")
@@ -219,6 +223,9 @@ def build(args, config=None):
 def install_kernel(args, config):
     log.info("Installing kernel")
 
+    print(str(config.install.target_dir))
+    print(str(config.install.target).replace('{KV}', 'KERNELVERSION'))
+
 def install_initramfs(args, config):
     # TODO dont install initramfs if not needed (section not given)
     log.info("Installing initramfs")
@@ -234,30 +241,25 @@ def install(args, config=None):
     # Mount
     for i in config.install.mount:
         if not os.access(i, os.R_OK):
-            log.error("Permission denied on accessing '{}'. Aborting.".format(i))
-            sys.exit(1)
+            die("Permission denied on accessing '{}'. Aborting.".format(i))
 
         if not os.path.ismount(i):
             if subprocess.run(['mount', '--', i]).returncode != 0:
-                log.error("Could not mount '{}'. Aborting.".format(i))
-                sys.exit(1)
+                die("Could not mount '{}'. Aborting.".format(i))
 
     # Check mounts
     for i in config.install.mount + config.install.assert_mounted:
         if not os.access(i, os.R_OK):
-            log.error("Permission denied on accessing '{}'. Aborting.".format(i))
-            sys.exit(1)
+            die("Permission denied on accessing '{}'. Aborting.".format(i))
 
         if not os.path.ismount(i):
-            log.error("'{}' is not mounted. Aborting.".format(i))
-            sys.exit(1)
+            die("'{}' is not mounted. Aborting.".format(i))
 
-    # TODO use this
-    target_dir = config.install.target_dir or '/boot'
-
-    # TODO only kernel if initramfs not needed
     install_kernel(args, config)
-    install_initramfs(args, config)
+
+    # Install the initramfs, if enabled and not packed
+    if config.build.enable_initramfs and not config.build.pack['initramfs']:
+        install_initramfs(args, config)
 
 def build_all(args):
     """
@@ -524,13 +526,11 @@ def detect(args):
 
     # Assert that --check is not used together with --type
     if check_only and args.output_type:
-        log.error("--check and --type are mutually exclusive")
-        sys.exit(1)
+        die("--check and --type are mutually exclusive")
 
     # Assert that --check is not used together with --output
     if check_only and args.output:
-        log.error("--check and --output are mutually exclusive")
-        sys.exit(1)
+        die("--check and --output are mutually exclusive")
 
     # Add fallback for output type.
     if not args.output_type:
@@ -546,8 +546,7 @@ def detect(args):
             log.info("Checking generated config against '{}'".format(args.check_config))
         else:
             if not has_proc_config_gz():
-                log.error("This kernel does not expose /proc/config.gz. Please provide the path to a valid config file manually.")
-                sys.exit(1)
+                die("This kernel does not expose /proc/config.gz. Please provide the path to a valid config file manually.")
             log.info("Checking generated config against currently running kernel")
 
     # Load symbols from Kconfig
@@ -568,10 +567,40 @@ def detect(args):
                     write_detected_modules(modules, module_select_all, f, args.output_type, args.output_module_name)
                     log.info("Configuration written to '{}'".format(args.output))
             except IOError as e:
-                log.error(str(e))
-                sys.exit(1)
+                die(str(e))
         else:
             write_detected_modules(modules, module_select_all, sys.stdout, args.output_type, args.output_module_name)
+
+def search(args):
+    """
+    Main function for the 'search' command.
+    """
+    # Load symbols from Kconfig
+    kconfig = load_kconfig(args.kernel_dir)
+
+    # TODO if changed only
+
+    # Load configuration file
+    config = load_config(args.autokernel_config)
+    # Apply autokernel configuration
+    apply_autokernel_config(kconfig, config)
+
+    if args.params[0].startswith('CONFIG_'):
+        args.params[0] = args.params[0][len('CONFIG_'):]
+    sym = kconfig.syms[args.params[0]]
+
+    print(sym)
+    print("deps")
+
+    def p(s, v):
+        if tri_to_bool(s.tri_value) != v:
+            print(s.name, "=", v)
+        else:
+            print("[2m",s.name, "=", v,"[m")
+
+    for d, v in required_deps(sym):
+        p(d, v)
+    p(sym, True)
 
 def check_file_exists(value):
     """
@@ -647,7 +676,17 @@ def main():
     parser_all.set_defaults(func=build_all)
 
     # TODO
-    #parser_search = subparsers.add_parser('search', help='TODO')
+    parser_search = subparsers.add_parser('search', help='TODO')
+    parser_search.add_argument('params', nargs='+',
+            help="TODO")
+    parser_search.set_defaults(func=search)
+
+    #TODO autokernel search CONFIG_SYSVIPC
+    #TODO -l --limit [50]
+    #TODO autokernel deps [CONFIG_]SYSVIPC
+    # -c, --changes-only (only display dependencies deviating from the current configuration)
+    #
+    #TODO autokernel createmodule CONFIG_OPTIMIZE_INLINING=y CONFIG_A=y
 
     # Config detection options
     parser_detect = subparsers.add_parser('detect', help='TODO')
@@ -666,8 +705,7 @@ def main():
     try:
         args = parser.parse_args()
     except ArgumentParserError as e:
-        log.error(str(e))
-        sys.exit(1)
+        die(str(e))
 
     # Enable verbose logging if desired
     log.verbose_output = args.verbose
@@ -686,10 +724,8 @@ if __name__ == '__main__':
     try:
         main()
     except PermissionError as e:
-        log.error(str(e))
-        sys.exit(1)
+        die(str(e))
     except Exception as e:
         import traceback
         traceback.print_exc()
-        log.error("Aborted because of previous errors")
-        sys.exit(1)
+        die("Aborted because of previous errors")

@@ -48,10 +48,15 @@ def detect_arch():
     arch = re.sub('riscv.*',   'riscv',   arch)
     return arch
 
+kernel_environment_variables_loaded = False
 def load_environment_variables(dir):
     """
     Loads important environment variables from the given kernel source tree.
     """
+    global kernel_environment_variables_loaded
+    if kernel_environment_variables_loaded:
+        return
+
     log.info("Loading kernel environment variables for '{}'".format(dir))
 
     arch = detect_arch()
@@ -64,6 +69,8 @@ def load_environment_variables(dir):
 
     os.environ["KERNELVERSION"] = subprocess.run(['make', 'kernelversion'], cwd=dir, stdout=subprocess.PIPE).stdout.decode().strip().splitlines()[0]
     os.environ["CC_VERSION_TEXT"] = subprocess.run(['gcc', '--version'], stdout=subprocess.PIPE).stdout.decode().strip().splitlines()[0]
+
+    kernel_environment_variables_loaded = True
 
 def load_kconfig(kernel_dir):
     kconfig_file = os.path.join(kernel_dir, "Kconfig")
@@ -223,7 +230,6 @@ class Expr:
 def required_deps(sym):
     expr = Expr(sym.direct_dep)
     expr.simplify()
-    #print(pretty(expr.expr))
 
     deps = []
     for k, s, v in expr.unsatisfied_deps():

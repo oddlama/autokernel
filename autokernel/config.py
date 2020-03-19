@@ -111,15 +111,16 @@ def find_all_named_tokens(tree, token_name, strip_quotes=True):
                 and len(c.children) == 1
                 and c.children[0].__class__ == lark.Token]
 
-class UniqueBoolProperty:
+class UniqueProperty:
     """
     A property that tracks if it has been changed, stores a default
     value and raises an error if it is assigned more than once.
     """
-    def __init__(self, name, default):
+    def __init__(self, name, default, convert_bool=False):
         self.name = name
         self.default = default
         self.value = None
+        self.convert_bool = convert_bool
 
     def defined(self):
         return self.value is not None
@@ -140,10 +141,19 @@ class UniqueBoolProperty:
         if ignore_missing:
             tok = tok or default_if_ignored
 
-        self.value = parse_bool(tree, tok)
+        if self.convert_bool:
+            self.value = parse_bool(tree, tok)
+        else:
+            self.value = tok
 
-    def __nonzero__(self):
+    def __bool__(self):
+        return bool(self.__get__())
+
+    def __get__(self):
         return self.default if self.value is None else self.value
+
+    def __str__(self):
+        return self.__get__()
 
 class BlockNode:
     """
@@ -282,8 +292,8 @@ class ConfigInstall(BlockNode):
 
     def __init__(self):
         self.efi = ConfigEfi()
-        self.target_dir = None
-        self.target = None
+        self.target_dir = UniqueProperty('target_dir', default='/boot')
+        self.target = UniqueProperty('target', default='vmlinuz-{KV}')
         self.mount = []
         self.assert_mounted = []
 
@@ -291,9 +301,7 @@ class ConfigInstall(BlockNode):
         def blck_efi(tree):
             self.efi.parse_tree(tree)
         def stmt_install_target_dir(tree):
-            if self.target_dir:
-                raise redefinition_exception(tree, 'target_dir')
-            self.target_dir = find_named_token(tree, 'path')
+            self.target_dir.parse(tree, named_token='path')
         def stmt_install_target(tree):
             if self.target:
                 raise redefinition_exception(tree, 'target')
@@ -315,10 +323,10 @@ class ConfigBuild(BlockNode):
     node_name = 'build'
 
     def __init__(self):
-        self.enable_initramfs = UniqueBoolProperty('initramfs', default=False)
+        self.enable_initramfs = UniqueProperty('initramfs', default=False, convert_bool=True)
         self.pack = {
-                'initramfs': UniqueBoolProperty('pack initramfs', default=False),
-                'cmdline': UniqueBoolProperty('pack cmdline', default=False),
+                'initramfs': UniqueProperty('pack initramfs', default=False, convert_bool=True),
+                'cmdline': UniqueProperty('pack cmdline', default=False, convert_bool=True),
             }
 
     def parse_context(self, ctxt):
