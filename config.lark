@@ -103,7 +103,7 @@ stmt_root_include_module:     "include_module"     WS path ";"
 // terminals
 // ================
 
-KERNEL_OPTION: /[_A-Z][_A-Z0-9]*/
+KERNEL_OPTION: /[_A-Z0-9]+/
 COMMENT:       /#[^\n]*/
 IDENTIFIER:    ( "_" | "-" | LETTER | DIGIT )+
 

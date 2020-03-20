@@ -216,6 +216,7 @@ class Expr:
         if not configuration:
             raise Exception("Cannot satisfy dependencies.")
 
+        # If configuration is 'True', return none.
         if configuration.get(True, False):
             return []
 
