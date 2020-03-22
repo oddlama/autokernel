@@ -10,8 +10,6 @@ param: STRING
 // module
 // ================
 
-// TODO: ...
-assert_expression: STRING+
 module_name: IDENTIFIER
 kernel_option_value: STRING
 
@@ -23,7 +21,7 @@ ctxt_module: ( tok_ignore
              | stmt_module_set )*
 stmt_module_use:    "use"    ( WS IDENTIFIER )+   ";"
 stmt_module_merge:  "merge"  WS path              ";"
-stmt_module_assert: "assert" WS assert_expression ";"
+stmt_module_assert: "assert" WS KERNEL_OPTION [ WS kernel_option_value ] ";"
 stmt_module_set:    "set"    WS KERNEL_OPTION [ WS kernel_option_value ] ";"
 
 // kernel

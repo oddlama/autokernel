@@ -201,7 +201,7 @@ class ConfigModule(BlockNode):
         self.uses = []
         self.dependencies = []
         self.merge_kconf_files = []
-        #TODO self.assertions = []
+        self.assertions = []
         self.assignments = []
 
     def parse_block_params(self, blck):
@@ -215,8 +215,10 @@ class ConfigModule(BlockNode):
             self.uses.extend(find_all_tokens(tree, 'IDENTIFIER'))
         def stmt_module_merge(tree):
             self.merge_kconf_files.append(find_named_token(tree, 'path'))
-        # TODO def stmt_module_assert(tree):
-        # TODO     pass
+        def stmt_module_assert(tree):
+            key = find_token(tree, 'KERNEL_OPTION')
+            value = find_named_token(tree, 'kernel_option_value', ignore_missing=True) or 'y'
+            self.assertions.append((key, value))
         def stmt_module_set(tree):
             key = find_token(tree, 'KERNEL_OPTION')
             value = find_named_token(tree, 'kernel_option_value', ignore_missing=True) or 'y'
@@ -225,6 +227,7 @@ class ConfigModule(BlockNode):
         apply_tree_nodes(ctxt.children, [
                 stmt_module_use,
                 stmt_module_merge,
+                stmt_module_assert,
                 stmt_module_set,
             ])
 
