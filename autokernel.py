@@ -135,7 +135,7 @@ def apply_autokernel_config(kconfig, config):
 
     return changes
 
-def check_config(args):
+def main_check_config(args):
     """
     Main function for the 'check' command.
     """
@@ -165,7 +165,7 @@ def check_config(args):
         if sym_gen.str_value != sym_cmp.str_value:
             print("[{} -> {}] {}".format(sym_cmp.str_value, sym_gen.str_value, sym))
 
-def generate_config(args, config=None):
+def main_generate_config(args, config=None):
     """
     Main function for the 'generate_config' command.
     """
@@ -209,7 +209,7 @@ def build_initramfs(args, config):
     # TODO don't build initramfs if not needed
     print("subprocess.run(['genkernel'], cwd={})".format(args.kernel_dir))
 
-def build(args, config=None):
+def main_build(args, config=None):
     """
     Main function for the 'build' command.
     """
@@ -240,7 +240,7 @@ def install_initramfs(args, config):
     # TODO dont install initramfs if not needed (section not given)
     log.info("Installing initramfs")
 
-def install(args, config=None):
+def main_install(args, config=None):
     """
     Main function for the 'install' command.
     """
@@ -271,7 +271,7 @@ def install(args, config=None):
     if config.build.enable_initramfs and not config.build.pack['initramfs']:
         install_initramfs(args, config)
 
-def build_all(args):
+def main_build_all(args):
     """
     Main function for the 'all' command.
     """
@@ -279,8 +279,8 @@ def build_all(args):
     # Load configuration file
     config = load_config(args.autokernel_config)
 
-    build(args, config)
-    install(args, config)
+    main_build(args, config)
+    main_install(args, config)
 
 class Module():
     """
@@ -403,7 +403,7 @@ class ModuleConfigWriter:
         content += "}\n\n"
         self.file.write(content)
 
-class OptionToModuleContext:
+class ModuleCreator:
     def __init__(self):
         self.modules = {}
         self.module_for_sym = {}
@@ -462,7 +462,7 @@ class OptionToModuleContext:
     def add_external_module(self, mod):
         self.modules[mod.name] = mod
 
-    def write_detected_modules(self, f, output_type, output_module_name):
+    def _write_detected_modules(self, f, output_type, output_module_name):
         """
         Writes the collected modules to a file / stdout, in the requested output format.
         """
@@ -491,6 +491,18 @@ class OptionToModuleContext:
             self.module_select_all.name = output_module_name
             writer.write_module(self.module_select_all)
 
+    def write_detected_modules(self, output, output_type, output_module_name):
+        # Write all modules in the given format to the given output file / stdout
+        if output:
+            try:
+                with open(output, 'w') as f:
+                    self._write_detected_modules(f, output_type, output_module_name)
+                    log.info("Module configuration written to '{}'".format(output))
+            except IOError as e:
+                die(str(e))
+        else:
+            self._write_detected_modules(sys.stdout, output_type, output_module_name)
+
 def detect_modules(kconfig):
     """
     Detects required options for the current system organized into modules.
@@ -502,9 +514,7 @@ def detect_modules(kconfig):
     log.info("HINT: It might be beneficial to run this while using a very generic")
     log.info("      and modular kernel, such as the default kernel on Arch Linux.")
 
-    module_creator = OptionToModuleContext()
     local_module_count = 0
-
     def next_local_module_id():
         """
         Returns the next id for a local module
@@ -514,6 +524,7 @@ def detect_modules(kconfig):
         local_module_count += 1
         return i
 
+    module_creator = ModuleCreator()
     def add_module_for_detected_node(node, opts):
         """
         Adds a module for the given detected node
@@ -552,9 +563,9 @@ def detect_modules(kconfig):
 
     return module_creator
 
-def detect(args):
+def main_detect(args):
     """
-    Main function for the 'detect' command.
+    Main function for the 'main_detect' command.
     """
     # Check if we should write a config or report differences
     check_only = args.check_config is not 0
@@ -596,50 +607,53 @@ def detect(args):
         check_config_against_detected_modules(kconfig, module_creator.modules)
     else:
         # Write all modules in the given format to the given output file / stdout
-        if args.output:
-            try:
-                with open(args.output, 'w') as f:
-                    module_creator.write_detected_modules(f, args.output_type, args.output_module_name)
-                    log.info("Configuration written to '{}'".format(args.output))
-            except IOError as e:
-                die(str(e))
-        else:
-            module_creator.write_detected_modules(sys.stdout, args.output_type, args.output_module_name)
+        module_creator.write_detected_modules(args.output, args.output_type, args.output_module_name)
 
-def search(args):
+def main_search(args):
     """
     Main function for the 'search' command.
     """
     # Load symbols from Kconfig
     kconfig = load_kconfig(args.kernel_dir)
 
-    # TODO if changed only
-
-    # Load configuration file
-    config = load_config(args.autokernel_config)
-
-    if args.params[0].startswith('CONFIG_'):
-        args.params[0] = args.params[0][len('CONFIG_'):]
-    sym = kconfig.syms[args.params[0]]
-
-    print(sym)
-    print("deps")
-
-    def p(s, v):
-        if tri_to_bool(s.tri_value) != v:
-            print(s.name, "=", v)
+    for config_symbol in args.config_symbols:
+        # Get symbol
+        if config_symbol.startswith('CONFIG_'):
+            sym_name = config_symbol[len('CONFIG_'):]
         else:
-            print("[2m{} = {}[m".format(s.name, v))
+            sym_name = config_symbol
 
-    # Apply autokernel configuration
-    apply_autokernel_config(kconfig, config)
+        # Print symbol
+        sym = kconfig.syms[sym_name]
+        print(sym)
+
+def main_deps(args):
+    """
+    Main function for the 'search' command.
+    """
+    # Load symbols from Kconfig
+    kconfig = load_kconfig(args.kernel_dir)
+
+    # Get symbol
+    if args.config_symbol.startswith('CONFIG_'):
+        sym_name = args.config_symbol[len('CONFIG_'):]
+    else:
+        sym_name = args.config_symbol
+    sym = kconfig.syms[sym_name]
+
+    # Apply autokernel configuration only if we want our dependencies based on the current configuration
+    if not args.dep_global:
+        # Load configuration file
+        config = load_config(args.autokernel_config)
+        # Apply kernel config
+        apply_autokernel_config(kconfig, config)
 
     # Create a module for the detected option
-    module_creator = OptionToModuleContext()
+    module_creator = ModuleCreator()
     module_creator.add_module_for_sym(sym)
 
     # Write the module
-    module_creator.write_detected_modules(sys.stdout, "module", "TODO")
+    module_creator.write_detected_modules(sys.stdout, args.output_type, "ERROR_PLEASE_REPORT_TO_DEVELOPERS")
 
 def check_file_exists(value):
     """
@@ -694,31 +708,31 @@ def main():
     parser_check = subparsers.add_parser('check', help="Reports differences between the config that will be generated by autokernel, and the given config file. If no config file is given, the script will try to load the current kernel's configuration from '/proc/config.gz'.")
     parser_check.add_argument('-c', '--compare-config', nargs='?', dest='compare_config', type=check_file_exists,
             help="The .config file to compare the generated configuration against.")
-    parser_check.set_defaults(func=check_config)
+    parser_check.set_defaults(func=main_check_config)
 
     # Config generation options
     parser_generate_config = subparsers.add_parser('generate-config', help='Generates the kernel configuration file from the autokernel configuration.')
     parser_generate_config.add_argument('-o', '--output', dest='output',
             help="The output filename. An existing configuration file will be overwritten. The default is '{KERNEL_DIR}/.config'.")
-    parser_generate_config.set_defaults(func=generate_config)
+    parser_generate_config.set_defaults(func=main_generate_config)
 
     # Build options
     parser_build = subparsers.add_parser('build', help='Generates the configuration, and then builds the kernel (and initramfs if required) in the kernel tree.')
-    parser_build.set_defaults(func=build)
+    parser_build.set_defaults(func=main_build)
 
     # Installation options
     parser_install = subparsers.add_parser('install', help='Installs the finished kernel and requisites into the system.')
-    parser_install.set_defaults(func=install)
+    parser_install.set_defaults(func=main_install)
 
     # Full build options
     parser_all = subparsers.add_parser('all', help='First builds and then installs the kernel.')
-    parser_all.set_defaults(func=build_all)
+    parser_all.set_defaults(func=main_build_all)
 
     # TODO
-    parser_search = subparsers.add_parser('search', help='TODO')
-    parser_search.add_argument('params', nargs='+',
-            help="TODO")
-    parser_search.set_defaults(func=search)
+    parser_search = subparsers.add_parser('search', help='Searches for the given symbol and outputs a short summary')
+    parser_search.add_argument('config_symbols', nargs='+',
+            help="A list of configuration symbols to search for")
+    parser_search.set_defaults(func=main_search)
 
     #TODO autokernel search CONFIG_SYSVIPC
     #TODO -l --limit [50]
@@ -727,17 +741,29 @@ def main():
     #
     #TODO autokernel createmodule CONFIG_OPTIMIZE_INLINING=y CONFIG_A=y
 
+    # Single config module generation options
+    parser_deps = subparsers.add_parser('deps', help='Generates required modules to enable the given symbol')
+    parser_deps.add_argument('-g', '--global', action='store_true', dest='dep_global',
+            help="Report changes based on an allnoconfig instead of basing the output on changes from the current autokernel configuration")
+    parser_deps.add_argument('-t', '--type', choices=['module', 'kconf'], dest='output_type',
+            help="Selects the output type. 'kconf' will output options in the kernel configuration format. 'module' will output a list of autokernel modules to reflect the necessary configuration.")
+    parser_deps.add_argument('-o', '--output', dest='output',
+            help="Writes the output to the given file. Use - for stdout (default).")
+    parser_deps.add_argument('config_symbol',
+            help="The configuration symbol to generate dependencies for")
+    parser_deps.set_defaults(func=main_deps)
+
     # Config detection options
     parser_detect = subparsers.add_parser('detect', help='TODO')
+    parser_detect.add_argument('-c', '--check', nargs='?', default=0, dest='check_config', type=check_file_exists,
+            help="Instead of outputting the required configuration values, compare the detected options against the given kernel configuration and report the status of each option. If no config file is given, the script will try to load the current kernel's configuration from '/proc/config.gz'.")
     parser_detect.add_argument('-t', '--type', choices=['module', 'kconf'], dest='output_type',
             help="Selects the output type. 'kconf' will output options in the kernel configuration format. 'module' will output a list of autokernel modules to reflect the necessary configuration.")
     parser_detect.add_argument('-m', '--module-name', dest='output_module_name', default='local',
             help="The name of the generated module, which will enable all detected options (default: 'local').")
-    parser_detect.add_argument('-c', '--check', nargs='?', default=0, dest='check_config', type=check_file_exists,
-            help="Instead of outputting the required configuration values, compare the detected options against the given kernel configuration and report the status of each option. If no config file is given, the script will try to load the current kernel's configuration from '/proc/config.gz'.")
     parser_detect.add_argument('-o', '--output', dest='output',
             help="Writes the output to the given file. Use - for stdout (default).")
-    parser_detect.set_defaults(func=detect)
+    parser_detect.set_defaults(func=main_detect)
 
     # TODO static paths as global variable
 
@@ -750,9 +776,9 @@ def main():
     log.verbose_output = args.verbose
     log.quiet_output = args.quiet
 
-    # Fallback to build_all() if no mode is given
+    # Fallback to main_build_all() if no mode is given
     if 'func' not in args:
-        build_all(args)
+        main_build_all(args)
     else:
         # Execute the mode's function
         args.func(args)
