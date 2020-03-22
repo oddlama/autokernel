@@ -118,8 +118,8 @@ def apply_autokernel_config(kconfig, config):
 
         # Merge all given kconf files of the module
         for filename in module.merge_kconf_files:
-            # TODO don't count these as changes?
-            print("TODO: merge {}".format(filename))
+            log.verbose("Merging external kconf '{}'".format(filename))
+            kconfig.load_config(filename)
 
         # Process all symbol value changes
         for symbol, value in module.assignments:
@@ -470,6 +470,8 @@ class ModuleCreator:
             writer = KernelConfigWriter(f)
         elif output_type == 'module':
             writer = ModuleConfigWriter(f)
+        else:
+            die("Invalid output_type '{}'".format(output_type))
 
         # Fill in reverse dependencies for all modules
         self._create_reverse_deps()
@@ -578,14 +580,6 @@ def main_detect(args):
     if check_only and args.output:
         die("--check and --output are mutually exclusive")
 
-    # Add fallback for output type.
-    if not args.output_type:
-        args.output_type = 'module'
-
-    # Allow - as an alias for stdout
-    if args.output == '-':
-        args.output = None
-
     # Determine the config file to check against, if applicable.
     if check_only:
         if args.check_config:
@@ -606,6 +600,14 @@ def main_detect(args):
         # Check all detected symbols' values and report them
         check_config_against_detected_modules(kconfig, module_creator.modules)
     else:
+        # Add fallback for output type.
+        if not args.output_type:
+            args.output_type = 'module'
+
+        # Allow - as an alias for stdout
+        if args.output == '-':
+            args.output = None
+
         # Write all modules in the given format to the given output file / stdout
         module_creator.write_detected_modules(args.output, args.output_type, args.output_module_name)
 
@@ -652,8 +654,16 @@ def main_deps(args):
     module_creator = ModuleCreator()
     module_creator.add_module_for_sym(sym)
 
+    # Add fallback for output type.
+    if not args.output_type:
+        args.output_type = 'module'
+
+    # Allow - as an alias for stdout
+    if args.output == '-':
+        args.output = None
+
     # Write the module
-    module_creator.write_detected_modules(sys.stdout, args.output_type, "ERROR_PLEASE_REPORT_TO_DEVELOPERS")
+    module_creator.write_detected_modules(args.output, args.output_type, "ERROR_PLEASE_REPORT_TO_DEVELOPERS")
 
 def check_file_exists(value):
     """
