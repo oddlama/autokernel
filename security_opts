@@ -196,7 +196,7 @@ module config_module_sig_force {
 
 # required by security_opts
 module config_init_stack_all {
-	set INIT_STACK_ALL y if CC_HAS_AUTO_VAR_INIT;
+	set INIT_STACK_ALL y;
 }
 
 # required by security_opts

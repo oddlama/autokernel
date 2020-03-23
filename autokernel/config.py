@@ -175,6 +175,9 @@ class BlockNode:
         """
         Parses the given block tree node, and class parse_block_params and parse_context.
         """
+        if not hasattr(self, 'first_definition'):
+            self.first_definition = (tree.meta, currently_parsed_filenames[-1])
+
         if tree.data != ('blck_' + self.node_name):
             raise ConfigParsingException(tree.meta, "{} cannot parse '{}'".format(self.__class__.__name__, tree.data))
 
@@ -386,7 +389,8 @@ class Config(BlockNode):
             module = ConfigModule()
             module.parse_tree(tree)
             if module.name in self.modules:
-                raise ConfigParsingException(tree.meta, "redefinition of module '{}'".format(module.name))
+                dt, df = self.modules[module.name].first_definition
+                raise ConfigParsingException(tree.meta, "redefinition of module '{}' (previously defined in {}:{}:{})".format(module.name, df, dt.line, dt.column))
             self.modules[module.name] = module
         def blck_kernel(tree):
             self.kernel.parse_tree(tree)
@@ -468,13 +472,19 @@ def load_config(config_file):
         print_parsing_exception(config_file, e)
         sys.exit(1)
 
+    def get_module(u):
+        if u not in config.modules:
+            log.error("Module '{}' used but never defined".format(u))
+            sys.exit(1)
+        return config.modules[u]
+
     # Resolve module dependencies
     for m in config.modules:
         mod = config.modules[m]
-        mod.dependencies = [config.modules[u] for u in mod.uses]
+        mod.dependencies = [get_module(u) for u in mod.uses]
 
     # Resolve kernel dependencies
     kmod = config.kernel.module
-    kmod.dependencies = [config.modules[u] for u in kmod.uses]
+    kmod.dependencies = [get_module(u) for u in kmod.uses]
 
     return config

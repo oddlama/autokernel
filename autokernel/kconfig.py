@@ -5,7 +5,7 @@ import subprocess
 import os
 import re
 import kconfiglib
-from kconfiglib import expr_value
+from kconfiglib import expr_value, STR_TO_TRI, TRI_TO_STR
 
 from sympy import pretty, Symbol, true, false, Or, And, Not
 from sympy.logic.boolalg import to_cnf, simplify_logic
