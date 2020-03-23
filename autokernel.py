@@ -439,10 +439,11 @@ class ModuleConfigWriter:
         self.file.write(content)
 
 class ModuleCreator:
-    def __init__(self):
+    def __init__(self, module_prefix=''):
         self.modules = {}
         self.module_for_sym = {}
         self.module_select_all = Module('module_select_all')
+        self.module_prefix = module_prefix
 
     def _create_reverse_deps(self):
         # Clear rev_deps
@@ -464,7 +465,7 @@ class ModuleCreator:
         Recursively adds a module for the given option,
         until all dependencies are satisfied.
         """
-        mod = Module("config_{}".format(sym.name.lower()))
+        mod = Module(module_prefix + "config_{}".format(sym.name.lower()))
 
         # Find dependencies if needed
         needs_deps = not expr_value(sym.direct_dep)
@@ -583,7 +584,7 @@ def detect_modules(kconfig):
         local_module_count += 1
         return i
 
-    module_creator = ModuleCreator()
+    module_creator = ModuleCreator(module_prefix='detected_')
     def add_module_for_detected_node(node, opts):
         """
         Adds a module for the given detected node
