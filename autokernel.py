@@ -19,19 +19,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-def symbol_can_be_user_assigned(sym):
-    for node in sym.nodes:
-        if node.prompt:
-            return True
-
-    return False
-
-def value_to_str(value):
-    if value in STR_TO_TRI:
-        return '[{}]'.format(value)
-    else:
-        return "'{}'".format(value)
-
 
 # Monkeypatch Symbol.set_value, to detect conflicting changes.
 # Detection is only done when using the set_value_detect_conflicts instead of Symbol.set_value
@@ -479,23 +466,33 @@ class ModuleCreator:
         """
         mod = Module("config_{}".format(sym.name.lower()))
 
-        # If we cannot assign the symbol, we add an assertion instead.
-        if symbol_can_be_user_assigned(sym):
-            mod.assignments.append((sym.name, 'y'))
-        else:
-            mod.assertions.append((sym.name, 'y'))
+        # Find dependencies if needed
+        needs_deps = not expr_value(sym.direct_dep)
+        if needs_deps:
+            req_deps = required_deps(sym)
+            if req_deps is False:
+                # Dependencies can never be satisfied. The module should be skipped.
+                log.warn("Cannot satisfy dependencies for {}".format(sym.name))
+                return False
 
-        # Only process dependencies, if they are not already satisfied
-        if not expr_value(sym.direct_dep):
-            for d, v in required_deps(sym):
-                if v:
-                    depm = self.add_module_for_sym(d)
-                    mod.deps.append(depm)
-                else:
-                    if symbol_can_be_user_assigned(sym):
-                        mod.assignments.append((d.name, 'n'))
+        if not symbol_can_be_user_assigned(sym):
+            # If we cannot assign the symbol, we add an assertion instead.
+            mod.assertions.append((sym.name, 'y'))
+        else:
+            mod.assignments.append((sym.name, 'y'))
+
+            if needs_deps:
+                for d, v in req_deps:
+                    if v:
+                        depm = self.add_module_for_sym(d)
+                        if depm is False:
+                            return False
+                        mod.deps.append(depm)
                     else:
-                        mod.assertions.append((d.name, 'n'))
+                        if symbol_can_be_user_assigned(sym):
+                            mod.assignments.append((d.name, 'n'))
+                        else:
+                            mod.assertions.append((d.name, 'n'))
 
         self.modules[mod.name] = mod
         return mod
@@ -509,6 +506,8 @@ class ModuleCreator:
 
         # Create a module for the symbol, if it doesn't exist already
         mod = self._add_module_for_option(sym)
+        if mod is False:
+            return False
         self.module_for_sym[sym] = mod
         return mod
 
@@ -593,6 +592,9 @@ def detect_modules(kconfig):
         for o in opts:
             sym = kconfig.syms[o]
             m = module_creator.add_module_for_sym(sym)
+            if m is False:
+                log.warn("Skipping module {} (unsatisfiable dependencies)".format(mod.name))
+                return None
             mod.deps.append(m)
         module_creator.add_external_module(mod)
         return mod
@@ -618,8 +620,9 @@ def detect_modules(kconfig):
             # If there are options for the node in the database,
             # add a module for the detected node and its options
             mod = add_module_for_detected_node(node, opts)
-            # Select the module in the global selector module
-            module_creator.select_module(mod)
+            if mod:
+                # Select the module in the global selector module
+                module_creator.select_module(mod)
 
     return module_creator
 
@@ -714,6 +717,9 @@ def main_deps(args):
 
         sym = kconfig.syms[sym_name]
         mod = module_creator.add_module_for_sym(sym)
+        if mod is False:
+            log.warn("Skipping {} (unsatisfiable dependencies)".format(sym.name))
+            continue
         module_creator.select_module(mod)
 
     # Add fallback for output type.

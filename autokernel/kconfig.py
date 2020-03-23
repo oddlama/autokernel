@@ -12,6 +12,20 @@ from sympy.logic.boolalg import to_cnf, simplify_logic
 from sympy.logic.inference import satisfiable
 
 
+def symbol_can_be_user_assigned(sym):
+    for node in sym.nodes:
+        if node.prompt:
+            return True
+
+    return False
+
+def value_to_str(value):
+    if value in STR_TO_TRI:
+        return '[{}]'.format(value)
+    else:
+        return "'{}'".format(value)
+
+
 def tri_to_bool(tri):
     """
     Converts a tristate to a boolean value (['n'] -> False, ['m', 'y'] -> True)
@@ -87,7 +101,6 @@ def load_kconfig(kernel_dir):
         for line in w.split('\n'):
             log.verbose(line)
 
-    allnoconfig(kconfig)
     return kconfig
 
 def allnoconfig(kconfig):
@@ -141,12 +154,16 @@ class ExprIgnore:
         return False
 
 class Expr:
-    def __init__(self, expr):
+    def __init__(self, sym):
+        self.sym = sym
         self.symbols = []
         self.expr_ignore_sym = None
-        self.expr = self._parse(expr)
+        self.expr = self._parse(sym.direct_dep)
 
     def _add_symbol_if_nontrivial(self, sym, trivialize=True):
+        if sym.__class__ is ExprSymbol and not symbol_can_be_user_assigned(sym.sym):
+            return true if expr_value(sym.sym) else false
+
         # If the symbol is aleady satisfied in the current config,
         # skip it.
         if trivialize and sym.is_satisfied():
@@ -213,7 +230,7 @@ class Expr:
     def unsatisfied_deps(self):
         configuration = satisfiable(self.expr)
         if not configuration:
-            raise Exception("Cannot satisfy dependencies for expression '{}'.".format(str(self.expr)))
+            return False
 
         # If configuration is 'True', return none.
         if configuration.get(True, False):
@@ -228,11 +245,15 @@ class Expr:
         return deps
 
 def required_deps(sym):
-    expr = Expr(sym.direct_dep)
+    expr = Expr(sym)
     expr.simplify()
 
     deps = []
-    for k, s, v in expr.unsatisfied_deps():
+    unsat_deps = expr.unsatisfied_deps()
+    if unsat_deps is False:
+        return False
+
+    for k, s, v in unsat_deps:
         if s.__class__ is ExprIgnore:
             pass
         elif s.__class__ is ExprSymbol:
