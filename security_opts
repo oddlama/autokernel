@@ -194,15 +194,9 @@ module config_module_sig_force {
 	set MODULE_SIG_FORCE y;
 }
 
-# required by config_init_stack_all
-module config_cc_has_auto_var_init {
-	set CC_HAS_AUTO_VAR_INIT y;
-}
-
 # required by security_opts
 module config_init_stack_all {
-	use config_cc_has_auto_var_init;
-	set INIT_STACK_ALL y;
+	set INIT_STACK_ALL y if CC_HAS_AUTO_VAR_INIT;
 }
 
 # required by security_opts

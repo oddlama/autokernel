@@ -19,6 +19,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+def symbol_can_be_user_assigned(sym):
+    for node in sym.nodes:
+        if node.prompt:
+            return True
+
+    return False
+
 def value_to_str(value):
     if value in STR_TO_TRI:
         return '[{}]'.format(value)
@@ -417,8 +424,8 @@ class KernelConfigWriter:
                 content += "CONFIG_{}={}\n".format(a, v)
             else:
                 content += "CONFIG_{}=\"{}\"\n".format(a, v)
-        for o in module.assertions:
-            content += "# REQUIRES {}\n".format(o)
+        for o, v in module.assertions:
+            content += "# REQUIRES {} {}\n".format(o, v)
         self.file.write(content)
 
 class ModuleConfigWriter:
@@ -439,8 +446,8 @@ class ModuleConfigWriter:
             content += "\tuse {};\n".format(d.name)
         for a, v in module.assignments:
             content += "\tset {} {};\n".format(a, v)
-        for o in module.assertions:
-            content += "\tassert {};\n".format(o)
+        for o, v in module.assertions:
+            content += "\tassert {} {};\n".format(o, v)
         content += "}\n\n"
         self.file.write(content)
 
@@ -471,7 +478,12 @@ class ModuleCreator:
         until all dependencies are satisfied.
         """
         mod = Module("config_{}".format(sym.name.lower()))
-        mod.assignments.append((sym.name, 'y'))
+
+        # If we cannot assign the symbol, we add an assertion instead.
+        if symbol_can_be_user_assigned(sym):
+            mod.assignments.append((sym.name, 'y'))
+        else:
+            mod.assertions.append((sym.name, 'y'))
 
         # Only process dependencies, if they are not already satisfied
         if not expr_value(sym.direct_dep):
@@ -480,7 +492,10 @@ class ModuleCreator:
                     depm = self.add_module_for_sym(d)
                     mod.deps.append(depm)
                 else:
-                    mod.assignments.append((d.name, 'n'))
+                    if symbol_can_be_user_assigned(sym):
+                        mod.assignments.append((d.name, 'n'))
+                    else:
+                        mod.assertions.append((d.name, 'n'))
 
         self.modules[mod.name] = mod
         return mod
@@ -671,6 +686,7 @@ def main_info(args):
         # Print symbol
         sym = kconfig.syms[sym_name]
         print(sym)
+        print(sym.env_var)
 
 def main_deps(args):
     """
