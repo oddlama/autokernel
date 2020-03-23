@@ -75,7 +75,7 @@ def load_environment_variables(dir):
 def load_kconfig(kernel_dir):
     kconfig_file = os.path.join(kernel_dir, "Kconfig")
     if not os.path.isfile(kconfig_file):
-        raise Exception("'{}' must point to a valid Kconfig file!".format(kconfig_file))
+        raise ValueError("'{}' must point to a valid Kconfig file!".format(kconfig_file))
 
     load_environment_variables(dir=kernel_dir)
 
@@ -144,13 +144,12 @@ class Expr:
     def __init__(self, expr):
         self.symbols = []
         self.expr_ignore_sym = None
-
         self.expr = self._parse(expr)
 
-    def _add_symbol_if_nontrivial(self, sym):
+    def _add_symbol_if_nontrivial(self, sym, trivialize=True):
         # If the symbol is aleady satisfied in the current config,
         # skip it.
-        if sym.is_satisfied():
+        if trivialize and sym.is_satisfied():
             return true
 
         # Return existing symbol if possible
@@ -165,9 +164,9 @@ class Expr:
         self.symbols.append((sym, s))
         return s
 
-    def _parse(self, expr):
-        def add_sym(expr):
-            return self._add_symbol_if_nontrivial(ExprSymbol(expr))
+    def _parse(self, expr, trivialize=True):
+        def add_sym(expr, trivialize=trivialize):
+            return self._add_symbol_if_nontrivial(ExprSymbol(expr), trivialize)
 
         if expr.__class__ is not tuple:
             if expr.__class__ is kconfiglib.Symbol:
@@ -181,7 +180,7 @@ class Expr:
             elif expr.__class__ is kconfiglib.Choice:
                 return self.expr_ignore()
             else:
-                raise Exception("Unexpected expression type '{}'".format(expr.__class__.__name__))
+                raise ValueError("Unexpected expression type '{}'".format(expr.__class__.__name__))
         else:
             # If the expression is an operator, resolve the operator.
             if expr[0] is kconfiglib.AND:
@@ -189,18 +188,18 @@ class Expr:
             elif expr[0] is kconfiglib.OR:
                 return Or(self._parse(expr[1]), self._parse(expr[2]))
             elif expr[0] is kconfiglib.NOT:
-                return Not(self._parse(expr[1]))
+                return Not(self._parse(expr[1], trivialize=False))
             elif expr[0] is kconfiglib.EQUAL and expr[2].is_constant:
                 if tri_to_bool(expr[2]):
-                    return add_sym(expr[1])
+                    return add_sym(expr[1], trivialize=False)
                 else:
-                    return Not(add_sym(expr[1]))
+                    return Not(ExprSymbol(expr[1]))
             elif expr[0] in [kconfiglib.UNEQUAL, kconfiglib.LESS, kconfiglib.LESS_EQUAL, kconfiglib.GREATER, kconfiglib.GREATER_EQUAL]:
                 if expr[1].__class__ is tuple or expr[2].__class__ is tuple:
-                    raise Exception("Cannot compare expressions")
-                return self._add_symbol_if_nontrivial(ExprCompare(expr[0], expr[1], expr[2]))
+                    raise ValueError("Cannot compare expressions")
+                return self._add_symbol_if_nontrivial(ExprCompare(expr[0], expr[1], expr[2]), trivialize)
             else:
-                raise Exception("Unknown expression type: '{}'".format(expr[0]))
+                raise ValueError("Unknown expression type: '{}'".format(expr[0]))
 
     def expr_ignore(self):
         if not self.expr_ignore_sym:
@@ -214,7 +213,7 @@ class Expr:
     def unsatisfied_deps(self):
         configuration = satisfiable(self.expr)
         if not configuration:
-            raise Exception("Cannot satisfy dependencies.")
+            raise Exception("Cannot satisfy dependencies for expression '{}'.".format(str(self.expr)))
 
         # If configuration is 'True', return none.
         if configuration.get(True, False):
