@@ -125,7 +125,10 @@ def apply_autokernel_config(kernel_dir, kconfig, config):
     # Sets a symbols value if and asserts that there are no conflicting double assignments
     def set_symbol(symbol, value, hint_name):
         # Get the kconfig symbol, and change the value
-        sym = kconfig.syms[symbol]
+        try:
+            sym = kconfig.syms[symbol]
+        except KeyError as e:
+            die("Referenced symbol '{}' does not exist".format(symbol))
 
         if not set_value_detect_conflicts(sym, value, 'module ' + hint_name):
             die("Invalid value {} for symbol {}".format(value_to_str(value), symbol))
@@ -153,7 +156,7 @@ def apply_autokernel_config(kernel_dir, kconfig, config):
             assert_symbol(stmt.sym_name, stmt.value)
 
         def stmt_set(stmt):
-            set_symbol(stmt.sym_name, stmt.value, module.name)
+            set_symbol(stmt.sym_name, stmt.value, module.name or 'kernel')
 
         dispatch_stmt = {
             ConfigModule.StmtUse: stmt_use,
@@ -243,7 +246,6 @@ def build_kernel(args, config, pass_id):
 def build_initramfs(args, config):
     log.info("Building initramfs")
 
-    # TODO don't build initramfs if not needed
     print("subprocess.run(['genkernel'], cwd={})".format(args.kernel_dir))
 
 def main_build(args, config=None):
@@ -274,7 +276,6 @@ def install_kernel(args, config):
     print(str(config.install.target).replace('{KV}', 'KERNELVERSION'))
 
 def install_initramfs(args, config):
-    # TODO dont install initramfs if not needed (section not given)
     log.info("Installing initramfs")
 
 def main_install(args, config=None):
@@ -767,6 +768,7 @@ def main():
     """
     Parses options and dispatches control to the correct subcommand function
     """
+    # TODO descr
     parser = ThrowingArgumentParser(description="TODO. If no mode is given, 'autokernel all' will be executed.")
     subparsers = parser.add_subparsers(title="commands",
             description="Use 'autokernel command --help' to view the help for any command.",
@@ -833,7 +835,7 @@ def main():
     parser_deps.set_defaults(func=main_deps)
 
     # Config detection options
-    parser_detect = subparsers.add_parser('detect', help='TODO')
+    parser_detect = subparsers.add_parser('detect', help='Detects configuration options based on information gathered from the running system')
     parser_detect.add_argument('-c', '--check', nargs='?', default=0, dest='check_config', type=check_file_exists,
             help="Instead of outputting the required configuration values, compare the detected options against the given kernel configuration and report the status of each option. If no config file is given, the script will try to load the current kernel's configuration from '/proc/config.gz'.")
     parser_detect.add_argument('-t', '--type', choices=['module', 'kconf'], dest='output_type',
