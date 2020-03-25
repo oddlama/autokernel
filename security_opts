@@ -441,4 +441,3 @@ module security_opts {
 	set DEFAULT_MMAP_MIN_ADDR "65536";
 	set ARCH_MMAP_RND_BITS "32";
 }
-

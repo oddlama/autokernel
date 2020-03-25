@@ -3,6 +3,9 @@ import sys
 from . import log
 import lark
 import lark.exceptions
+from sympy import pretty as sympy_pretty, Symbol, true, false, Not, Or
+from sympy.logic.boolalg import to_cnf, simplify_logic
+from sympy.logic.inference import satisfiable
 
 class ConfigParsingException(Exception):
     def __init__(self, meta, message):
@@ -61,7 +64,7 @@ def apply_tree_nodes(nodes, callbacks, on_additional=None, ignore_additional=Fal
             elif not ignore_additional:
                 raise ConfigParsingException(n.meta, "unprocessed rule '{}'; this is a bug that should be reported.".format(n.data))
 
-def find_token(tree, token_name, ignore_missing=False, strip_quotes=True):
+def find_token(tree, token_name, ignore_missing=False, strip_quotes=False):
     """
     Finds a token by literal name in the children of the given tree. Raises
     an exception if the token is not found and ignore_missing is not set.
@@ -74,7 +77,7 @@ def find_token(tree, token_name, ignore_missing=False, strip_quotes=True):
         raise ConfigParsingException(tree.meta, "Missing token '{}'".format(token_name))
     return None
 
-def find_named_token(tree, token_name, ignore_missing=False, strip_quotes=True):
+def find_named_token(tree, token_name, ignore_missing=False):
     """
     Finds a token by subrule name in the children of the given tree. Raises
     an exception if the token is not found.
@@ -83,16 +86,29 @@ def find_named_token(tree, token_name, ignore_missing=False, strip_quotes=True):
         if c.__class__ == lark.Tree and c.data == token_name:
             if len(c.children) != 1:
                 raise ConfigParsingException(c.meta, "Subrule token '{}' has too many children".format(token_name))
-            if c.children[0].__class__ == lark.Token:
-                return remove_quotes(str(c.children[0])) if strip_quotes else str(c.children[0])
-            else:
-                raise ConfigParsingException(c.meta, "Subrule token '{}' has no children literal".format(token_name))
+
+            if c.children[0].data not in ['string', 'string_quoted']:
+                raise ConfigParsingException(c.meta, "Subrule token '{}.{}' has an invalid name (must be either 'string' or 'string_quoted')".format(token_name, c.children[0].data))
+
+            if c.children[0].__class__ != lark.Tree:
+                raise ConfigParsingException(c.meta, "Subrule token '{}.{}' has no children tree".format(token_name, c.children[0].data))
+
+            if len(c.children[0].children) != 1:
+                raise ConfigParsingException(c.meta, "Subrule token '{}.{}' has too many children".format(token_name, c.children[0].data))
+
+            if c.children[0].children[0].__class__ != lark.Token:
+                raise ConfigParsingException(c.meta, "Subrule token '{}.{}' has no children literal".format(token_name, c.children[0].data))
+
+            if c.children[0].data == 'string':
+                return str(c.children[0].children[0])
+            elif c.children[0].data == 'string_quoted':
+                return remove_quotes(str(c.children[0].children[0]))
 
     if not ignore_missing:
         raise ConfigParsingException(tree.meta, "Missing token '{}'".format(token_name))
     return None
 
-def find_all_tokens(tree, token_name, strip_quotes=True):
+def find_all_tokens(tree, token_name, strip_quotes=False):
     """
     Finds all tokens by name in the children of the given tree.
     """
@@ -100,16 +116,19 @@ def find_all_tokens(tree, token_name, strip_quotes=True):
             for c in tree.children \
                 if c.__class__ == lark.Token and c.type == token_name]
 
-def find_all_named_tokens(tree, token_name, strip_quotes=True):
+def find_all_named_tokens(tree, token_name):
     """
     Finds all tokens by subrule name in the children of the given tree.
     """
-    return [remove_quotes(str(c.children[0])) if strip_quotes else str(c.children[0]) \
+    return [remove_quotes(str(c.children[0].children[0])) if c.children[0].data == 'string_quoted' else str(c.children[0]) \
             for c in tree.children
                 if c.__class__ == lark.Tree
                 and c.data == token_name
                 and len(c.children) == 1
-                and c.children[0].__class__ == lark.Token]
+                and c.children[0].data in ['string', 'string_quoted']
+                and c.children[0].__class__ == lark.Tree
+                and len(c.children[0].children) == 1
+                and c.children[0].children[0].__class__ == lark.Token]
 
 class UniqueProperty:
     """
@@ -155,6 +174,52 @@ class UniqueProperty:
     def __str__(self):
         return self.__get__()
 
+class Condition:
+    def __init__(self, sympy_expr):
+        self.condition = sympy_expr
+        self.value = None
+
+    def evaluate(self, kconfig, symbol_changes):
+        if not self.value:
+            self.value = self._evaluate(kconfig, symbol_changes)
+        return self.value
+
+    def _evaluate(self, kconfig, symbol_changes):
+        return True
+        # TODO 
+        #if symbol in symbol_changes and old_value != new_value:
+        #    die("Conflicting change for symbol {} (previously set to {}, now {}) triggered by {}".format(name, value_to_str(symbol_changes[symbol]), value_to_str(new_value), symbol_change_inducer.name))
+
+def parse_config_expr_to_sympy(tree):
+    print(tree.pretty())
+    return true
+
+def find_subtrees(tree, name):
+    """
+    Returns all subtrees with given name
+    """
+    return [c for c in tree.children if c.__class__ == lark.Tree and c.data == name]
+
+def find_conditions(tree, name='expr'):
+    """
+    Returns all conditions in the direct subtree.
+    """
+    return [parse_config_expr_to_sympy(expr) for expr in find_subtrees(tree, 'expr')]
+
+def find_condition(tree, ignore_missing=True):
+    conditions = find_conditions(tree)
+
+    if len(conditions) == 0:
+        if ignore_missing:
+            return true
+        else:
+            raise ConfigParsingException(tree.meta, "Missing expression")
+
+    if len(conditions) == 1:
+        return find_conditions(tree)[0]
+
+    raise ConfigParsingException(tree.meta, "Expected exactly one expression, but got {}".format(len(conditions)))
+
 class BlockNode:
     """
     A base class for blocks to help with tree parsing.
@@ -199,13 +264,33 @@ class BlockNode:
 class ConfigModule(BlockNode):
     node_name = 'module'
 
+    class StmtUse:
+        def __init__(self, cond, module_name):
+            self.condition = cond
+            self.module_name = module_name
+            self.module = None
+    class StmtMerge:
+        def __init__(self, cond, filename):
+            self.condition = cond
+            self.filename = filename
+    class StmtAssert:
+        def __init__(self, cond, sym_name, value):
+            self.condition = cond
+            self.sym_name = sym_name
+            self.value = value
+    class StmtSet:
+        def __init__(self, cond, sym_name, value):
+            self.condition = cond
+            self.sym_name = sym_name
+            self.value = value
+
     def __init__(self):
         self.name = None
         self.uses = []
-        self.dependencies = []
         self.merge_kconf_files = []
         self.assertions = []
         self.assignments = []
+        self.all_statements_in_order = []
 
     def parse_block_params(self, blck):
         def module_name(tree):
@@ -213,21 +298,58 @@ class ConfigModule(BlockNode):
 
         apply_tree_nodes(blck.children, [module_name], ignore_additional=True)
 
-    def parse_context(self, ctxt):
+    def parse_context(self, ctxt, precondition=true):
+        print("precond", sympy_pretty(precondition))
+        def stmt_module_if(tree):
+            conditions = find_conditions(tree)
+            subcontexts = find_subtrees(tree, 'ctxt_module')
+            if len(subcontexts) - len(conditions) not in [0, 1]:
+                raise ConfigParsingException(tree.meta, "invalid amount of subcontexts(={}) and conditions(={}) for if block; this is a bug that should be reported.".format(len(subcontexts), len(conditions)))
+            print("subcontexts(={}) and conditions(={})".format(len(subcontexts), len(conditions)))
+
+            previous_conditions = []
+            def negate_previous():
+                return Not(Or(*previous_conditions))
+
+            for c, s in zip(conditions, subcontexts):
+                # The condition for an else if block is the combined negation of all previous conditions,
+                # and its own condition
+                cond = precondition & negate_previous() & c
+                self.parse_context(s, precondition=cond)
+                previous_conditions.append(c)
+
+            if len(subcontexts) > len(conditions):
+                # The condition for the else block is the combined negation of all previous conditions
+                cond = precondition & negate_previous()
+                self.parse_context(s, precondition=cond)
+
         def stmt_module_use(tree):
-            self.uses.extend(find_all_tokens(tree, 'IDENTIFIER'))
+            cond = Condition(precondition & find_condition(tree))
+            new_uses = [ConfigModule.StmtUse(cond, i) for i in find_all_tokens(tree, 'IDENTIFIER')]
+            self.uses.extend(new_uses)
+            self.all_statements_in_order.extend(new_uses)
         def stmt_module_merge(tree):
-            self.merge_kconf_files.append(find_named_token(tree, 'path'))
+            cond = Condition(precondition & find_condition(tree))
+            stmt = ConfigModule.StmtMerge(cond, find_named_token(tree, 'path'))
+            self.merge_kconf_files.append(stmt)
+            self.all_statements_in_order.append(stmt)
         def stmt_module_assert(tree):
+            cond = Condition(precondition & find_condition(tree))
             key = find_token(tree, 'KERNEL_OPTION')
             value = find_named_token(tree, 'kernel_option_value', ignore_missing=True) or 'y'
-            self.assertions.append((key, value))
+            stmt = ConfigModule.StmtAssert(cond, key, value)
+            self.assertions.append(stmt)
+            self.all_statements_in_order.append(stmt)
         def stmt_module_set(tree):
+            cond = Condition(precondition & find_condition(tree))
             key = find_token(tree, 'KERNEL_OPTION')
             value = find_named_token(tree, 'kernel_option_value', ignore_missing=True) or 'y'
-            self.assignments.append((key, value))
+            stmt = ConfigModule.StmtSet(cond, key, value)
+            self.assignments.append(stmt)
+            self.all_statements_in_order.append(stmt)
 
         apply_tree_nodes(ctxt.children, [
+                stmt_module_if,
                 stmt_module_use,
                 stmt_module_merge,
                 stmt_module_assert,
@@ -337,11 +459,11 @@ class ConfigBuild(BlockNode):
 
     def parse_context(self, ctxt):
         def stmt_build_initramfs(tree):
-            self.enable_initramfs.parse(tree, token='STRING')
+            self.enable_initramfs.parse(tree, named_token='param')
         def stmt_build_pack(tree):
-            key = find_token(tree, 'STRING')
+            key = find_named_token(tree, 'key')
             if key not in self.pack:
-                return ConfigParsingException(tree.meta, "Invalid parameter '{}'".format(key))
+                raise ConfigParsingException(tree.meta, "Invalid parameter '{}'".format(key))
             self.pack[key].parse(tree, named_token='param', ignore_missing='true')
 
         apply_tree_nodes(ctxt.children, [
@@ -482,10 +604,12 @@ def load_config(config_file):
     # Resolve module dependencies
     for m in config.modules:
         mod = config.modules[m]
-        mod.dependencies = [get_module(u) for u in mod.uses]
+        for u in mod.uses:
+            u.module = get_module(u.module_name)
 
     # Resolve kernel dependencies
     kmod = config.kernel.module
-    kmod.dependencies = [get_module(u) for u in kmod.uses]
+    for u in kmod.uses:
+        u.module = get_module(u.module_name)
 
     return config

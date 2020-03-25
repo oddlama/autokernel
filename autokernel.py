@@ -3,7 +3,7 @@
 from autokernel.kconfig import *
 from autokernel.node_detector import NodeDetector
 from autokernel.lkddb import Lkddb
-from autokernel.config import load_config
+from autokernel.config import load_config, ConfigModule
 from autokernel import log
 
 import argparse
@@ -143,23 +143,31 @@ def apply_autokernel_config(kernel_dir, kconfig, config):
             return
         visited.add(module.name)
 
-        # Ensure all dependencies are processed first
-        for d in module.dependencies:
-            visit(d)
+        def stmt_use(stmt):
+            visit(stmt.module)
 
-        # Merge all given kconf files of the module
-        for filename in module.merge_kconf_files:
-            filename = filename.replace('{KERNEL_DIR}', kernel_dir)
+        def stmt_merge(stmt):
+            filename = stmt.filename.replace('{KERNEL_DIR}', kernel_dir)
             log.verbose("Merging external kconf '{}'".format(filename))
             kconfig.load_config(filename, replace=False)
 
-        # Process all symbol value changes
-        for symbol, value in module.assignments:
-            set_symbol(symbol, value)
+        def stmt_assert(stmt):
+            assert_symbol(stmt.sym_name, stmt.value)
 
-        # Process all assertions
-        for symbol, value in module.assertions:
-            assert_symbol(symbol, value)
+        def stmt_set(stmt):
+            set_symbol(stmt.sym_name, stmt.value)
+
+        dispatch_stmt = {
+            ConfigModule.StmtUse: stmt_use,
+            ConfigModule.StmtMerge: stmt_merge,
+            ConfigModule.StmtAssert: stmt_assert,
+            ConfigModule.StmtSet: stmt_set,
+        }
+
+        for stmt in module.all_statements_in_order:
+            # If the statement has a condition attached, ensure it is met.
+            if not stmt.condition or stmt.condition.evaluate(kconfig, symbol_changes):
+                dispatch_stmt[stmt.__class__](stmt)
 
     # Visit the root node and apply all symbol changes
     visit(config.kernel.module)

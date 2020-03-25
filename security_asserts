@@ -40,7 +40,7 @@ module security_asserts {
 	#assert MODULE_SIG_FORCE y;
 	assert DEFAULT_MMAP_MIN_ADDR "65536";
 	#assert REFCOUNT_FULL y;
-	assert INIT_STACK_ALL y;
+	#assert INIT_STACK_ALL y;
 	assert INIT_ON_ALLOC_DEFAULT_ON y;
 	assert INIT_ON_FREE_DEFAULT_ON y;
 	assert SECURITY_DMESG_RESTRICT y;
@@ -67,10 +67,10 @@ module security_asserts {
 	assert LOCK_DOWN_KERNEL_FORCE_CONFIDENTIALITY y;
 	assert SECCOMP y;
 	assert SECCOMP_FILTER y;
-	assert STRICT_DEVMEM y;
+	#assert STRICT_DEVMEM y;
 	assert MODULES n;
 	assert DEVMEM n;
-	assert IO_STRICT_DEVMEM y;
+	#assert IO_STRICT_DEVMEM y;
 	assert ACPI_CUSTOM_METHOD n;
 	assert COMPAT_BRK n;
 	assert DEVKMEM n;
@@ -84,7 +84,7 @@ module security_asserts {
 	assert LEGACY_VSYSCALL_NONE y;
 	assert IA32_EMULATION n;
 	assert X86_X32 n;
-	assert MODIFY_LDT_SYSCALL n;
+	#assert MODIFY_LDT_SYSCALL n;
 	assert X86_PTDUMP n;
 	assert ZSMALLOC_STAT n;
 	assert PAGE_OWNER n;
@@ -94,7 +94,7 @@ module security_asserts {
 	assert UPROBES n;
 	assert GENERIC_TRACER n;
 	assert PROC_VMCORE n;
-	assert PROC_PAGE_MONITOR n;
+	#assert PROC_PAGE_MONITOR n;
 	assert USELIB n;
 	assert CHECKPOINT_RESTORE n;
 	assert USERFAULTFD n;
@@ -110,7 +110,7 @@ module security_asserts {
 	assert MMIOTRACE_TEST n;
 	assert KSM n;
 	assert KALLSYMS n;
-	assert X86_VSYSCALL_EMULATION n;
+	#assert X86_VSYSCALL_EMULATION n;
 	assert MAGIC_SYSRQ n;
 	assert KEXEC_FILE n;
 	assert USER_NS n;
@@ -121,5 +121,5 @@ module security_asserts {
 	assert IP_SCTP n;
 	assert FTRACE n;
 	assert BPF_JIT n;
-	assert ARCH_MMAP_RND_BITS "32";
+	#assert ARCH_MMAP_RND_BITS "32";
 }

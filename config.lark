@@ -4,9 +4,10 @@
 ?tok_ignore: COMMENT
            | ";" -> extra_semicolon
 
-path: STRING
-param: STRING
-kernel_option_value: STRING
+path: string
+key: string
+param: string
+kernel_option_value: string
 
 // kernel logic expressions
 // ================
@@ -18,7 +19,7 @@ EXPR_CMP_LEQ: "<="
 EXPR_CMP_NEQ: ( WS "is" WS "not" WS | "!=" )
 EXPR_CMP_EQ:  ( WS "is" WS | "==" )
 
-expr_id: STRING
+expr_id: KERNEL_OPTION
 expr_op_neg: "not" WS
            | "!"
 expr_op_cmp: EXPR_CMP_GE
@@ -28,14 +29,17 @@ expr_op_cmp: EXPR_CMP_GE
            | EXPR_CMP_NEQ
            | EXPR_CMP_EQ
 
+EXPR_STRING: /[_a-zA-Z0-9]+/
+expr_string: ESCAPED_STRING -> string_quoted
+           | EXPR_STRING    -> string
 expr:         expr_term ( WS "or" WS expr_term | "||" expr_term )*
 expr_term:    expr_factor ( WS "and" WS expr_term | "&&" expr_term )*
-expr_cmp:     expr_id expr_op_cmp expr_id
+expr_cmp:     expr_string expr_op_cmp expr_string
 ?expr_factor: [ expr_op_neg ] expr_id
             | [ expr_op_neg ] "(" expr ")"
             | expr_cmp
 
-?expr_ws: WS expr
+_expr_ws: WS expr
         | "(" expr ")"
 
 // module
@@ -50,11 +54,11 @@ ctxt_module: ( tok_ignore
              | stmt_module_merge
              | stmt_module_assert
              | stmt_module_set )*
-stmt_module_if:     "if"     WS expr_ws "{" ctxt_module "}" ( "else" WS "if" WS expr_ws "{" ctxt_module "}" )* [ "else" WS "{" ctxt_module "}" ]
-stmt_module_use:    "use"    ( WS IDENTIFIER )+                          [ WS "if" expr_ws ] ";"
-stmt_module_merge:  "merge"  WS path                                     [ WS "if" expr_ws ] ";"
-stmt_module_assert: "assert" WS KERNEL_OPTION [ WS kernel_option_value ] [ WS "if" expr_ws ] ";"
-stmt_module_set:    "set"    WS KERNEL_OPTION [ WS kernel_option_value ] [ WS "if" expr_ws ] ";"
+stmt_module_if:     "if"     _expr_ws "{" ctxt_module "}" ( "else" WS "if" _expr_ws "{" ctxt_module "}" )* [ "else" WS "{" ctxt_module "}" ]
+stmt_module_use:    "use"    ( WS IDENTIFIER )+                          [ WS "if" _expr_ws ] ";"
+stmt_module_merge:  "merge"  WS path                                     [ WS "if" _expr_ws ] ";"
+stmt_module_assert: "assert" WS KERNEL_OPTION [ WS kernel_option_value ] [ WS "if" _expr_ws ] ";"
+stmt_module_set:    "set"    WS KERNEL_OPTION [ WS kernel_option_value ] [ WS "if" _expr_ws ] ";"
 
 // kernel
 // ================
@@ -111,8 +115,8 @@ blck_build: "build" "{" ctxt_build "}"
 ctxt_build: ( tok_ignore
             | stmt_build_initramfs
             | stmt_build_pack )*
-stmt_build_initramfs: "initramfs" WS STRING ";"
-stmt_build_pack: "pack" WS STRING [ WS param ] ";"
+stmt_build_initramfs: "initramfs" WS param ";"
+stmt_build_pack: "pack" WS key [ WS param ] ";"
 
 // root
 // ================
@@ -138,7 +142,9 @@ COMMENT:       /#[^\n]*/
 IDENTIFIER:    ( "_" | "-" | LETTER | DIGIT )+
 
 // The negative lookbehind avoids beeing greedy for the semicolon at the end
-STRING:        ( ESCAPED_STRING | /\S+(?<!;)/ )
+STRING: /\S+(?<!;)/
+string: ESCAPED_STRING -> string_quoted
+      | STRING         -> string
 
 // meta
 // ================
