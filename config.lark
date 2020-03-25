@@ -6,23 +6,55 @@
 
 path: STRING
 param: STRING
+kernel_option_value: STRING
+
+// kernel logic expressions
+// ================
+
+EXPR_CMP_GE:  ">"
+EXPR_CMP_GEQ: ">="
+EXPR_CMP_LE:  "<"
+EXPR_CMP_LEQ: "<="
+EXPR_CMP_NEQ: ( WS "is" WS "not" WS | "!=" )
+EXPR_CMP_EQ:  ( WS "is" WS | "==" )
+
+expr_id: STRING
+expr_op_neg: "not" WS
+           | "!"
+expr_op_cmp: EXPR_CMP_GE
+           | EXPR_CMP_GEQ
+           | EXPR_CMP_LE
+           | EXPR_CMP_LEQ
+           | EXPR_CMP_NEQ
+           | EXPR_CMP_EQ
+
+expr:         expr_term ( WS "or" WS expr_term | "||" expr_term )*
+expr_term:    expr_factor ( WS "and" WS expr_term | "&&" expr_term )*
+expr_cmp:     expr_id expr_op_cmp expr_id
+?expr_factor: [ expr_op_neg ] expr_id
+            | [ expr_op_neg ] "(" expr ")"
+            | expr_cmp
+
+?expr_ws: WS expr
+        | "(" expr ")"
 
 // module
 // ================
 
 module_name: IDENTIFIER
-kernel_option_value: STRING
 
 blck_module: "module" WS module_name "{" ctxt_module "}"
 ctxt_module: ( tok_ignore
+             | stmt_module_if
              | stmt_module_use
              | stmt_module_merge
              | stmt_module_assert
              | stmt_module_set )*
-stmt_module_use:    "use"    ( WS IDENTIFIER )+   ";"
-stmt_module_merge:  "merge"  WS path              ";"
-stmt_module_assert: "assert" WS KERNEL_OPTION [ WS kernel_option_value ] ";"
-stmt_module_set:    "set"    WS KERNEL_OPTION [ WS kernel_option_value ] ";"
+stmt_module_if:     "if"     WS expr_ws "{" ctxt_module "}" ( "else" WS "if" WS expr_ws "{" ctxt_module "}" )* [ "else" WS "{" ctxt_module "}" ]
+stmt_module_use:    "use"    ( WS IDENTIFIER )+                          [ WS "if" expr_ws ] ";"
+stmt_module_merge:  "merge"  WS path                                     [ WS "if" expr_ws ] ";"
+stmt_module_assert: "assert" WS KERNEL_OPTION [ WS kernel_option_value ] [ WS "if" expr_ws ] ";"
+stmt_module_set:    "set"    WS KERNEL_OPTION [ WS kernel_option_value ] [ WS "if" expr_ws ] ";"
 
 // kernel
 // ================
