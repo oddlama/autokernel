@@ -1,9 +1,10 @@
 import os
 import sys
 from . import log
+from .kconfig import tri_to_bool
 import lark
 import lark.exceptions
-from sympy import pretty as sympy_pretty, Symbol, true, false, Not, Or
+from sympy import pretty as sympy_pretty, Symbol, true, false, Not, Or, And
 from sympy.logic.boolalg import to_cnf, simplify_logic
 from sympy.logic.inference import satisfiable
 
@@ -64,6 +65,12 @@ def apply_tree_nodes(nodes, callbacks, on_additional=None, ignore_additional=Fal
             elif not ignore_additional:
                 raise ConfigParsingException(n.meta, "unprocessed rule '{}'; this is a bug that should be reported.".format(n.data))
 
+def find_first_child(tree, name):
+    for c in tree.children:
+        if c.data == name:
+            return c
+    return None
+
 def find_token(tree, token_name, ignore_missing=False, strip_quotes=False):
     """
     Finds a token by literal name in the children of the given tree. Raises
@@ -77,7 +84,7 @@ def find_token(tree, token_name, ignore_missing=False, strip_quotes=False):
         raise ConfigParsingException(tree.meta, "Missing token '{}'".format(token_name))
     return None
 
-def find_named_token(tree, token_name, ignore_missing=False):
+def find_named_token_raw(tree, token_name, ignore_missing=False):
     """
     Finds a token by subrule name in the children of the given tree. Raises
     an exception if the token is not found.
@@ -100,13 +107,20 @@ def find_named_token(tree, token_name, ignore_missing=False):
                 raise ConfigParsingException(c.meta, "Subrule token '{}.{}' has no children literal".format(token_name, c.children[0].data))
 
             if c.children[0].data == 'string':
-                return str(c.children[0].children[0])
+                return (str(c.children[0].children[0]), False)
             elif c.children[0].data == 'string_quoted':
-                return remove_quotes(str(c.children[0].children[0]))
+                return (remove_quotes(str(c.children[0].children[0])), True)
 
     if not ignore_missing:
         raise ConfigParsingException(tree.meta, "Missing token '{}'".format(token_name))
-    return None
+    return (None, None)
+
+def find_named_token(tree, token_name, ignore_missing=False):
+    """
+    Finds a token by subrule name in the children of the given tree. Raises
+    an exception if the token is not found. Strips quotes if it was a quoted string.
+    """
+    return find_named_token_raw(tree, token_name, ignore_missing=ignore_missing)[0]
 
 def find_all_tokens(tree, token_name, strip_quotes=False):
     """
@@ -176,23 +190,88 @@ class UniqueProperty:
 
 class Condition:
     def __init__(self, sympy_expr):
-        self.condition = sympy_expr
+        self.expr = sympy_expr
         self.value = None
 
     def evaluate(self, kconfig, symbol_changes):
-        if not self.value:
+        if self.value is None:
             self.value = self._evaluate(kconfig, symbol_changes)
         return self.value
 
     def _evaluate(self, kconfig, symbol_changes):
-        return True
-        # TODO 
-        #if symbol in symbol_changes and old_value != new_value:
-        #    die("Conflicting change for symbol {} (previously set to {}, now {}) triggered by {}".format(name, value_to_str(symbol_changes[symbol]), value_to_str(new_value), symbol_change_inducer.name))
+        def get_sym(sym_name):
+            try:
+                sym = kconfig.syms[sym_name]
+            except KeyError as e:
+                log.die("Referenced symbol '{}' does not exist".format(sym_name))
 
-def parse_config_expr_to_sympy(tree):
-    print(tree.pretty())
-    return true
+            # If the symbol hadn't been encountered before, pin the current value
+            if sym not in symbol_changes:
+                symbol_changes[sym] = sym.str_value
+
+            return sym
+
+        subs = {}
+        for s in self.expr.free_symbols:
+            if s.name.count('\001') == 2:
+                lhs, op, rhs = s.name.split('\001')
+                lhs_quoted = lhs[0]
+                lhs = lhs[1:]
+                rhs_quoted = rhs[0]
+                rhs = rhs[1:]
+
+                if lhs_quoted:
+                    lhs = get_sym(lhs).str_value
+                if rhs_quoted:
+                    rhs = get_sym(rhs).str_value
+
+                if op == 'EXPR_CMP_GE':
+                    value = int(lhs) > int(rhs)
+                elif op == 'EXPR_CMP_GEQ':
+                    value = int(lhs) >= int(rhs)
+                elif op == 'EXPR_CMP_LE':
+                    value = int(lhs) < int(rhs)
+                elif op == 'EXPR_CMP_LEQ':
+                    value = int(lhs) <= int(rhs)
+                elif op == 'EXPR_CMP_NEQ':
+                    value = lhs != rhs
+                elif op == 'EXPR_CMP_EQ':
+                    value = lhs == rhs
+                else:
+                    raise Exception("Invalid comparison op '{}'. This is a bug.".format(op))
+                subs[s.name] = value
+            else:
+                subs[s.name] = tri_to_bool(get_sym(s.name).tri_value)
+        return self.expr.subs(subs)
+
+def parse_expr(tree):
+    if tree.data == 'expr':
+        return Or(*[parse_expr(c) for c in tree.children if c.__class__ == lark.Tree and c.data == 'expr_term'])
+    if tree.data == 'expr_term':
+        return And(*[parse_expr(c) for c in tree.children if c.__class__ == lark.Tree and c.data == 'expr_factor'])
+    elif tree.data == 'expr_factor':
+        negated = find_first_child(tree, 'expr_op_neg') is not None
+        def negate_if_needed(s):
+            return Not(s) if negated else s
+
+        expr_cmp = find_first_child(tree, 'expr_cmp')
+        if expr_cmp:
+            lhs, lhs_quoted = find_named_token_raw(expr_cmp, 'expr_lhs')
+            rhs, rhs_quoted = find_named_token_raw(expr_cmp, 'expr_rhs')
+            operation = find_first_child(expr_cmp, 'expr_op_cmp').children[0].type
+            return negate_if_needed(Symbol("{}{}\001{}\001{}{}".format('1' if lhs_quoted else '0', lhs, operation, '1' if rhs_quoted else '0', rhs)))
+
+        expr_id = find_first_child(tree, 'expr_id')
+        if expr_id:
+            return negate_if_needed(Symbol(str(expr_id.children[0])))
+
+        expr = find_first_child(tree, 'expr')
+        if expr:
+            return negate_if_needed(parse_expr(expr))
+
+        raise ConfigParsingException(tree.meta, "Invalid expression subtree '{}' in 'expr_factor'".format(tree.data))
+    else:
+        raise ConfigParsingException(tree.meta, "Invalid expression subtree '{}'".format(tree.data))
 
 def find_subtrees(tree, name):
     """
@@ -204,7 +283,7 @@ def find_conditions(tree, name='expr'):
     """
     Returns all conditions in the direct subtree.
     """
-    return [parse_config_expr_to_sympy(expr) for expr in find_subtrees(tree, 'expr')]
+    return [parse_expr(expr) for expr in find_subtrees(tree, 'expr')]
 
 def find_condition(tree, ignore_missing=True):
     conditions = find_conditions(tree)
@@ -216,7 +295,7 @@ def find_condition(tree, ignore_missing=True):
             raise ConfigParsingException(tree.meta, "Missing expression")
 
     if len(conditions) == 1:
-        return find_conditions(tree)[0]
+        return conditions[0]
 
     raise ConfigParsingException(tree.meta, "Expected exactly one expression, but got {}".format(len(conditions)))
 
@@ -299,13 +378,11 @@ class ConfigModule(BlockNode):
         apply_tree_nodes(blck.children, [module_name], ignore_additional=True)
 
     def parse_context(self, ctxt, precondition=true):
-        print("precond", sympy_pretty(precondition))
         def stmt_module_if(tree):
             conditions = find_conditions(tree)
             subcontexts = find_subtrees(tree, 'ctxt_module')
             if len(subcontexts) - len(conditions) not in [0, 1]:
                 raise ConfigParsingException(tree.meta, "invalid amount of subcontexts(={}) and conditions(={}) for if block; this is a bug that should be reported.".format(len(subcontexts), len(conditions)))
-            print("subcontexts(={}) and conditions(={})".format(len(subcontexts), len(conditions)))
 
             previous_conditions = []
             def negate_previous():
@@ -321,7 +398,7 @@ class ConfigModule(BlockNode):
             if len(subcontexts) > len(conditions):
                 # The condition for the else block is the combined negation of all previous conditions
                 cond = precondition & negate_previous()
-                self.parse_context(s, precondition=cond)
+                self.parse_context(subcontexts[-1], precondition=cond)
 
         def stmt_module_use(tree):
             cond = Condition(precondition & find_condition(tree))

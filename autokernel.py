@@ -5,6 +5,7 @@ from autokernel.node_detector import NodeDetector
 from autokernel.lkddb import Lkddb
 from autokernel.config import load_config, ConfigModule
 from autokernel import log
+from autokernel.log import die
 
 import argparse
 import gzip
@@ -35,8 +36,9 @@ def set_value_proxy_detect_conflicts(sym, value):
     new_value = value
     if old_value != new_value:
         symbol = sym
-        trigger_is_sym = symbol_change_inducer == symbol
+        trigger_is_sym = symbol_change_inducer[0] == symbol
         # Track choices by choice name
+        # TODO THIS DOES NOT WORK LIKE THAT, other dependencies can still be there...
         if symbol.direct_dep.__class__ is kconfiglib.Choice:
             orig_symbol = symbol
             symbol = symbol.direct_dep
@@ -52,7 +54,7 @@ def set_value_proxy_detect_conflicts(sym, value):
 
         log.verbose("{} {}".format(value_to_str(new_value), name))
         if symbol in symbol_changes and old_value != new_value:
-            die("Conflicting change for symbol {} (previously set to {}, now {}) triggered by {}".format(name, value_to_str(symbol_changes[symbol]), value_to_str(new_value), symbol_change_inducer.name))
+            die("Conflicting change for symbol {} (previously set to {}, now {}) triggered by {} in {}".format(name, value_to_str(symbol_changes[symbol]), value_to_str(new_value), symbol_change_inducer[0].name, symbol_change_inducer[1]))
 
         # Do not track implicit choice changes.
         if is_choice and not trigger_is_sym:
@@ -63,18 +65,14 @@ def set_value_proxy_detect_conflicts(sym, value):
     return saved_set_value(sym, value)
 kconfiglib.Symbol.set_value = set_value_proxy_detect_conflicts
 
-def set_value_detect_conflicts(sym, value):
+def set_value_detect_conflicts(sym, value, hint_name):
     # Remember which symbol caused a chain of changes
     global symbol_change_inducer
-    symbol_change_inducer = sym
+    symbol_change_inducer = (sym, hint_name)
     ret = sym.set_value(value)
     symbol_change_inducer = None
     return ret
 
-
-def die(message):
-    log.error(message)
-    sys.exit(1)
 
 def has_proc_config_gz():
     """
@@ -125,11 +123,11 @@ def apply_autokernel_config(kernel_dir, kconfig, config):
             die("Assertion failed: {} should be {} but is {}".format(symbol, value_to_str(value), value_to_str(sym.str_value)))
 
     # Sets a symbols value if and asserts that there are no conflicting double assignments
-    def set_symbol(symbol, value):
+    def set_symbol(symbol, value, hint_name):
         # Get the kconfig symbol, and change the value
         sym = kconfig.syms[symbol]
 
-        if not set_value_detect_conflicts(sym, value):
+        if not set_value_detect_conflicts(sym, value, 'module ' + hint_name):
             die("Invalid value {} for symbol {}".format(value_to_str(value), symbol))
 
         if sym.str_value != value:
@@ -155,7 +153,7 @@ def apply_autokernel_config(kernel_dir, kconfig, config):
             assert_symbol(stmt.sym_name, stmt.value)
 
         def stmt_set(stmt):
-            set_symbol(stmt.sym_name, stmt.value)
+            set_symbol(stmt.sym_name, stmt.value, module.name)
 
         dispatch_stmt = {
             ConfigModule.StmtUse: stmt_use,
@@ -165,8 +163,8 @@ def apply_autokernel_config(kernel_dir, kconfig, config):
         }
 
         for stmt in module.all_statements_in_order:
-            # If the statement has a condition attached, ensure it is met.
-            if not stmt.condition or stmt.condition.evaluate(kconfig, symbol_changes):
+            # Ensure the attached condition is met for the statement.
+            if stmt.condition.evaluate(kconfig, symbol_changes):
                 dispatch_stmt[stmt.__class__](stmt)
 
     # Visit the root node and apply all symbol changes

@@ -17,3 +17,7 @@ def warn(msg):
 
 def error(msg):
     print("[1;31m * ERROR:[m {}".format(msg), file=sys.stderr)
+
+def die(message):
+    error(message)
+    sys.exit(1)
