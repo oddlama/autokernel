@@ -401,14 +401,15 @@ class Config(BlockNode):
         def blck_build(tree):
             self.build.parse_tree(tree)
         def stmt_root_include_module_dir(tree):
-            dir = find_named_token(tree, 'path')
+            dir = os.path.join(os.path.dirname(currently_parsed_filenames[-1]), find_named_token(tree, 'path'))
             if os.path.isdir(dir):
-                for file in os.listdir(dir):
-                    _include_module_file(tree, os.path.join(dir, file))
+                for filename in os.listdir(dir):
+                    _include_module_file(tree, os.path.join(dir, filename))
             else:
                 raise ConfigParsingException(tree.meta, "'{}' is not a directory".format(dir))
         def stmt_root_include_module(tree):
-            _include_module_file(tree, find_named_token(tree, 'path'))
+            filename = os.path.join(os.path.dirname(currently_parsed_filenames[-1]), find_named_token(tree, 'path'))
+            _include_module_file(tree, filename)
 
         if restrict_to_modules:
             def other(tree):

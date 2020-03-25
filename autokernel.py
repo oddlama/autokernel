@@ -110,15 +110,12 @@ def generated_by_autokernel_header():
 def vim_config_modeline_header():
     return "# vim: set ft=ruby ts=4 sw=4 sts=-1 noet:\n"
 
-def apply_autokernel_config(kconfig, config):
+def apply_autokernel_config(kernel_dir, kconfig, config):
     """
     Applies the given autokernel configuration to a freshly loaded kconfig object,
     and returns the kconfig and a dictionary of changes
     """
     log.info("Applying autokernel configuration")
-
-    # Track all changed symbols and values.
-    changes = {}
 
     # Asserts that the symbol has the given value
     def assert_symbol(symbol, value):
@@ -152,6 +149,7 @@ def apply_autokernel_config(kconfig, config):
 
         # Merge all given kconf files of the module
         for filename in module.merge_kconf_files:
+            filename = filename.replace('{KERNEL_DIR}', kernel_dir)
             log.verbose("Merging external kconf '{}'".format(filename))
             kconfig.load_config(filename, replace=False)
 
@@ -165,9 +163,7 @@ def apply_autokernel_config(kconfig, config):
 
     # Visit the root node and apply all symbol changes
     visit(config.kernel.module)
-    log.info("Changed {} symbols".format(len(changes)))
-
-    return changes
+    log.info("Changed {} symbols".format(len(symbol_changes)))
 
 def main_check_config(args):
     """
@@ -186,7 +182,7 @@ def main_check_config(args):
     # Load symbols from Kconfig
     kconfig_gen = load_kconfig(args.kernel_dir)
     # Apply autokernel configuration
-    apply_autokernel_config(kconfig_gen, config)
+    apply_autokernel_config(args.kernel_dir, kconfig_gen, config)
 
     # Load symbols from Kconfig
     kconfig_cmp = load_kconfig(args.kernel_dir)
@@ -216,7 +212,7 @@ def main_generate_config(args, config=None):
     # Load symbols from Kconfig
     kconfig = load_kconfig(args.kernel_dir)
     # Apply autokernel configuration
-    apply_autokernel_config(kconfig, config)
+    apply_autokernel_config(args.kernel_dir, kconfig, config)
 
     # Write configuration to file
     kconfig.write_config(
@@ -465,7 +461,7 @@ class ModuleCreator:
         Recursively adds a module for the given option,
         until all dependencies are satisfied.
         """
-        mod = Module(module_prefix + "config_{}".format(sym.name.lower()))
+        mod = Module(self.module_prefix + "config_{}".format(sym.name.lower()))
 
         # Find dependencies if needed
         needs_deps = not expr_value(sym.direct_dep)
@@ -704,7 +700,7 @@ def main_deps(args):
         # Load configuration file
         config = load_config(args.autokernel_config)
         # Apply kernel config
-        apply_autokernel_config(kconfig, config)
+        apply_autokernel_config(args.kernel_dir, kconfig, config)
 
     # Create a module for the detected option
     module_creator = ModuleCreator()

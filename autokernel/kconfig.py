@@ -74,7 +74,7 @@ def load_environment_variables(dir):
     log.info("Loading kernel environment variables for '{}'".format(dir))
 
     arch = detect_arch()
-    log.info("Detected ARCH: {}".format(arch))
+    log.info("Detected kernel ARCH: {}".format(arch))
     set_env_default("ARCH", arch)
     set_env_default("SRCARCH", arch)
     set_env_default("CC", "gcc")
