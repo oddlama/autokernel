@@ -184,14 +184,14 @@ class UniqueProperty:
         else:
             self.value = tok
 
-    def __bool__(self):
-        return bool(self.__get__())
-
-    def __get__(self):
+    def _get(self):
         return self.default if self.value is None else self.value
 
+    def __bool__(self):
+        return bool(self._get())
+
     def __str__(self):
-        return self.__get__()
+        return self._get()
 
 special_var_cmp_mode = {
     '$KERNEL_VERSION': 'semver'
@@ -378,6 +378,8 @@ def find_condition(tree, ignore_missing=True):
     raise ConfigParsingException(tree.meta, "Expected exactly one expression, but got {}".format(len(conditions)))
 
 class BlockNode:
+    node_name = None
+
     """
     A base class for blocks to help with tree parsing.
     """
@@ -414,7 +416,7 @@ class BlockNode:
                     ctxt = c
 
         if not ctxt:
-            raise ConfigParsingException(tree.meta, "'{}' must have exactly one child '{}'".format())
+            raise ConfigParsingException(tree.meta, "'{}' must have exactly one child '{}'".format("blck_" + self.node_name, "ctxt_" + self.node_name))
 
         self.parse_context(ctxt, *args, **kwargs)
 

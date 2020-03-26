@@ -36,6 +36,7 @@ class SplitParser:
     A parser which creates one node per argument, while discarding empty arguments.
     """
 
+    attr_name = None
     def parse(self, arguments):
         """
         Parses the arguments into a several data objects, one per argument.
@@ -50,25 +51,27 @@ class ParamParser:
     A parser which matches one argument for each parameter (sequetially).
     """
 
+    parameters = []
+    discard_extra = False
+    mandatory = None
+
     def parse(self, arguments):
         """
         Parses the arguments into a single data object.
         Must return a list.
         """
 
-        parameters = self._get_parameters()
-        discard_extra = self._get_discard_extra()
-        mandatory = self._get_mandatory()
+        mandatory = self.mandatory or self.parameters
 
         # Ensure the amount of arguments is equal to the required amount
-        if len(arguments) != len(parameters) and not discard_extra:
-            raise EntryParsingException("parser requires exactly {} arguments but {} were given".format(len(parameters), len(arguments)))
-        elif len(arguments) < len(parameters):
-            raise EntryParsingException("parser requires at least {} arguments but only {} were given".format(len(parameters), len(arguments)))
+        if len(arguments) != len(self.parameters) and not self.discard_extra:
+            raise EntryParsingException("parser requires exactly {} arguments but {} were given".format(len(self.parameters), len(arguments)))
+        elif len(arguments) < len(self.parameters):
+            raise EntryParsingException("parser requires at least {} arguments but only {} were given".format(len(self.parameters), len(arguments)))
 
         # Create data dictionary and insert all arguments
         data = {}
-        for i, parameter in enumerate(parameters):
+        for i, parameter in enumerate(self.parameters):
             # Skip this entry completely, if it is missing mandatory data
             if parameter in mandatory and arguments[i] is wildcard_token:
                 return []
@@ -76,22 +79,6 @@ class ParamParser:
             data[parameter] = arguments[i]
 
         return [data]
-
-    @classmethod
-    def _get_parameters(cls):
-        return cls.parameters
-
-    @classmethod
-    def _get_discard_extra(cls):
-        if hasattr(cls, 'discard_extra'):
-            return cls.discard_extra
-        return False
-
-    @classmethod
-    def _get_mandatory(cls):
-        if hasattr(cls, 'mandatory'):
-            return cls.mandatory
-        return cls._get_parameters()
 
 class AcpiParser(ParamParser):
     subsystem = Subsystem.acpi

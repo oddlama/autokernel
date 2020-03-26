@@ -16,6 +16,9 @@ class Node:
     said type (to represent multiple nodes).
     """
 
+    node_type = None
+    nodes = [] # Must be overwritten
+
     @classmethod
     def detect_nodes(cls):
         """
@@ -68,6 +71,8 @@ class SysfsNode(LineParserNode):
     A base class used for nodes which get their information
     by parsing a sysfs file.
     """
+
+    sysfs_path = None
 
     @classmethod
     def get_sysfs_files(cls):

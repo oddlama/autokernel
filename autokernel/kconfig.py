@@ -29,7 +29,7 @@ def tri_to_bool(tri):
     """
     Converts a tristate to a boolean value (['n'] -> False, ['m', 'y'] -> True)
     """
-    return tri != NO
+    return tri != STR_TO_TRI['n']
 
 def expr_value_bool(expr):
     """
@@ -115,7 +115,7 @@ def allnoconfig(kconfig):
     warn_save = kconfig.warn
     kconfig.warn = False
     for sym in kconfig.unique_defined_syms:
-        sym.set_value(YES if sym.is_allnoconfig_y else NO)
+        sym.set_value('y' if sym.is_allnoconfig_y else 'n')
     kconfig.warn = warn_save
     kconfig.load_allconfig("allno.config")
 

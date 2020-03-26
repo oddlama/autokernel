@@ -11,12 +11,15 @@ class WildcardTokenType:
 wildcard_token = WildcardTokenType()
 
 class SubsystemNode:
+    parameters = []
+    mandatory = None
+
     def __init__(self, subsystem, data):
         """
         Initialize node from dictionary with data
         """
         self.subsystem = subsystem
-        for param in self._get_parameters():
+        for param in self.parameters:
             if param in data:
                 setattr(self, param, self._parse_parameter(param, data[param]))
             else:
@@ -28,7 +31,7 @@ class SubsystemNode:
         """
         str = '{}{{'.format(self.__class__.__name__)
         str += ', '.join(['{}={}'.format(param, self._param_to_str(param)) \
-                    for param in self._get_parameters()])
+                    for param in self.parameters])
         str += '}'
         return str
 
@@ -40,14 +43,14 @@ class SubsystemNode:
         if clsname.endswith('Node'):
             clsname = clsname[:-4]
         str = '_'.join([clsname] + ['{}'.format(self._param_to_str(param)) \
-                    for param in self._get_parameters()])
+                    for param in self.parameters])
         return re.sub(r'[^a-zA-Z0-9_-]+', '', str).lower()
 
     def _parse_parameter(self, param, p):
         if p == wildcard_token:
             return p
 
-        ptype = self._get_parameters()[param]
+        ptype = self.parameters[param]
         if ptype == str:
             return "'{}'".format(p)
         elif ptype == hex:
@@ -55,7 +58,7 @@ class SubsystemNode:
 
     def _param_to_str(self, param):
         p = getattr(self, param)
-        ptype = self._get_parameters()[param]
+        ptype = self.parameters[param]
         if ptype == str:
             return p
         elif ptype == hex:
@@ -69,7 +72,7 @@ class SubsystemNode:
         """
         score = 0
 
-        for p in self._get_parameters():
+        for p in self.parameters:
             a = getattr(self, p)
             b = getattr(other, p)
 
@@ -91,19 +94,11 @@ class SubsystemNode:
         # All parameters have passed comparison checks
         return score
 
-    @classmethod
-    def _get_parameters(cls):
-        return cls.parameters
+    def _get_mandatory(self):
+        return self.mandatory or self.parameters
 
-    @classmethod
-    def _get_mandatory(cls):
-        if hasattr(cls, 'mandatory'):
-            return cls.mandatory
-        return cls._get_parameters()
-
-    @classmethod
-    def get_ambiguity_threshold(cls):
-        return len(cls._get_mandatory())
+    def get_ambiguity_threshold(self):
+        return len(self._get_mandatory())
 
 class AcpiNode(SubsystemNode):
     parameters = {'id': str}
