@@ -21,56 +21,74 @@ from pathlib import Path
 
 
 
-# Monkeypatch Symbol.set_value, to detect conflicting changes.
+# Monkeypatch Symbol.set_value, and Symbol._invalidate to detect conflicting changes.
 # Detection is only done when using the set_value_detect_conflicts instead of Symbol.set_value
 
-symbol_change_inducer = None
+symbol_change_hint= None
 symbol_changes = {}
+symbols_invalidated = {}
 
 saved_set_value = kconfiglib.Symbol.set_value
+saved_invalidate = kconfiglib.Symbol._invalidate
+
+def register_symbol_change(symbol, new_value, inducing_change):
+    if symbol == inducing_change[0]:
+        log.verbose("{} {}".format(value_to_str(new_value), symbol.name))
+        symbol_changes[symbol] = new_value
+    else:
+        log.verbose("{} {} (implicitly triggered by {} = {})".format(value_to_str(new_value), symbol.name, inducing_change[0].name, inducing_change[1]))
+
+def track_symbol_changes(symbol, old_value, new_value, inducing_change):
+    if old_value == new_value:
+        register_symbol_change(symbol, new_value, inducing_change)
+        return
+
+    # Bot normal and implicit changes can trigger conflicts
+    if symbol in symbol_changes and symbol_changes[symbol] != new_value:
+        die("Conflicting change for symbol {} (previously set to {}, now {}) triggered by {} = {} in {}".format(symbol.name, value_to_str(symbol_changes[symbol]), value_to_str(new_value), inducing_change[0].name, inducing_change[1], symbol_change_hint))
+
+    # Implicit changes will not be recorded by register_symbol_change, but
+    # they can trigger conflicting changes above.
+    # This prevents them from changing an option that was previously set by the user.
+    register_symbol_change(symbol, new_value, inducing_change)
+
 def set_value_proxy_detect_conflicts(sym, value):
-    if not symbol_change_inducer:
+    # Additional logic only if called through wrapper
+    if not symbol_change_hint:
         return saved_set_value(sym, value)
 
-    old_value = sym.str_value
-    new_value = value
-    if old_value != new_value:
-        symbol = sym
-        trigger_is_sym = symbol_change_inducer[0] == symbol
-        # Track choices by choice name
-        # TODO THIS DOES NOT WORK LIKE THAT, other dependencies can still be there...
-        if symbol.direct_dep.__class__ is kconfiglib.Choice:
-            orig_symbol = symbol
-            symbol = symbol.direct_dep
+    symbols_invalidated.clear()
+    ret = saved_set_value(sym, value)
 
-            new_value = orig_symbol.name
-            old_value = symbol_changes.get(symbol, new_value)
+    # Process invalidated symbols and check for conflicting changes.
+    track_symbol_changes(sym, sym.str_value, value, (sym, value))
+    for s in symbols_invalidated:
+        # Skip self-invalidation
+        if s == sym:
+            continue
 
-            name = symbol.name or orig_symbol.name
-            is_choice = True
-        else:
-            name = symbol.name
-            is_choice = False
+        # We will only track implicit changes if they changed the value.
+        if symbols_invalidated[s] == s.str_value:
+            continue
 
-        log.verbose("{} {}".format(value_to_str(new_value), name))
-        if symbol in symbol_changes and old_value != new_value:
-            die("Conflicting change for symbol {} (previously set to {}, now {}) triggered by {} in {}".format(name, value_to_str(symbol_changes[symbol]), value_to_str(new_value), symbol_change_inducer[0].name, symbol_change_inducer[1]))
+        track_symbol_changes(s, symbols_invalidated[s], s.str_value, (sym, value))
 
-        # Do not track implicit choice changes.
-        if is_choice and not trigger_is_sym:
-            pass
-        else:
-            symbol_changes[symbol] = new_value
+    return ret
 
-    return saved_set_value(sym, value)
+def monkey_invalidate(sym):
+    # Remember old value
+    symbols_invalidated[sym] = sym.str_value
+    return saved_invalidate(sym)
+
 kconfiglib.Symbol.set_value = set_value_proxy_detect_conflicts
+kconfiglib.Symbol._invalidate = monkey_invalidate
 
 def set_value_detect_conflicts(sym, value, hint_name):
     # Remember which symbol caused a chain of changes
-    global symbol_change_inducer
-    symbol_change_inducer = (sym, hint_name)
+    global symbol_change_hint
+    symbol_change_hint = hint_name
     ret = sym.set_value(value)
-    symbol_change_inducer = None
+    symbol_change_hint = None
     return ret
 
 
@@ -135,6 +153,9 @@ def apply_autokernel_config(kernel_dir, kconfig, config):
 
         if sym.str_value != value:
             log.warn("Symbol assignment failed: {} from {} -> {}".format(symbol, value_to_str(sym.str_value), value_to_str(value)))
+
+    # Reset symbol_changes
+    symbol_changes.clear()
 
     # Visit all module nodes and apply configuration changes
     visited = set()
