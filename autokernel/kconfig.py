@@ -1,5 +1,4 @@
 from . import log
-from .constants import NO, MOD, YES
 
 import subprocess
 import os

@@ -41,13 +41,9 @@ class SplitParser:
         Parses the arguments into a several data objects, one per argument.
         Must return a list.
         """
-        attr_name = self._get_attr_name()
+        attr_name = self.attr_name
         # Create one node per argument, but filter out wildcard_token
         return [{attr_name: a} for a in arguments if a is not wildcard_token]
-
-    @classmethod
-    def _get_attr_name(cls):
-        return cls.attr_name
 
 class ParamParser:
     """

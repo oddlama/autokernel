@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 
 import autokernel.kconfig
-#from autokernel.kconfig import *
-#from autokernel.kconfig import *
-from autokernel.node_detector import NodeDetector
-from autokernel.lkddb import Lkddb
-from autokernel.config import load_config, ConfigModule
+import autokernel.config
+import autokernel.lkddb
+import autokernel.node_detector
 from autokernel import log
-from autokernel.log import die
 
 import argparse
 import gzip
@@ -22,7 +19,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-
 # Monkeypatch Symbol.set_value, and Symbol._invalidate to detect conflicting changes.
 # Detection is only done when using the set_value_detect_conflicts instead of Symbol.set_value
 
@@ -35,10 +31,12 @@ saved_invalidate = kconfiglib.Symbol._invalidate
 
 def register_symbol_change(symbol, new_value, inducing_change):
     if symbol == inducing_change[0]:
-        log.verbose("{} {}".format(value_to_str(new_value), symbol.name))
+        log.verbose("{} {}".format(autokernel.kconfig.value_to_str(new_value), symbol.name))
         symbol_changes[symbol] = new_value
     else:
-        log.verbose("{} {} (implicitly triggered by {} = {})".format(value_to_str(new_value), symbol.name, inducing_change[0].name, inducing_change[1]))
+        log.verbose("{} {} (implicitly triggered by {} = {})".format(
+            autokernel.kconfig.value_to_str(new_value),
+            symbol.name, inducing_change[0].name, inducing_change[1]))
 
 def track_symbol_changes(symbol, old_value, new_value, inducing_change):
     if old_value == new_value:
@@ -47,7 +45,11 @@ def track_symbol_changes(symbol, old_value, new_value, inducing_change):
 
     # Bot normal and implicit changes can trigger conflicts
     if symbol in symbol_changes and symbol_changes[symbol] != new_value:
-        die("Conflicting change for symbol {} (previously set to {}, now {}) triggered by {} = {} in {}".format(symbol.name, value_to_str(symbol_changes[symbol]), value_to_str(new_value), inducing_change[0].name, inducing_change[1], symbol_change_hint))
+        log.die("Conflicting change for symbol {} (previously set to {}, now {}) triggered by {} = {} in {}".format(
+            symbol.name,
+            autokernel.kconfig.value_to_str(symbol_changes[symbol]),
+            autokernel.kconfig.value_to_str(new_value),
+            inducing_change[0].name, inducing_change[1], symbol_change_hint))
 
     # Implicit changes will not be recorded by register_symbol_change, but
     # they can trigger conflicting changes above.
@@ -140,7 +142,10 @@ def apply_autokernel_config(kernel_dir, kconfig, config):
         # TODO differentiate between m and y if user wants that!
         sym = kconfig.syms[symbol]
         if sym.str_value != value:
-            die("Assertion failed: {} should be {} but is {}".format(symbol, value_to_str(value), value_to_str(sym.str_value)))
+            log.die("Assertion failed: {} should be {} but is {}".format(
+                symbol,
+                autokernel.kconfig.value_to_str(value),
+                autokernel.kconfig.value_to_str(sym.str_value)))
 
     # Sets a symbols value if and asserts that there are no conflicting double assignments
     def set_symbol(symbol, value, hint_name):
@@ -148,13 +153,16 @@ def apply_autokernel_config(kernel_dir, kconfig, config):
         try:
             sym = kconfig.syms[symbol]
         except KeyError as e:
-            die("Referenced symbol '{}' does not exist".format(symbol))
+            log.die("Referenced symbol '{}' does not exist".format(symbol))
 
         if not set_value_detect_conflicts(sym, value, 'module ' + hint_name):
-            die("Invalid value {} for symbol {}".format(value_to_str(value), symbol))
+            log.die("Invalid value {} for symbol {}".format(autokernel.kconfig.value_to_str(value), symbol))
 
         if sym.str_value != value:
-            log.warn("Symbol assignment failed: {} from {} -> {}".format(symbol, value_to_str(sym.str_value), value_to_str(value)))
+            log.warn("Symbol assignment failed: {} from {} -> {}".format(
+                symbol,
+                autokernel.kconfig.value_to_str(sym.str_value),
+                autokernel.kconfig.value_to_str(value)))
 
     # Reset symbol_changes
     symbol_changes.clear()
@@ -182,10 +190,10 @@ def apply_autokernel_config(kernel_dir, kconfig, config):
             set_symbol(stmt.sym_name, stmt.value, module.name or 'kernel')
 
         dispatch_stmt = {
-            ConfigModule.StmtUse: stmt_use,
-            ConfigModule.StmtMerge: stmt_merge,
-            ConfigModule.StmtAssert: stmt_assert,
-            ConfigModule.StmtSet: stmt_set,
+            autokernel.config.ConfigModule.StmtUse: stmt_use,
+            autokernel.config.ConfigModule.StmtMerge: stmt_merge,
+            autokernel.config.ConfigModule.StmtAssert: stmt_assert,
+            autokernel.config.ConfigModule.StmtSet: stmt_set,
         }
 
         for stmt in module.all_statements_in_order:
@@ -205,11 +213,11 @@ def main_check_config(args):
         log.info("Checking generated config against '{}'".format(args.compare_config))
     else:
         if not has_proc_config_gz():
-            die("This kernel does not expose /proc/config.gz. Please provide the path to a valid config file manually.")
+            log.die("This kernel does not expose /proc/config.gz. Please provide the path to a valid config file manually.")
         log.info("Checking generated config against currently running kernel")
 
     # Load configuration file
-    config = load_config(args.autokernel_config)
+    config = autokernel.config.load_config(args.autokernel_config)
 
     # Load symbols from Kconfig
     kconfig_gen = autokernel.kconfig.load_kconfig(args.kernel_dir)
@@ -235,7 +243,7 @@ def main_generate_config(args, config=None):
     log.info("Generating kernel configuration")
     if not config:
         # Load configuration file
-        config = load_config(args.autokernel_config)
+        config = autokernel.config.load_config(args.autokernel_config)
 
     # Fallback for config output
     if not hasattr(args, 'output') or not args.output:
@@ -264,7 +272,7 @@ def build_kernel(args, config, pass_id):
 
     # TODO cleaning capabilities?
     if subprocess.run(['make'], cwd=args.kernel_dir).returncode != 0:
-        die("make failed in {}".format(args.kernel_dir))
+        log.die("make failed in {}".format(args.kernel_dir))
 
 def build_initramfs(args, config):
     log.info("Building initramfs")
@@ -277,9 +285,9 @@ def main_build(args, config=None):
     """
     if not config:
         # Load configuration file
-        config = load_config(args.autokernel_config)
+        config = autokernel.config.load_config(args.autokernel_config)
 
-    generate_config(args, config)
+    main_generate_config(args, config)
 
     # Build the kernel
     build_kernel(args, config, pass_id='initial')
@@ -296,7 +304,7 @@ def install_kernel(args, config):
     log.info("Installing kernel")
 
     print(str(config.install.target_dir))
-    print(str(config.install.target).replace('$KERNEL_VERSION', kernel_version))
+    print(str(config.install.target).replace('$KERNEL_VERSION', autokernel.kconfig.kernel_version))
 
 def install_initramfs(args, config):
     log.info("Installing initramfs")
@@ -307,24 +315,24 @@ def main_install(args, config=None):
     """
     if not config:
         # Load configuration file
-        config = load_config(args.autokernel_config)
+        config = autokernel.config.load_config(args.autokernel_config)
 
     # Mount
     for i in config.install.mount:
         if not os.access(i, os.R_OK):
-            die("Permission denied on accessing '{}'. Aborting.".format(i))
+            log.die("Permission denied on accessing '{}'. Aborting.".format(i))
 
         if not os.path.ismount(i):
             if subprocess.run(['mount', '--', i]).returncode != 0:
-                die("Could not mount '{}'. Aborting.".format(i))
+                log.die("Could not mount '{}'. Aborting.".format(i))
 
     # Check mounts
     for i in config.install.mount + config.install.assert_mounted:
         if not os.access(i, os.R_OK):
-            die("Permission denied on accessing '{}'. Aborting.".format(i))
+            log.die("Permission denied on accessing '{}'. Aborting.".format(i))
 
         if not os.path.ismount(i):
-            die("'{}' is not mounted. Aborting.".format(i))
+            log.die("'{}' is not mounted. Aborting.".format(i))
 
     install_kernel(args, config)
 
@@ -338,7 +346,7 @@ def main_build_all(args):
     """
     log.info("Started full build")
     # Load configuration file
-    config = load_config(args.autokernel_config)
+    config = autokernel.config.load_config(args.autokernel_config)
 
     main_build(args, config)
     main_install(args, config)
@@ -364,14 +372,12 @@ def check_config_against_detected_modules(kconfig, modules):
     visited = set()
     visited_opts = set()
     color = {
-        NO: "[1;31m",
-        MOD: "[1;33m",
-        YES: "[1;32m",
+        'n': "[1;31m",
+        'm': "[1;33m",
+        'y': "[1;32m",
     }
 
     def visit_opt(opt, v):
-        from autokernel.constants import NO, MOD, YES
-
         # Ensure we visit only once
         if opt in visited_opts:
             return
@@ -384,19 +390,19 @@ def check_config_against_detected_modules(kconfig, modules):
 
             if tri_v == sym_v:
                 # Match
-                v_color = color[YES]
-            elif tri_to_bool(tri_v) == tri_to_bool(sym_v):
+                v_color = color['y']
+            elif autokernel.kconfig.tri_to_bool(tri_v) == autokernel.kconfig.tri_to_bool(sym_v):
                 # Match, but mixed y and m
-                v_color = color[MOD]
+                v_color = color['m']
             else:
                 # Mismatch
-                v_color = color[NO]
+                v_color = color['n']
 
             # Print option value
             print("[{}{}[m] {} = {}".format(v_color, TRI_TO_STR[sym_v], sym.name, v))
         else:
             # Print option assignment
-            print("{} = {}{}[m".format(sym.name, color[YES] if sym.str_value == v else color[NO], sym.str_value))
+            print("{} = {}{}[m".format(sym.name, color['y'] if sym.str_value == v else color['n'], sym.str_value))
 
     def visit(m):
         # Ensure we visit only once
@@ -494,15 +500,15 @@ class ModuleCreator:
         mod = Module(self.module_prefix + "config_{}".format(sym.name.lower()))
 
         # Find dependencies if needed
-        needs_deps = not expr_value(sym.direct_dep)
+        needs_deps = not autokernel.kconfig.expr_value(sym.direct_dep)
         if needs_deps:
-            req_deps = required_deps(sym)
+            req_deps = autokernel.kconfig.required_deps(sym)
             if req_deps is False:
                 # Dependencies can never be satisfied. The module should be skipped.
                 log.warn("Cannot satisfy dependencies for {}".format(sym.name))
                 return False
 
-        if not symbol_can_be_user_assigned(sym):
+        if not autokernel.kconfig.symbol_can_be_user_assigned(sym):
             # If we cannot assign the symbol, we add an assertion instead.
             mod.assertions.append((sym.name, 'y'))
         else:
@@ -516,7 +522,7 @@ class ModuleCreator:
                             return False
                         mod.deps.append(depm)
                     else:
-                        if symbol_can_be_user_assigned(sym):
+                        if autokernel.kconfig.symbol_can_be_user_assigned(sym):
                             mod.assignments.append((d.name, 'n'))
                         else:
                             mod.assertions.append((d.name, 'n'))
@@ -553,7 +559,7 @@ class ModuleCreator:
         elif output_type == 'module':
             writer = ModuleConfigWriter(f)
         else:
-            die("Invalid output_type '{}'".format(output_type))
+            log.die("Invalid output_type '{}'".format(output_type))
 
         # Set select_all name
         self.module_select_all.name = output_module_name
@@ -585,7 +591,7 @@ class ModuleCreator:
                     self._write_detected_modules(f, args.output_type, args.output_module_name)
                     log.info("Module configuration written to '{}'".format(args.output))
             except IOError as e:
-                die(str(e))
+                log.die(str(e))
         else:
             self._write_detected_modules(sys.stdout, args.output_type, args.output_module_name)
 
@@ -627,9 +633,9 @@ def detect_modules(kconfig):
         return mod
 
     # Load the configuration database
-    config_db = Lkddb()
+    config_db = autokernel.lkddb.Lkddb()
     # Inspect the current system
-    detector = NodeDetector()
+    detector = autokernel.node_detector.NodeDetector()
 
     # Try to find detected nodes in the database
     log.info("Matching detected nodes against database")
@@ -662,11 +668,11 @@ def main_detect(args):
 
     # Assert that --check is not used together with --type
     if check_only and args.output_type:
-        die("--check and --type are mutually exclusive")
+        log.die("--check and --type are mutually exclusive")
 
     # Assert that --check is not used together with --output
     if check_only and args.output:
-        die("--check and --output are mutually exclusive")
+        log.die("--check and --output are mutually exclusive")
 
     # Determine the config file to check against, if applicable.
     if check_only:
@@ -674,7 +680,7 @@ def main_detect(args):
             log.info("Checking generated config against '{}'".format(args.check_config))
         else:
             if not has_proc_config_gz():
-                die("This kernel does not expose /proc/config.gz. Please provide the path to a valid config file manually.")
+                log.die("This kernel does not expose /proc/config.gz. Please provide the path to a valid config file manually.")
             log.info("Checking generated config against currently running kernel")
 
     # Load symbols from Kconfig
@@ -728,7 +734,7 @@ def main_deps(args):
     # Apply autokernel configuration only if we want our dependencies based on the current configuration
     if not args.dep_global:
         # Load configuration file
-        config = load_config(args.autokernel_config)
+        config = autokernel.config.load_config(args.autokernel_config)
         # Apply kernel config
         apply_autokernel_config(args.kernel_dir, kconfig, config)
 
@@ -872,7 +878,7 @@ def main():
     try:
         args = parser.parse_args()
     except ArgumentParserError as e:
-        die(str(e))
+        log.die(str(e))
 
     # Enable verbose logging if desired
     log.verbose_output = args.verbose
@@ -894,8 +900,8 @@ if __name__ == '__main__':
     try:
         main()
     except PermissionError as e:
-        die(str(e))
+        log.die(str(e))
     except Exception as e:
         import traceback
         traceback.print_exc()
-        die("Aborted because of previous errors")
+        log.die("Aborted because of previous errors")
