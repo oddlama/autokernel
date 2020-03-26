@@ -5,7 +5,7 @@ class WildcardTokenType:
     Do not use this class, instead use the wildcard_token instance!
     This is to provide a common toke to signal that "any value" is acceptable
     """
-    pass
+    pass # pylint: disable=unnecessary-pass
 
 # The wildcard token instance
 wildcard_token = WildcardTokenType()
@@ -29,11 +29,11 @@ class SubsystemNode:
         """
         Returns a string representation of this object
         """
-        str = '{}{{'.format(self.__class__.__name__)
-        str += ', '.join(['{}={}'.format(param, self._param_to_str(param)) \
+        s = '{}{{'.format(self.__class__.__name__)
+        s += ', '.join(['{}={}'.format(param, self._param_to_str(param)) \
                     for param in self.parameters])
-        str += '}'
-        return str
+        s += '}'
+        return s
 
     def get_canonical_name(self):
         """
@@ -42,11 +42,12 @@ class SubsystemNode:
         clsname = self.__class__.__name__
         if clsname.endswith('Node'):
             clsname = clsname[:-4]
-        str = '_'.join([clsname] + ['{}'.format(self._param_to_str(param)) \
+        s = '_'.join([clsname] + ['{}'.format(self._param_to_str(param)) \
                     for param in self.parameters])
-        return re.sub(r'[^a-zA-Z0-9_-]+', '', str).lower()
+        return re.sub(r'[^a-zA-Z0-9_-]+', '', s).lower()
 
     def _parse_parameter(self, param, p):
+        # pylint: disable=comparison-with-callable
         if p == wildcard_token:
             return p
 
@@ -57,6 +58,7 @@ class SubsystemNode:
             return int(p, 16)
 
     def _param_to_str(self, param):
+        # pylint: disable=comparison-with-callable
         p = getattr(self, param)
         ptype = self.parameters[param]
         if ptype == str:

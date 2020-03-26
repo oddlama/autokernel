@@ -4,11 +4,10 @@ import subprocess
 import os
 import re
 import kconfiglib
-from kconfiglib import expr_value, STR_TO_TRI, TRI_TO_STR
 
-from sympy import pretty, Symbol, true, false, Or, And, Not
-from sympy.logic.boolalg import to_cnf, simplify_logic
-from sympy.logic.inference import satisfiable
+import sympy
+import sympy.logic.boolalg
+import sympy.logic.inference
 
 
 def symbol_can_be_user_assigned(sym):
@@ -19,7 +18,7 @@ def symbol_can_be_user_assigned(sym):
     return False
 
 def value_to_str(value):
-    if value in STR_TO_TRI:
+    if value in kconfiglib.STR_TO_TRI:
         return '[{}]'.format(value)
     else:
         return "'{}'".format(value)
@@ -29,14 +28,14 @@ def tri_to_bool(tri):
     """
     Converts a tristate to a boolean value (['n'] -> False, ['m', 'y'] -> True)
     """
-    return tri != STR_TO_TRI['n']
+    return tri != kconfiglib.STR_TO_TRI['n']
 
 def expr_value_bool(expr):
     """
-    Evaluates the given expression using expr_value(expr) and converts
+    Evaluates the given expression using kconfiglib.expr_value(expr) and converts
     the result to a boolean value using tri_to_bool().
     """
-    return tri_to_bool(expr_value(expr))
+    return tri_to_bool(kconfiglib.expr_value(expr))
 
 def set_env_default(var, default_value):
     """
@@ -46,7 +45,7 @@ def set_env_default(var, default_value):
         os.environ[var] = default_value
 
 def detect_arch():
-    arch = subprocess.run(['uname', '-m'], stdout=subprocess.PIPE).stdout.decode().strip().splitlines()[0]
+    arch = subprocess.run(['uname', '-m'], check=True, stdout=subprocess.PIPE).stdout.decode().strip().splitlines()[0]
     arch = re.sub('i.86',      'x86',     arch)
     arch = re.sub('x86_64',    'x86',     arch)
     arch = re.sub('sun4u',     'sparc64', arch)
@@ -62,29 +61,31 @@ def detect_arch():
     return arch
 
 kernel_environment_variables_loaded = False
+kernel_arch = None
 kernel_version = None
-def load_environment_variables(dir):
+def load_environment_variables(kernel_dir):
     """
     Loads important environment variables from the given kernel source tree.
     """
-    global kernel_environment_variables_loaded
+    global kernel_environment_variables_loaded # pylint: disable=global-statement
     if kernel_environment_variables_loaded:
         return
 
-    log.info("Loading kernel environment variables for '{}'".format(dir))
+    log.info("Loading kernel environment variables for '{}'".format(kernel_dir))
 
-    arch = detect_arch()
-    log.info("Detected kernel ARCH: {}".format(arch))
-    set_env_default("ARCH", arch)
-    set_env_default("SRCARCH", arch)
+    global kernel_arch # pylint: disable=global-statement
+    kernel_arch = detect_arch()
+    log.info("Detected kernel_arch: {}".format(kernel_arch))
+    set_env_default("ARCH", kernel_arch)
+    set_env_default("SRCARCH", kernel_arch)
     set_env_default("CC", "gcc")
     set_env_default("HOSTCC", "gcc")
     set_env_default("HOSTCXX", "g++")
 
-    global kernel_version
-    kernel_version = subprocess.run(['make', 'kernelversion'], cwd=dir, stdout=subprocess.PIPE).stdout.decode().strip().splitlines()[0]
+    global kernel_version # pylint: disable=global-statement
+    kernel_version = subprocess.run(['make', 'kernelversion'], cwd=kernel_dir, check=True, stdout=subprocess.PIPE).stdout.decode().strip().splitlines()[0]
     os.environ["KERNELVERSION"] = kernel_version
-    os.environ["CC_VERSION_TEXT"] = subprocess.run(['gcc', '--version'], stdout=subprocess.PIPE).stdout.decode().strip().splitlines()[0]
+    os.environ["CC_VERSION_TEXT"] = subprocess.run(['gcc', '--version'], check=True, stdout=subprocess.PIPE).stdout.decode().strip().splitlines()[0]
 
     kernel_environment_variables_loaded = True
 
@@ -162,12 +163,12 @@ class Expr:
 
     def _add_symbol_if_nontrivial(self, sym, trivialize=True):
         if sym.__class__ is ExprSymbol and not symbol_can_be_user_assigned(sym.sym):
-            return true if expr_value(sym.sym) else false
+            return sympy.true if kconfiglib.expr_value(sym.sym) else sympy.false
 
         # If the symbol is aleady satisfied in the current config,
         # skip it.
         if trivialize and sym.is_satisfied():
-            return true
+            return sympy.true
 
         # Return existing symbol if possible
         for s, sympy_s in self.symbols:
@@ -177,7 +178,7 @@ class Expr:
 
         # Create new symbol
         i = len(self.symbols)
-        s = Symbol(str(i))
+        s = sympy.Symbol(str(i))
         self.symbols.append((sym, s))
         return s
 
@@ -188,7 +189,7 @@ class Expr:
         if expr.__class__ is not tuple:
             if expr.__class__ is kconfiglib.Symbol:
                 if expr.is_constant:
-                    return true if tri_to_bool(expr) else false
+                    return sympy.true if tri_to_bool(expr) else sympy.false
                 elif expr.type in [kconfiglib.BOOL, kconfiglib.TRISTATE]:
                     return add_sym(expr)
                 else:
@@ -201,16 +202,16 @@ class Expr:
         else:
             # If the expression is an operator, resolve the operator.
             if expr[0] is kconfiglib.AND:
-                return And(self._parse(expr[1]), self._parse(expr[2]))
+                return sympy.And(self._parse(expr[1]), self._parse(expr[2]))
             elif expr[0] is kconfiglib.OR:
-                return Or(self._parse(expr[1]), self._parse(expr[2]))
+                return sympy.Or(self._parse(expr[1]), self._parse(expr[2]))
             elif expr[0] is kconfiglib.NOT:
-                return Not(self._parse(expr[1], trivialize=False))
+                return sympy.Not(self._parse(expr[1], trivialize=False))
             elif expr[0] is kconfiglib.EQUAL and expr[2].is_constant:
                 if tri_to_bool(expr[2]):
                     return add_sym(expr[1], trivialize=False)
                 else:
-                    return Not(ExprSymbol(expr[1]))
+                    return sympy.Not(ExprSymbol(expr[1]))
             elif expr[0] in [kconfiglib.UNEQUAL, kconfiglib.LESS, kconfiglib.LESS_EQUAL, kconfiglib.GREATER, kconfiglib.GREATER_EQUAL]:
                 if expr[1].__class__ is tuple or expr[2].__class__ is tuple:
                     raise ValueError("Cannot compare expressions")
@@ -224,11 +225,10 @@ class Expr:
         return self.expr_ignore_sym
 
     def simplify(self):
-        self.expr = simplify_logic(self.expr)
-        #self.expr = simplify_logic(to_cnf(self.expr), form='cnf')
+        self.expr = sympy.logic.boolalg.simplify_logic(self.expr)
 
     def unsatisfied_deps(self):
-        configuration = satisfiable(self.expr)
+        configuration = sympy.logic.inference.satisfiable(self.expr)
         if not configuration:
             return False
 
@@ -253,11 +253,11 @@ def required_deps(sym):
     if unsat_deps is False:
         return False
 
-    for k, s, v in unsat_deps:
+    for _, s, v in unsat_deps:
         if s.__class__ is ExprIgnore:
             pass
         elif s.__class__ is ExprSymbol:
             deps.append((s.sym, v))
         else:
-            raise Exception("Cannot automatically satisfy inequality: '{}'".format(s))
+            raise ValueError("Cannot automatically satisfy inequality: '{}'".format(s))
     return deps

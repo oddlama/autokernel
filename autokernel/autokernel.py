@@ -14,9 +14,7 @@ import subprocess
 import sys
 import tempfile
 import kconfiglib
-from kconfiglib import STR_TO_TRI, TRI_TO_STR
 from datetime import datetime, timezone
-from pathlib import Path
 
 
 # Monkeypatch Symbol.set_value, and Symbol._invalidate to detect conflicting changes.
@@ -27,7 +25,7 @@ symbol_changes = {}
 symbols_invalidated = {}
 
 saved_set_value = kconfiglib.Symbol.set_value
-saved_invalidate = kconfiglib.Symbol._invalidate
+saved_invalidate = kconfiglib.Symbol._invalidate # pylint: disable=protected-access
 
 def register_symbol_change(symbol, new_value, inducing_change):
     if symbol == inducing_change[0]:
@@ -85,11 +83,11 @@ def monkey_invalidate(sym):
     return saved_invalidate(sym)
 
 kconfiglib.Symbol.set_value = set_value_proxy_detect_conflicts
-kconfiglib.Symbol._invalidate = monkey_invalidate
+kconfiglib.Symbol._invalidate = monkey_invalidate # pylint: disable=protected-access
 
 def set_value_detect_conflicts(sym, value, hint_name):
     # Remember which symbol caused a chain of changes
-    global symbol_change_hint
+    global symbol_change_hint # pylint: disable=global-statement
     symbol_change_hint = hint_name
     ret = sym.set_value(value)
     symbol_change_hint = None
@@ -152,7 +150,7 @@ def apply_autokernel_config(kernel_dir, kconfig, config):
         # Get the kconfig symbol, and change the value
         try:
             sym = kconfig.syms[symbol]
-        except KeyError as e:
+        except KeyError:
             log.die("Referenced symbol '{}' does not exist".format(symbol))
 
         if not set_value_detect_conflicts(sym, value, 'module ' + hint_name):
@@ -271,13 +269,15 @@ def build_kernel(args, config, pass_id):
         raise ValueError("pass_id has an invalid value '{}'".format(pass_id))
 
     # TODO cleaning capabilities?
-    if subprocess.run(['make'], cwd=args.kernel_dir).returncode != 0:
-        log.die("make failed in {}".format(args.kernel_dir))
+    try:
+        subprocess.run(['make'], cwd=args.kernel_dir, check=True)
+    except subprocess.CalledProcessError as e:
+        log.die("make failed in {} with code {}".format(args.kernel_dir, e.returncode))
 
 def build_initramfs(args, config):
     log.info("Building initramfs")
 
-    print("subprocess.run(['genkernel'], cwd={})".format(args.kernel_dir))
+    print("subprocess.run(['genkernel'], cwd={}), config={}".format(args.kernel_dir, config))
 
 def main_build(args, config=None):
     """
@@ -303,11 +303,14 @@ def main_build(args, config=None):
 def install_kernel(args, config):
     log.info("Installing kernel")
 
+    print(args.kernel_dir)
     print(str(config.install.target_dir))
     print(str(config.install.target).replace('$KERNEL_VERSION', autokernel.kconfig.kernel_version))
 
 def install_initramfs(args, config):
     log.info("Installing initramfs")
+    print(args.kernel_dir)
+    print(config.install.target_dir)
 
 def main_install(args, config=None):
     """
@@ -323,8 +326,10 @@ def main_install(args, config=None):
             log.die("Permission denied on accessing '{}'. Aborting.".format(i))
 
         if not os.path.ismount(i):
-            if subprocess.run(['mount', '--', i]).returncode != 0:
-                log.die("Could not mount '{}'. Aborting.".format(i))
+            try:
+                subprocess.run(['mount', '--', i], check=True)
+            except subprocess.CalledProcessError as e:
+                log.die("Could not mount '{}', mount returned code {}. Aborting.".format(i, e.returncode))
 
     # Check mounts
     for i in config.install.mount + config.install.assert_mounted:
@@ -384,9 +389,9 @@ def check_config_against_detected_modules(kconfig, modules):
         visited_opts.add(opt)
 
         sym = kconfig.syms[opt]
-        if v in STR_TO_TRI:
+        if v in kconfiglib.STR_TO_TRI:
             sym_v = sym.tri_value
-            tri_v = STR_TO_TRI[v]
+            tri_v = kconfiglib.STR_TO_TRI[v]
 
             if tri_v == sym_v:
                 # Match
@@ -399,7 +404,7 @@ def check_config_against_detected_modules(kconfig, modules):
                 v_color = color['n']
 
             # Print option value
-            print("[{}{}[m] {} = {}".format(v_color, TRI_TO_STR[sym_v], sym.name, v))
+            print("[{}{}[m] {} = {}".format(v_color, kconfiglib.TRI_TO_STR[sym_v], sym.name, v))
         else:
             # Print option assignment
             print("{} = {}{}[m".format(sym.name, color['y'] if sym.str_value == v else color['n'], sym.str_value))
@@ -500,7 +505,7 @@ class ModuleCreator:
         mod = Module(self.module_prefix + "config_{}".format(sym.name.lower()))
 
         # Find dependencies if needed
-        needs_deps = not autokernel.kconfig.expr_value(sym.direct_dep)
+        needs_deps = not kconfiglib.expr_value(sym.direct_dep)
         if needs_deps:
             req_deps = autokernel.kconfig.required_deps(sym)
             if req_deps is False:
@@ -885,7 +890,7 @@ def main():
     log.quiet_output = args.quiet
 
     # Load and set all necessary environment variables
-    autokernel.kconfig.load_environment_variables(dir=args.kernel_dir)
+    autokernel.kconfig.load_environment_variables(args.kernel_dir)
 
     # Fallback to main_build_all() if no mode is given
     if 'func' not in args:
@@ -894,14 +899,14 @@ def main():
         # Execute the mode's function
         args.func(args)
 
-    # TODO umask (probably better as external advice, use umask then execute this.)
+    # TODO umask (probably better as external advice, ala "use umask then execute this".)
 
 if __name__ == '__main__':
     try:
         main()
     except PermissionError as e:
         log.die(str(e))
-    except Exception as e:
+    except Exception as e: # pylint: disable=broad-except
         import traceback
         traceback.print_exc()
         log.die("Aborted because of previous errors")

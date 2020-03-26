@@ -1,5 +1,6 @@
 from . import log
 from .subsystem import Subsystem, wildcard_token
+from . import kconfig as atk_kconfig
 
 import os
 import bz2
@@ -168,12 +169,11 @@ class Lkddb:
     """
 
     lkddb_url = 'https://cateee.net/sources/lkddb/lkddb.list.bz2'
-    # TODO cache file?
     lkddb_file = '/tmp/lkddb.list.bz2'
     lkddb_line_regex = re.compile('^(?P<lkddb_subsystem>[a-zA-Z0-9_-]*) (?P<arguments>.*) : (?P<config_options>[^:]*) : (?P<source>[^:]*)$')
 
     # Wildcards either only dots (.) or empty arguments
-    wildcard_regex = re.compile('^(\.+|)$')
+    wildcard_regex = re.compile(r'^(\.+|)$')
     entry_types = {
             'acpi':      AcpiParser(),
             'fs':        FsParser(),
@@ -247,7 +247,7 @@ class Lkddb:
         Downloads the newest lkddb file.
         """
 
-        # TODO only when upstream version is newer
+        # TODO renew
         if not os.path.exists(self.lkddb_file):
             log.info("Downloading lkddb database")
             urllib.request.urlretrieve(self.lkddb_url, self.lkddb_file)
@@ -278,7 +278,7 @@ class Lkddb:
             return False
 
         try:
-            subsystem, data_list, entry_data = self._parse_entry(line, line_nr)
+            subsystem, data_list, entry_data = self._parse_entry(line)
             if not subsystem:
                 return False
 
@@ -291,7 +291,7 @@ class Lkddb:
         except UnkownLkddbSubsystemException:
             pass
 
-    def _parse_entry(self, line, line_nr):
+    def _parse_entry(self, line):
         # Match regex
         m = Lkddb.lkddb_line_regex.match(line)
         if not m:
@@ -304,8 +304,7 @@ class Lkddb:
         source = m.group('source')
 
         if source.startswith('arch/'):
-            # TODO dont hardcode. use arch config from somewhere.....
-            if not source.startswith('arch/x86/'):
+            if not source.startswith('arch/{}/'.format(atk_kconfig.kernel_arch)):
                 # We skip entries that do not match our architecture
                 return None, None, None
 

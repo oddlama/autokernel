@@ -3,9 +3,7 @@ import sys
 import re
 import lark
 import lark.exceptions
-from sympy import pretty as sympy_pretty, Symbol, true, false, Not, Or, And
-from sympy.logic.boolalg import to_cnf, simplify_logic
-from sympy.logic.inference import satisfiable
+import sympy
 
 from . import log
 from . import kconfig as atk_kconfig
@@ -24,7 +22,7 @@ def get_lark_parser():
     """
     Returns the lark parser for config files
     """
-    global _lark
+    global _lark # pylint: disable=global-statement
     if _lark is None:
         with open(os.path.join(os.path.dirname(__file__), '../config.lark'), 'r') as f:
             _lark = lark.Lark(f.read(), propagate_positions=True, start='blck_root')
@@ -255,7 +253,7 @@ class Condition:
         def get_sym(sym_name):
             try:
                 sym = kconfig.syms[sym_name]
-            except KeyError as e:
+            except KeyError:
                 log.die("Referenced symbol '{}' does not exist".format(sym_name))
 
             # If the symbol hadn't been encountered before, pin the current value
@@ -324,24 +322,24 @@ class Condition:
 
 def parse_expr(tree):
     if tree.data == 'expr':
-        return Or(*[parse_expr(c) for c in tree.children if c.__class__ == lark.Tree and c.data == 'expr_term'])
+        return sympy.Or(*[parse_expr(c) for c in tree.children if c.__class__ == lark.Tree and c.data == 'expr_term'])
     if tree.data == 'expr_term':
-        return And(*[parse_expr(c) for c in tree.children if c.__class__ == lark.Tree and c.data == 'expr_factor'])
+        return sympy.And(*[parse_expr(c) for c in tree.children if c.__class__ == lark.Tree and c.data == 'expr_factor'])
     elif tree.data == 'expr_factor':
         negated = find_first_child(tree, 'expr_op_neg') is not None
         def negate_if_needed(s):
-            return Not(s) if negated else s
+            return sympy.Not(s) if negated else s
 
         expr_cmp = find_first_child(tree, 'expr_cmp')
         if expr_cmp:
             lhs, lhs_quoted = find_named_token_raw(expr_cmp, 'expr_lhs')
             rhs, rhs_quoted = find_named_token_raw(expr_cmp, 'expr_rhs')
             operation = find_first_child(expr_cmp, 'expr_op_cmp').children[0].type
-            return negate_if_needed(Symbol("{}{}\001{}\001{}{}".format('1' if lhs_quoted else '0', lhs, operation, '1' if rhs_quoted else '0', rhs)))
+            return negate_if_needed(sympy.Symbol("{}{}\001{}\001{}{}".format('1' if lhs_quoted else '0', lhs, operation, '1' if rhs_quoted else '0', rhs)))
 
         expr_id = find_first_child(tree, 'expr_id')
         if expr_id:
-            return negate_if_needed(Symbol(str(expr_id.children[0])))
+            return negate_if_needed(sympy.Symbol(str(expr_id.children[0])))
 
         expr = find_first_child(tree, 'expr')
         if expr:
@@ -361,14 +359,14 @@ def find_conditions(tree, name='expr'):
     """
     Returns all conditions in the direct subtree.
     """
-    return [parse_expr(expr) for expr in find_subtrees(tree, 'expr')]
+    return [parse_expr(expr) for expr in find_subtrees(tree, name)]
 
 def find_condition(tree, ignore_missing=True):
     conditions = find_conditions(tree)
 
     if len(conditions) == 0:
         if ignore_missing:
-            return true
+            return sympy.true
         else:
             raise ConfigParsingException(tree.meta, "Missing expression")
 
@@ -378,22 +376,24 @@ def find_condition(tree, ignore_missing=True):
     raise ConfigParsingException(tree.meta, "Expected exactly one expression, but got {}".format(len(conditions)))
 
 class BlockNode:
-    node_name = None
-
     """
     A base class for blocks to help with tree parsing.
     """
+
+    node_name = None
+    first_definition = None # Will be overwritten
+
     def parse_context(self, ctxt):
         """
         Called to parse the related context
         """
-        pass
+        pass # pylint: disable=unnecessary-pass
 
     def parse_block_params(self, blck, *args, **kwargs):
         """
         Called to parse additional block parameters
         """
-        pass
+        pass # pylint: disable=unnecessary-pass
 
     def parse_tree(self, tree, *args, **kwargs):
         """
@@ -451,13 +451,13 @@ class ConfigModule(BlockNode):
         self.assignments = []
         self.all_statements_in_order = []
 
-    def parse_block_params(self, blck):
+    def parse_block_params(self, blck): # pylint: disable=arguments-differ
         def module_name(tree):
             self.name = find_token(tree, 'IDENTIFIER')
 
         apply_tree_nodes(blck.children, [module_name], ignore_additional=True)
 
-    def parse_context(self, ctxt, precondition=true):
+    def parse_context(self, ctxt, precondition=sympy.true): # pylint: disable=arguments-differ
         def stmt_module_if(tree):
             conditions = find_conditions(tree)
             subcontexts = find_subtrees(tree, 'ctxt_module')
@@ -466,7 +466,7 @@ class ConfigModule(BlockNode):
 
             previous_conditions = []
             def negate_previous():
-                return Not(Or(*previous_conditions))
+                return sympy.Not(sympy.Or(*previous_conditions))
 
             for c, s in zip(conditions, subcontexts):
                 # The condition for an else if block is the combined negation of all previous conditions,
@@ -639,7 +639,7 @@ class Config(BlockNode):
         self.build = ConfigBuild()
         self._include_module_files = set()
 
-    def parse_context(self, ctxt, restrict_to_modules=False):
+    def parse_context(self, ctxt, restrict_to_modules=False): # pylint: disable=arguments-differ
         def _include_module_file(tree, filename):
             rpath = os.path.realpath(filename)
             if rpath in self._include_module_files:
@@ -680,12 +680,12 @@ class Config(BlockNode):
         def blck_build(tree):
             self.build.parse_tree(tree)
         def stmt_root_include_module_dir(tree):
-            dir = os.path.join(os.path.dirname(currently_parsed_filenames[-1]), find_named_token(tree, 'path'))
-            if os.path.isdir(dir):
-                for filename in os.listdir(dir):
-                    _include_module_file(tree, os.path.join(dir, filename))
+            include_dir = os.path.join(os.path.dirname(currently_parsed_filenames[-1]), find_named_token(tree, 'path'))
+            if os.path.isdir(include_dir):
+                for filename in os.listdir(include_dir):
+                    _include_module_file(tree, os.path.join(include_dir, filename))
             else:
-                raise ConfigParsingException(tree.meta, "'{}' is not a directory".format(dir))
+                raise ConfigParsingException(tree.meta, "'{}' is not a directory".format(include_dir))
         def stmt_root_include_module(tree):
             filename = os.path.join(os.path.dirname(currently_parsed_filenames[-1]), find_named_token(tree, 'path'))
             _include_module_file(tree, filename)
@@ -734,7 +734,7 @@ def load_config_tree(config_file):
     with open(config_file, 'r') as f:
         try:
             return larkparser.parse(f.read())
-        except lark.exceptions.UnexpectedInput as e:
+        except (lark.exceptions.UnexpectedCharacters, lark.exceptions.UnexpectedToken) as e:
             print_error_in_file(config_file, str(e).splitlines()[0], e.line, (e.column, e.column))
             sys.exit(1)
 
