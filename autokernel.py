@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
-from autokernel.kconfig import *
+import autokernel.kconfig
+#from autokernel.kconfig import *
+#from autokernel.kconfig import *
 from autokernel.node_detector import NodeDetector
 from autokernel.lkddb import Lkddb
 from autokernel.config import load_config, ConfigModule
@@ -169,7 +171,7 @@ def apply_autokernel_config(kernel_dir, kconfig, config):
             visit(stmt.module)
 
         def stmt_merge(stmt):
-            filename = stmt.filename.replace('{KERNEL_DIR}', kernel_dir)
+            filename = stmt.filename.replace('$KERNEL_DIR', kernel_dir)
             log.verbose("Merging external kconf '{}'".format(filename))
             kconfig.load_config(filename, replace=False)
 
@@ -210,12 +212,12 @@ def main_check_config(args):
     config = load_config(args.autokernel_config)
 
     # Load symbols from Kconfig
-    kconfig_gen = load_kconfig(args.kernel_dir)
+    kconfig_gen = autokernel.kconfig.load_kconfig(args.kernel_dir)
     # Apply autokernel configuration
     apply_autokernel_config(args.kernel_dir, kconfig_gen, config)
 
     # Load symbols from Kconfig
-    kconfig_cmp = load_kconfig(args.kernel_dir)
+    kconfig_cmp = autokernel.kconfig.load_kconfig(args.kernel_dir)
     # Load the given config file or the current kernel's config
     kconfig_load_file_or_current_config(kconfig_cmp, args.compare_config)
 
@@ -240,7 +242,7 @@ def main_generate_config(args, config=None):
         args.output = os.path.join(args.kernel_dir, '.config')
 
     # Load symbols from Kconfig
-    kconfig = load_kconfig(args.kernel_dir)
+    kconfig = autokernel.kconfig.load_kconfig(args.kernel_dir)
     # Apply autokernel configuration
     apply_autokernel_config(args.kernel_dir, kconfig, config)
 
@@ -294,7 +296,7 @@ def install_kernel(args, config):
     log.info("Installing kernel")
 
     print(str(config.install.target_dir))
-    print(str(config.install.target).replace('{KV}', 'KERNELVERSION'))
+    print(str(config.install.target).replace('$KERNEL_VERSION', kernel_version))
 
 def install_initramfs(args, config):
     log.info("Installing initramfs")
@@ -676,7 +678,7 @@ def main_detect(args):
             log.info("Checking generated config against currently running kernel")
 
     # Load symbols from Kconfig
-    kconfig = load_kconfig(args.kernel_dir)
+    kconfig = autokernel.kconfig.load_kconfig(args.kernel_dir)
     # Detect system nodes and create modules
     module_creator = detect_modules(kconfig)
 
@@ -702,7 +704,7 @@ def main_info(args):
     Main function for the 'info' command.
     """
     # Load symbols from Kconfig
-    kconfig = load_kconfig(args.kernel_dir)
+    kconfig = autokernel.kconfig.load_kconfig(args.kernel_dir)
 
     for config_symbol in args.config_symbols:
         # Get symbol
@@ -721,7 +723,7 @@ def main_deps(args):
     Main function for the 'deps' command.
     """
     # Load symbols from Kconfig
-    kconfig = load_kconfig(args.kernel_dir)
+    kconfig = autokernel.kconfig.load_kconfig(args.kernel_dir)
 
     # Apply autokernel configuration only if we want our dependencies based on the current configuration
     if not args.dep_global:
@@ -875,6 +877,9 @@ def main():
     # Enable verbose logging if desired
     log.verbose_output = args.verbose
     log.quiet_output = args.quiet
+
+    # Load and set all necessary environment variables
+    autokernel.kconfig.load_environment_variables(dir=args.kernel_dir)
 
     # Fallback to main_build_all() if no mode is given
     if 'func' not in args:

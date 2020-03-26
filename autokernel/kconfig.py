@@ -63,6 +63,7 @@ def detect_arch():
     return arch
 
 kernel_environment_variables_loaded = False
+kernel_version = None
 def load_environment_variables(dir):
     """
     Loads important environment variables from the given kernel source tree.
@@ -81,7 +82,9 @@ def load_environment_variables(dir):
     set_env_default("HOSTCC", "gcc")
     set_env_default("HOSTCXX", "g++")
 
-    os.environ["KERNELVERSION"] = subprocess.run(['make', 'kernelversion'], cwd=dir, stdout=subprocess.PIPE).stdout.decode().strip().splitlines()[0]
+    global kernel_version
+    kernel_version = subprocess.run(['make', 'kernelversion'], cwd=dir, stdout=subprocess.PIPE).stdout.decode().strip().splitlines()[0]
+    os.environ["KERNELVERSION"] = kernel_version
     os.environ["CC_VERSION_TEXT"] = subprocess.run(['gcc', '--version'], stdout=subprocess.PIPE).stdout.decode().strip().splitlines()[0]
 
     kernel_environment_variables_loaded = True
@@ -90,8 +93,6 @@ def load_kconfig(kernel_dir):
     kconfig_file = os.path.join(kernel_dir, "Kconfig")
     if not os.path.isfile(kconfig_file):
         raise ValueError("'{}' must point to a valid Kconfig file!".format(kconfig_file))
-
-    load_environment_variables(dir=kernel_dir)
 
     log.info("Loading '{}'".format(kconfig_file))
     os.environ['srctree'] = kernel_dir

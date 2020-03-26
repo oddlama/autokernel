@@ -29,7 +29,7 @@ expr_op_cmp: EXPR_CMP_GE
            | EXPR_CMP_NEQ
            | EXPR_CMP_EQ
 
-EXPR_STRING: /[_a-zA-Z0-9]+/
+EXPR_STRING: /[\$_a-zA-Z0-9.,-]+/
 expr_string: ESCAPED_STRING -> string_quoted
            | EXPR_STRING    -> string
 expr_lhs: expr_string

@@ -1,12 +1,17 @@
 import os
 import sys
-from . import log
-from .kconfig import tri_to_bool
+import re
 import lark
 import lark.exceptions
 from sympy import pretty as sympy_pretty, Symbol, true, false, Not, Or, And
 from sympy.logic.boolalg import to_cnf, simplify_logic
 from sympy.logic.inference import satisfiable
+
+from . import log
+from . import kconfig as atk_kconfig
+
+kernel_option_regex = re.compile('^[_A-Z0-9]+$')
+
 
 class ConfigParsingException(Exception):
     def __init__(self, meta, message):
@@ -188,6 +193,54 @@ class UniqueProperty:
     def __str__(self):
         return self.__get__()
 
+special_var_cmp_mode = {
+    '$KERNEL_VERSION': 'semver'
+}
+
+def get_special_var_cmp_mode(var):
+    if var not in special_var_cmp_mode:
+        log.die("Unknown special variable '{}'".format(var))
+    return special_var_cmp_mode[var]
+
+def resolve_special_variable(var):
+    if var == '$KERNEL_VERSION':
+        return atk_kconfig.kernel_version
+    else:
+        log.die("Unknown special variable '{}'".format(var))
+
+def semver_to_int(ver):
+    t = ver.split('.')
+    if len(t) < 3:
+        t.extend([0] * (3 - len(t)))
+    elif len(t) > 3:
+        raise ValueError("Invalid semver '{}'".format(ver))
+
+    return int(t[0]) << 64 + int(t[1]) << 32 + int(t[2])
+
+def compare_variables(lhs, rhs, op, cmp_mode):
+    if cmp_mode == 'string':
+        if op not in ['EXPR_CMP_NEQ', 'EXPR_CMP_EQ']:
+            log.die("Invalid comparison '{}' between '{}' and '{}' (type 'string')".format(op, lhs, rhs))
+    elif cmp_mode == 'int':
+        lhs = int(lhs)
+        rhs = int(rhs)
+    elif cmp_mode == 'semver':
+        lhs = semver_to_int(lhs)
+        rhs = semver_to_int(rhs)
+
+    if op == 'EXPR_CMP_GE':
+        return lhs > rhs
+    elif op == 'EXPR_CMP_GEQ':
+        return lhs >= rhs
+    elif op == 'EXPR_CMP_LE':
+        return lhs < rhs
+    elif op == 'EXPR_CMP_LEQ':
+        return lhs <= rhs
+    elif op == 'EXPR_CMP_NEQ':
+        return lhs != rhs
+    elif op == 'EXPR_CMP_EQ':
+        return lhs == rhs
+
 class Condition:
     def __init__(self, sympy_expr):
         self.expr = sympy_expr
@@ -215,33 +268,58 @@ class Condition:
         for s in self.expr.free_symbols:
             if s.name.count('\001') == 2:
                 lhs, op, rhs = s.name.split('\001')
-                lhs_quoted = lhs[0]
-                lhs = lhs[1:]
-                rhs_quoted = rhs[0]
-                rhs = rhs[1:]
+                if op not in ['EXPR_CMP_GE', 'EXPR_CMP_GEQ', 'EXPR_CMP_LE', 'EXPR_CMP_LEQ', 'EXPR_CMP_NEQ', 'EXPR_CMP_EQ']:
+                    log.die("Invalid comparison op '{}'. This is a bug.".format(op))
 
-                if lhs_quoted:
-                    lhs = get_sym(lhs).str_value
-                if rhs_quoted:
-                    rhs = get_sym(rhs).str_value
+                def resolve_var(var):
+                    var_quoted = var[0] == "1"
+                    var = var[1:]
 
-                if op == 'EXPR_CMP_GE':
-                    value = int(lhs) > int(rhs)
-                elif op == 'EXPR_CMP_GEQ':
-                    value = int(lhs) >= int(rhs)
-                elif op == 'EXPR_CMP_LE':
-                    value = int(lhs) < int(rhs)
-                elif op == 'EXPR_CMP_LEQ':
-                    value = int(lhs) <= int(rhs)
-                elif op == 'EXPR_CMP_NEQ':
-                    value = lhs != rhs
-                elif op == 'EXPR_CMP_EQ':
-                    value = lhs == rhs
+                    # Remember if var were special variables
+                    var_special = var.startswith('$')
+
+                    # Resolve symbols
+                    var_is_sym = not var_quoted and not var_special and kernel_option_regex.match(var)
+                    if var_is_sym:
+                        var = get_sym(var).str_value
+
+                    # Find cmp mode and replace variable if it is special
+                    var_cmp_mode = None
+                    if var_special:
+                        var_cmp_mode = get_special_var_cmp_mode(var)
+                        var = resolve_special_variable(var)
+
+                    return (var, var_quoted, var_special, var_is_sym, var_cmp_mode)
+
+                lhs, lhs_quoted, lhs_special, lhs_is_sym, lhs_cmp_mode = resolve_var(lhs)
+                rhs, rhs_quoted, rhs_special, rhs_is_sym, rhs_cmp_mode = resolve_var(rhs)
+
+                # Find out final comparison mode
+                if lhs_special or rhs_special:
+                    # If both were special, we have to assert they resolved to the same cmp mode
+                    if lhs_cmp_mode and rhs_cmp_mode:
+                        if lhs_cmp_mode != rhs_cmp_mode:
+                            log.die("Cannot compare special symbols of different type {} (type {}) to {} (type {})".format(lhs, lhs_cmp_mode, rhs, rhs_cmp_mode))
+                        cmp_mode = lhs_cmp_mode
+                    else:
+                        # One of the variables wasn't special, so we can use the one deduced comparison mode
+                        cmp_mode = lhs_cmp_mode or rhs_cmp_mode
                 else:
-                    raise Exception("Invalid comparison op '{}'. This is a bug.".format(op))
-                subs[s.name] = value
+                    # If both variables are not special, we have to find the comparison mode
+                    # based on if the arguments are quoted. If both are symbols, we use
+                    # string comparison. If either is not a symbol, we do string comparison if
+                    # the argument is quoted and integer comparison otherwise.
+                    if lhs_is_sym and rhs_is_sym:
+                        cmp_mode = 'string'
+                    else:
+                        if lhs_quoted or rhs_quoted:
+                            cmp_mode = 'string'
+                        else:
+                            cmp_mode = 'int'
+
+                subs[s.name] = compare_variables(lhs, rhs, op, cmp_mode)
             else:
-                subs[s.name] = tri_to_bool(get_sym(s.name).tri_value)
+                subs[s.name] = atk_kconfig.tri_to_bool(get_sym(s.name).tri_value)
         return self.expr.subs(subs)
 
 def parse_expr(tree):
