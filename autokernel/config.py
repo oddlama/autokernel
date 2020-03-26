@@ -207,7 +207,7 @@ def resolve_special_variable(var):
         log.die("Unknown special variable '{}'".format(var))
 
 def semver_to_int(ver):
-    t = ver.split('.')
+    t = ver.split('-')[0].split('.')
     if len(t) < 3:
         t.extend([0] * (3 - len(t)))
     elif len(t) > 3:
