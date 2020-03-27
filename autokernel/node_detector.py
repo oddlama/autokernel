@@ -29,9 +29,8 @@ class Node:
     def log_nodes(cls, nodes):
         # Log all nodes, if we are in verbose mode
         log.info("  {:3d} {} nodes".format(len(nodes), cls.node_type))
-        if log.verbose_output:
-            for n in nodes:
-                log.verbose(" - {}".format(n))
+        for n in nodes:
+            log.verbose(" - {}".format(n))
 
     def __str__(self):
         """

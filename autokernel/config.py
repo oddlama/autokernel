@@ -9,14 +9,13 @@ from . import log
 from . import kconfig as atk_kconfig
 
 kernel_option_regex = re.compile('^[_A-Z0-9]+$')
-
+currently_parsed_filenames = []
 
 class ConfigParsingException(Exception):
     def __init__(self, meta, message):
         super().__init__(message)
         self.meta = meta
 
-currently_parsed_filenames = []
 _lark = None
 def get_lark_parser():
     """
@@ -45,6 +44,45 @@ def parse_bool(tree, s):
 
 def redefinition_exception(tree, name):
     return ConfigParsingException(tree.meta, "Duplicate definition of {}".format(name))
+
+def print_line_with_highlight(line, line_nr, highlight):
+    tabs_before = line[:highlight[0]-1].count('\t')
+    tabs_in_highlight = line[highlight[0]-1:highlight[1]-2].count('\t')
+    print("{:5d} | {}".format(line_nr, line[:-1].replace('\t', '    ')))
+    print("      | {}".format(" " * ((highlight[0] - 1) + tabs_before * 3) + log.color("[1;31m") + "^" + "~" * ((highlight[1] - highlight[0] - 1) + tabs_in_highlight * 3) + log.color_reset))
+
+def msg_warn(msg):
+  return log.color("[1;33m") + "warning:" + log.color_reset + " " + msg
+
+def msg_error(msg):
+  return log.color("[1;31m") + "error:" + log.color_reset + " " + msg
+
+def print_message_with_file_location(file, message, line, column_range):
+    print((log.color("[1m") + "{}:{}:{}:" + log.color_reset + " {}").format(
+        file, line, column_range[0], message), file=sys.stderr)
+    with open(file, 'r') as f:
+        line_str = f.readlines()[line - 1]
+        print_line_with_highlight(line_str, line, highlight=column_range)
+
+def print_message_at(definition, msg):
+    meta, file = definition
+    if meta.line == meta.end_line:
+        print_message_with_file_location(file, msg, meta.line, (meta.column, meta.end_column))
+    else:
+        print_message_with_file_location(file, msg, meta.line, (meta.column, meta.column + 1))
+
+def print_warn_at(definition, msg):
+    print_message_at(definition, msg_warn(msg))
+
+def print_error_at(definition, msg):
+    print_message_at(definition, msg_error(msg))
+
+def die_print_error_at(definition, msg):
+    print_error_at(definition, msg)
+    sys.exit(1)
+
+def die_print_parsing_exception(file, e):
+    die_print_error_at((e.meta, file), str(e))
 
 def apply_tree_nodes(nodes, callbacks, on_additional=None, ignore_additional=False):
     """
@@ -420,25 +458,33 @@ class BlockNode:
 
         self.parse_context(ctxt, *args, **kwargs)
 
+class Stmt:
+    def __init__(self, tree):
+        self.at = (tree.meta, currently_parsed_filenames[-1])
+
 class ConfigModule(BlockNode):
     node_name = 'module'
 
-    class StmtUse:
-        def __init__(self, cond, module_name):
+    class StmtUse(Stmt):
+        def __init__(self, tree, cond, module_name):
+            super().__init__(tree)
             self.condition = cond
             self.module_name = module_name
             self.module = None
-    class StmtMerge:
-        def __init__(self, cond, filename):
+    class StmtMerge(Stmt):
+        def __init__(self, tree, cond, filename):
+            super().__init__(tree)
             self.condition = cond
             self.filename = filename
-    class StmtAssert:
-        def __init__(self, cond, sym_name, value):
+    class StmtAssert(Stmt):
+        def __init__(self, tree, cond, sym_name, value):
+            super().__init__(tree)
             self.condition = cond
             self.sym_name = sym_name
             self.value = value
-    class StmtSet:
-        def __init__(self, cond, sym_name, value):
+    class StmtSet(Stmt):
+        def __init__(self, tree, cond, sym_name, value):
+            super().__init__(tree)
             self.condition = cond
             self.sym_name = sym_name
             self.value = value
@@ -482,26 +528,26 @@ class ConfigModule(BlockNode):
 
         def stmt_module_use(tree):
             cond = Condition(precondition & find_condition(tree))
-            new_uses = [ConfigModule.StmtUse(cond, i) for i in find_all_tokens(tree, 'IDENTIFIER')]
+            new_uses = [ConfigModule.StmtUse(tree, cond, i) for i in find_all_tokens(tree, 'IDENTIFIER')]
             self.uses.extend(new_uses)
             self.all_statements_in_order.extend(new_uses)
         def stmt_module_merge(tree):
             cond = Condition(precondition & find_condition(tree))
-            stmt = ConfigModule.StmtMerge(cond, find_named_token(tree, 'path'))
+            stmt = ConfigModule.StmtMerge(tree, cond, find_named_token(tree, 'path'))
             self.merge_kconf_files.append(stmt)
             self.all_statements_in_order.append(stmt)
         def stmt_module_assert(tree):
             cond = Condition(precondition & find_condition(tree))
             key = find_token(tree, 'KERNEL_OPTION')
             value = find_named_token(tree, 'kernel_option_value', ignore_missing=True) or 'y'
-            stmt = ConfigModule.StmtAssert(cond, key, value)
+            stmt = ConfigModule.StmtAssert(tree, cond, key, value)
             self.assertions.append(stmt)
             self.all_statements_in_order.append(stmt)
         def stmt_module_set(tree):
             cond = Condition(precondition & find_condition(tree))
             key = find_token(tree, 'KERNEL_OPTION')
             value = find_named_token(tree, 'kernel_option_value', ignore_missing=True) or 'y'
-            stmt = ConfigModule.StmtSet(cond, key, value)
+            stmt = ConfigModule.StmtSet(tree, cond, key, value)
             self.assignments.append(stmt)
             self.all_statements_in_order.append(stmt)
 
@@ -659,8 +705,7 @@ class Config(BlockNode):
                     self.parse_tree(subtree, restrict_to_modules=True)
                     currently_parsed_filenames.pop()
                 except ConfigParsingException as e:
-                    print_parsing_exception(filename, e)
-                    sys.exit(1)
+                    die_print_parsing_exception(filename, e)
             else:
                 raise ConfigParsingException(tree.meta, "'{}' does not exist or is not a file.".format(filename))
 
@@ -708,24 +753,6 @@ class Config(BlockNode):
                     stmt_root_include_module,
                 ])
 
-def print_line_with_highlight(line, line_nr, highlight):
-    tabs_before = line[:highlight[0]-1].count('\t')
-    tabs_in_highlight = line[highlight[0]-1:highlight[1]-2].count('\t')
-    print("{:5d} | {}".format(line_nr, line[:-1].replace('\t', '    ')))
-    print("      | {}".format(" " * ((highlight[0] - 1) + tabs_before * 3) + "[1;31m^" + "~" * ((highlight[1] - highlight[0] - 1) + tabs_in_highlight * 3) + "[m"))
-
-def print_error_in_file(file, message, line, column_range):
-    print("[1m{}:{}:{}:[m [1;31merror:[m {}".format(file, line, column_range[0], message), file=sys.stderr)
-    with open(file, 'r') as f:
-        line_str = f.readlines()[line - 1]
-        print_line_with_highlight(line_str, line, highlight=column_range)
-
-def print_parsing_exception(file, e):
-    if e.meta.line == e.meta.end_line:
-        print_error_in_file(file, str(e), e.meta.line, (e.meta.column, e.meta.end_column))
-    else:
-        print_error_in_file(file, str(e), e.meta.line, (e.meta.column, e.meta.column + 1))
-
 def load_config_tree(config_file):
     """
     Loads the autokernel configuration file and returns the parsed tree.
@@ -735,7 +762,7 @@ def load_config_tree(config_file):
         try:
             return larkparser.parse(f.read())
         except (lark.exceptions.UnexpectedCharacters, lark.exceptions.UnexpectedToken) as e:
-            print_error_in_file(config_file, str(e).splitlines()[0], e.line, (e.column, e.column))
+            print_message_with_file_location(config_file, msg_error(str(e).splitlines()[0]), e.line, (e.column, e.column))
             sys.exit(1)
 
 def load_config(config_file):
@@ -749,13 +776,11 @@ def load_config(config_file):
         config.parse_tree(tree)
         currently_parsed_filenames.pop()
     except ConfigParsingException as e:
-        print_parsing_exception(config_file, e)
-        sys.exit(1)
+        die_print_parsing_exception(config_file, e)
 
     def get_module(u):
         if u not in config.modules:
-            log.error("Module '{}' used but never defined".format(u))
-            sys.exit(1)
+            log.dir("Module '{}' used but never defined".format(u))
         return config.modules[u]
 
     # Resolve module dependencies

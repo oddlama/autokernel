@@ -17,9 +17,14 @@ def symbol_can_be_user_assigned(sym):
 
     return False
 
+value_to_str_color = {
+    'n': "[1;31m",
+    'm': "[1;33m",
+    'y': "[1;32m",
+}
 def value_to_str(value):
     if value in kconfiglib.STR_TO_TRI:
-        return '[{}]'.format(value)
+        return '[{}{}{}]'.format(log.color(value_to_str_color[value]), value, log.color_reset)
     else:
         return "'{}'".format(value)
 
@@ -76,14 +81,17 @@ def load_environment_variables(kernel_dir):
     global kernel_arch # pylint: disable=global-statement
     kernel_arch = detect_arch()
     log.info("Detected kernel_arch: {}".format(kernel_arch))
+
+    global kernel_version # pylint: disable=global-statement
+    kernel_version = subprocess.run(['make', 'kernelversion'], cwd=kernel_dir, check=True, stdout=subprocess.PIPE).stdout.decode().strip().splitlines()[0]
+    log.info("Detected kernel_version: {}".format(kernel_version))
+
     set_env_default("ARCH", kernel_arch)
     set_env_default("SRCARCH", kernel_arch)
     set_env_default("CC", "gcc")
     set_env_default("HOSTCC", "gcc")
     set_env_default("HOSTCXX", "g++")
 
-    global kernel_version # pylint: disable=global-statement
-    kernel_version = subprocess.run(['make', 'kernelversion'], cwd=kernel_dir, check=True, stdout=subprocess.PIPE).stdout.decode().strip().splitlines()[0]
     os.environ["KERNELVERSION"] = kernel_version
     os.environ["CC_VERSION_TEXT"] = subprocess.run(['gcc', '--version'], check=True, stdout=subprocess.PIPE).stdout.decode().strip().splitlines()[0]
 

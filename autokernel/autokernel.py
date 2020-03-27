@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 # Monkeypatch Symbol.set_value, and Symbol._invalidate to detect conflicting changes.
 # Detection is only done when using the set_value_detect_conflicts instead of Symbol.set_value
 
-symbol_change_hint= None
+symbol_change_hint = None
 symbol_changes = {}
 symbols_invalidated = {}
 
@@ -43,11 +43,19 @@ def track_symbol_changes(symbol, old_value, new_value, inducing_change):
 
     # Bot normal and implicit changes can trigger conflicts
     if symbol in symbol_changes and symbol_changes[symbol] != new_value:
-        log.die("Conflicting change for symbol {} (previously set to {}, now {}) triggered by {} = {} in {}".format(
-            symbol.name,
-            autokernel.kconfig.value_to_str(symbol_changes[symbol]),
-            autokernel.kconfig.value_to_str(new_value),
-            inducing_change[0].name, inducing_change[1], symbol_change_hint))
+        hint_name, hint_at = symbol_change_hint
+        if hint_at:
+            autokernel.config.die_print_error_at(hint_at, "conflicting change for symbol {} (previously set to {}, now {}) triggered by {} = {} in {}".format(
+                symbol.name,
+                autokernel.kconfig.value_to_str(symbol_changes[symbol]),
+                autokernel.kconfig.value_to_str(new_value),
+                inducing_change[0].name, inducing_change[1], hint_name))
+        else:
+            log.die("Conflicting change for symbol {} (previously set to {}, now {}) triggered by {} = {} in {}".format(
+                symbol.name,
+                autokernel.kconfig.value_to_str(symbol_changes[symbol]),
+                autokernel.kconfig.value_to_str(new_value),
+                inducing_change[0].name, inducing_change[1], hint_name))
 
     # Implicit changes will not be recorded by register_symbol_change, but
     # they can trigger conflicting changes above.
@@ -85,10 +93,10 @@ def monkey_invalidate(sym):
 kconfiglib.Symbol.set_value = set_value_proxy_detect_conflicts
 kconfiglib.Symbol._invalidate = monkey_invalidate # pylint: disable=protected-access
 
-def set_value_detect_conflicts(sym, value, hint_name):
+def set_value_detect_conflicts(sym, value, hint_name, hint_definition=None):
     # Remember which symbol caused a chain of changes
     global symbol_change_hint # pylint: disable=global-statement
-    symbol_change_hint = hint_name
+    symbol_change_hint = (hint_name, hint_definition)
     ret = sym.set_value(value)
     symbol_change_hint = None
     return ret
@@ -136,31 +144,36 @@ def apply_autokernel_config(kernel_dir, kconfig, config):
     log.info("Applying autokernel configuration")
 
     # Asserts that the symbol has the given value
-    def assert_symbol(symbol, value):
+    def get_sym(stmt):
+        # Get the kconfig symbol, and change the value
+        try:
+            return kconfig.syms[stmt.sym_name]
+        except KeyError:
+            autokernel.config.die_print_error_at(stmt.at, "symbol '{}' does not exist".format(stmt.sym_name))
+
+    # Asserts that the symbol has the given value
+    def assert_symbol(stmt):
         # TODO differentiate between m and y if user wants that!
-        sym = kconfig.syms[symbol]
-        if sym.str_value != value:
-            log.die("Assertion failed: {} should be {} but is {}".format(
-                symbol,
-                autokernel.kconfig.value_to_str(value),
+
+        sym = get_sym(stmt)
+        if sym.str_value != stmt.value:
+            autokernel.config.die_print_error_at(stmt.at, "assertion failed: {} should be {} but is {}".format(
+                sym.name,
+                autokernel.kconfig.value_to_str(stmt.value),
                 autokernel.kconfig.value_to_str(sym.str_value)))
 
     # Sets a symbols value if and asserts that there are no conflicting double assignments
-    def set_symbol(symbol, value, hint_name):
+    def set_symbol(stmt, hint_name):
         # Get the kconfig symbol, and change the value
-        try:
-            sym = kconfig.syms[symbol]
-        except KeyError:
-            log.die("Referenced symbol '{}' does not exist".format(symbol))
+        sym = get_sym(stmt)
+        if not set_value_detect_conflicts(sym, stmt.value, 'module ' + hint_name, stmt.at):
+            autokernel.config.die_print_error_at(stmt.at, "invalid value {} for symbol {}".format(autokernel.kconfig.value_to_str(stmt.value), sym.name))
 
-        if not set_value_detect_conflicts(sym, value, 'module ' + hint_name):
-            log.die("Invalid value {} for symbol {}".format(autokernel.kconfig.value_to_str(value), symbol))
-
-        if sym.str_value != value:
-            log.warn("Symbol assignment failed: {} from {} -> {}".format(
-                symbol,
+        if sym.str_value != stmt.value:
+            autokernel.config.print_warn_at(stmt.at, "symbol assignment failed: {} from {} → {}".format(
+                sym.name,
                 autokernel.kconfig.value_to_str(sym.str_value),
-                autokernel.kconfig.value_to_str(value)))
+                autokernel.kconfig.value_to_str(stmt.value)))
 
     # Reset symbol_changes
     symbol_changes.clear()
@@ -182,10 +195,10 @@ def apply_autokernel_config(kernel_dir, kconfig, config):
             kconfig.load_config(filename, replace=False)
 
         def stmt_assert(stmt):
-            assert_symbol(stmt.sym_name, stmt.value)
+            assert_symbol(stmt)
 
         def stmt_set(stmt):
-            set_symbol(stmt.sym_name, stmt.value, module.name or 'kernel')
+            set_symbol(stmt, module.name or 'kernel')
 
         dispatch_stmt = {
             autokernel.config.ConfigModule.StmtUse: stmt_use,
@@ -232,7 +245,10 @@ def main_check_config(args):
         sym_gen = kconfig_gen.syms[sym]
         sym_cmp = kconfig_cmp.syms[sym]
         if sym_gen.str_value != sym_cmp.str_value:
-            print("[{} -> {}] {}".format(sym_cmp.str_value, sym_gen.str_value, sym))
+            print("{} → {} {}".format(
+                autokernel.kconfig.value_to_str(sym_cmp.str_value),
+                autokernel.kconfig.value_to_str(sym_gen.str_value),
+                sym))
 
 def main_generate_config(args, config=None):
     """
@@ -404,10 +420,17 @@ def check_config_against_detected_modules(kconfig, modules):
                 v_color = color['n']
 
             # Print option value
-            print("[{}{}[m] {} = {}".format(v_color, kconfiglib.TRI_TO_STR[sym_v], sym.name, v))
+            if log.use_color():
+                print("[{}{}[m] {} = {}".format(v_color, kconfiglib.TRI_TO_STR[sym_v], sym.name, v))
+            else:
+                print("[{}] {} = {}".format(kconfiglib.TRI_TO_STR[sym_v], sym.name, v))
         else:
             # Print option assignment
-            print("{} = {}{}[m".format(sym.name, color['y'] if sym.str_value == v else color['n'], sym.str_value))
+            col = color['y'] if sym.str_value == v else color['n']
+            if log.use_color():
+                print("{} = {}{}[m".format(sym.name, col, sym.str_value))
+            else:
+                print("{} = {}".format(sym.name, sym.str_value))
 
     def visit(m):
         # Ensure we visit only once
@@ -813,6 +836,8 @@ def main():
             help="The kernel directory to operate on. The default is /usr/src/linux.")
     parser.add_argument('-C', '--config', dest='autokernel_config', default='/etc/autokernel/autokernel.conf', type=check_file_exists,
             help="The autokernel configuration file to use. The default is '/etc/autokernel/autokernel.conf'.")
+    parser.add_argument('--no-color', dest='use_color', action='store_false',
+            help="Disables coloring in normal output.")
 
     # Output options
     output_options = parser.add_mutually_exclusive_group()
@@ -885,9 +910,10 @@ def main():
     except ArgumentParserError as e:
         log.die(str(e))
 
-    # Enable verbose logging if desired
-    log.verbose_output = args.verbose
-    log.quiet_output = args.quiet
+    # Set logging options
+    log.set_verbose(args.verbose)
+    log.set_quiet(args.quiet)
+    log.set_use_color(args.use_color)
 
     # Load and set all necessary environment variables
     autokernel.kconfig.load_environment_variables(args.kernel_dir)
