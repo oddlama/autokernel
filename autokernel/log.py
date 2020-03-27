@@ -33,7 +33,6 @@ def color(c, alternative=""):
     if _use_color:
         return c
     return alternative
-""
 
 def _print_verbose_color(msg):
     print(_fmt_verbose.format(msg.replace("[m", "[m[2m")))

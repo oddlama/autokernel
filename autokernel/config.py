@@ -49,13 +49,13 @@ def print_line_with_highlight(line, line_nr, highlight):
     tabs_before = line[:highlight[0]-1].count('\t')
     tabs_in_highlight = line[highlight[0]-1:highlight[1]-2].count('\t')
     print("{:5d} | {}".format(line_nr, line[:-1].replace('\t', '    ')))
-    print("      | {}".format(" " * ((highlight[0] - 1) + tabs_before * 3) + log.color("[1;31m") + "^" + "~" * ((highlight[1] - highlight[0] - 1) + tabs_in_highlight * 3) + log.color_reset))
+    print("      | {}".format(" " * ((highlight[0] - 1) + tabs_before * 3) + log.color("[1;34m") + "^" + "~" * ((highlight[1] - highlight[0] - 1) + tabs_in_highlight * 3) + log.color_reset))
 
 def msg_warn(msg):
-  return log.color("[1;33m") + "warning:" + log.color_reset + " " + msg
+    return log.color("[1;33m") + "warning:" + log.color_reset + " " + msg
 
 def msg_error(msg):
-  return log.color("[1;31m") + "error:" + log.color_reset + " " + msg
+    return log.color("[1;31m") + "error:" + log.color_reset + " " + msg
 
 def print_message_with_file_location(file, message, line, column_range):
     print((log.color("[1m") + "{}:{}:{}:" + log.color_reset + " {}").format(
@@ -251,7 +251,7 @@ def semver_to_int(ver):
     elif len(t) > 3:
         raise ValueError("Invalid semver '{}'".format(ver))
 
-    return int(t[0]) << 64 + int(t[1]) << 32 + int(t[2])
+    return (int(t[0]) << 64) + (int(t[1]) << 32) + int(t[2])
 
 def compare_variables(lhs, rhs, op, cmp_mode):
     if cmp_mode == 'string':
@@ -778,20 +778,20 @@ def load_config(config_file):
     except ConfigParsingException as e:
         die_print_parsing_exception(config_file, e)
 
-    def get_module(u):
-        if u not in config.modules:
-            log.dir("Module '{}' used but never defined".format(u))
-        return config.modules[u]
+    def get_module(stmt):
+        if stmt.module_name not in config.modules:
+            die_print_error_at(stmt.at, "module '{}' is never defined".format(stmt.module_name))
+        return config.modules[stmt.module_name]
 
     # Resolve module dependencies
     for m in config.modules:
         mod = config.modules[m]
         for u in mod.uses:
-            u.module = get_module(u.module_name)
+            u.module = get_module(u)
 
     # Resolve kernel dependencies
     kmod = config.kernel.module
     for u in kmod.uses:
-        u.module = get_module(u.module_name)
+        u.module = get_module(u)
 
     return config
