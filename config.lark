@@ -7,6 +7,7 @@
 path: string
 key: string
 param: string
+quoted_param: quoted_string
 kernel_option_value: string
 
 // kernel logic expressions
@@ -56,22 +57,21 @@ ctxt_module: ( tok_ignore
              | stmt_module_use
              | stmt_module_merge
              | stmt_module_assert
-             | stmt_module_set )*
-stmt_module_if:     "if"     _expr_ws "{" ctxt_module "}" ( "else" WS "if" _expr_ws "{" ctxt_module "}" )* [ "else" WS "{" ctxt_module "}" ]
-stmt_module_use:    "use"    ( WS IDENTIFIER )+                          [ WS "if" _expr_ws ] ";"
-stmt_module_merge:  "merge"  WS path                                     [ WS "if" _expr_ws ] ";"
-stmt_module_assert: "assert" WS KERNEL_OPTION [ WS kernel_option_value ] [ WS "if" _expr_ws ] ";"
-stmt_module_set:    "set"    WS KERNEL_OPTION [ WS kernel_option_value ] [ WS "if" _expr_ws ] ";"
+             | stmt_module_set
+             | stmt_module_add_cmdline )*
+stmt_module_if:          "if"     _expr_ws "{" ctxt_module "}" ( "else" WS "if" _expr_ws "{" ctxt_module "}" )* [ "else" WS "{" ctxt_module "}" ]
+stmt_module_use:         "use"    ( WS IDENTIFIER )+                          [ WS "if" _expr_ws ] ";"
+stmt_module_merge:       "merge"  WS path                                     [ WS "if" _expr_ws ] ";"
+stmt_module_assert:      "assert" _expr_ws [ WS quoted_param ]                [ WS "if" _expr_ws ] ";"
+stmt_module_set:         "set"    WS KERNEL_OPTION [ WS kernel_option_value ] [ WS "if" _expr_ws ] ";"
+stmt_module_add_cmdline: "add_cmdline" ( WS quoted_param )+                   [ WS "if" _expr_ws ] ";"
 
 // kernel
 // ================
 
 blck_kernel: "kernel" "{" ctxt_kernel "}"
-// stmt_kernel_add_cmdline has to be before ctxt_module else the parser complains about infinite recursion. Seems to be a bug in lark.
 ctxt_kernel: ( tok_ignore
-             | stmt_kernel_add_cmdline
              | ctxt_module )*
-stmt_kernel_add_cmdline: "add_cmdline" ( WS param )+ ";"
 
 // genkernel
 // ================
@@ -79,7 +79,7 @@ stmt_kernel_add_cmdline: "add_cmdline" ( WS param )+ ";"
 blck_genkernel: "genkernel" "{" ctxt_genkernel "}"
 ctxt_genkernel: ( tok_ignore
                 | stmt_genkernel_add_params )*
-stmt_genkernel_add_params: "add_params" ( WS param )+ ";"
+stmt_genkernel_add_params: "add_params" ( WS quoted_param )+ ";"
 
 // initramfs
 // ================
@@ -88,7 +88,7 @@ blck_initramfs: "initramfs" "{" ctxt_initramfs "}"
 ctxt_initramfs: ( tok_ignore
                 | blck_genkernel
                 | stmt_initramfs_add_cmdline )*
-stmt_initramfs_add_cmdline: "add_cmdline" ( WS param )+ ";"
+stmt_initramfs_add_cmdline: "add_cmdline" ( WS quoted_param )+ ";"
 
 // efi
 // ================
@@ -148,6 +148,7 @@ IDENTIFIER:    ( "_" | "-" | LETTER | DIGIT )+
 STRING: /\S+(?<!;)/
 string: ESCAPED_STRING -> string_quoted
       | STRING         -> string
+quoted_string: ESCAPED_STRING -> string_quoted
 
 // meta
 // ================

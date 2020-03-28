@@ -256,16 +256,30 @@ def semver_to_int(ver):
 
     return (int(t[0]) << 64) + (int(t[1]) << 32) + int(t[2])
 
-def compare_variables(lhs, rhs, op, cmp_mode):
+def compare_variables(lhs, rhs, op, cmp_mode, hint_at):
     if cmp_mode == 'string':
         if op not in ['EXPR_CMP_NEQ', 'EXPR_CMP_EQ']:
-            log.die("Invalid comparison '{}' between '{}' and '{}' (type 'string')".format(op, lhs, rhs))
+            die_print_error_at(hint_at, "invalid comparison '{}' between '{}' and '{}' (type 'string')".format(op, lhs, rhs))
     elif cmp_mode == 'int':
-        lhs = int(lhs)
-        rhs = int(rhs)
+        try:
+            lhs = int(lhs)
+        except ValueError:
+            die_print_error_at(hint_at, "invalid left-hand-side comparison operand '{}', expected type 'int'".format(lhs))
+
+        try:
+            rhs = int(rhs)
+        except ValueError:
+            die_print_error_at(hint_at, "invalid right-hand-side comparison operand '{}', expected type 'int'".format(rhs))
     elif cmp_mode == 'semver':
-        lhs = semver_to_int(lhs)
-        rhs = semver_to_int(rhs)
+        try:
+            lhs = semver_to_int(lhs)
+        except ValueError:
+            die_print_error_at(hint_at, "invalid left-hand-side comparison operand '{}', expected type 'semver'".format(lhs))
+
+        try:
+            rhs = semver_to_int(rhs)
+        except ValueError:
+            die_print_error_at(hint_at, "invalid right-hand-side comparison operand '{}', expected type 'semver'".format(rhs))
 
     if op == 'EXPR_CMP_GE':
         return lhs > rhs
@@ -285,21 +299,21 @@ class Condition:
         self.expr = sympy_expr
         self.value = None
 
-    def evaluate(self, kconfig, symbol_changes):
+    def evaluate(self, kconfig, symbol_changes, hint_at):
         if self.value is None:
-            self.value = self._evaluate(kconfig, symbol_changes)
+            self.value = self._evaluate(kconfig, symbol_changes, hint_at)
         return self.value
 
-    def _evaluate(self, kconfig, symbol_changes):
+    def _evaluate(self, kconfig, symbol_changes, hint_at):
         def get_sym(sym_name):
             try:
                 sym = kconfig.syms[sym_name]
             except KeyError:
-                log.die("Referenced symbol '{}' does not exist".format(sym_name))
+                die_print_error_at(hint_at, "referenced symbol {} does not exist".format(sym_name))
 
             # If the symbol hadn't been encountered before, pin the current value
             if sym not in symbol_changes:
-                symbol_changes[sym] = sym.str_value
+                symbol_changes[sym] = (sym.str_value, hint_at)
 
             return sym
 
@@ -308,7 +322,7 @@ class Condition:
             if s.name.count('\001') == 2:
                 lhs, op, rhs = s.name.split('\001')
                 if op not in ['EXPR_CMP_GE', 'EXPR_CMP_GEQ', 'EXPR_CMP_LE', 'EXPR_CMP_LEQ', 'EXPR_CMP_NEQ', 'EXPR_CMP_EQ']:
-                    log.die("Invalid comparison op '{}'. This is a bug.".format(op))
+                    die_print_error_at(hint_at, "invalid comparison op '{}'. This is a bug.".format(op))
 
                 def resolve_var(var):
                     var_quoted = var[0] == "1"
@@ -338,7 +352,7 @@ class Condition:
                     # If both were special, we have to assert they resolved to the same cmp mode
                     if lhs_cmp_mode and rhs_cmp_mode:
                         if lhs_cmp_mode != rhs_cmp_mode:
-                            log.die("Cannot compare special symbols of different type {} (type {}) to {} (type {})".format(lhs, lhs_cmp_mode, rhs, rhs_cmp_mode))
+                            die_print_error_at(hint_at, "cannot compare special symbols of different type {} (type {}) to {} (type {})".format(lhs, lhs_cmp_mode, rhs, rhs_cmp_mode))
                         cmp_mode = lhs_cmp_mode
                     else:
                         # One of the variables wasn't special, so we can use the one deduced comparison mode
@@ -352,11 +366,19 @@ class Condition:
                         cmp_mode = 'string'
                     else:
                         if lhs_quoted or rhs_quoted:
+                            # Comparison against string
+                            cmp_mode = 'string'
+                        elif lhs_is_sym and rhs in ['y', 'm', 'n']:
+                            # Comparison against y,m,n value
+                            cmp_mode = 'string'
+                        elif rhs_is_sym and lhs in ['y', 'm', 'n']:
+                            # Comparison against y,m,n value
                             cmp_mode = 'string'
                         else:
+                            # Comparison against int
                             cmp_mode = 'int'
 
-                subs[s.name] = compare_variables(lhs, rhs, op, cmp_mode)
+                subs[s.name] = compare_variables(lhs, rhs, op, cmp_mode, hint_at)
             else:
                 subs[s.name] = atk_kconfig.tri_to_bool(get_sym(s.name).tri_value)
         return self.expr.subs(subs)
@@ -469,28 +491,33 @@ class ConfigModule(BlockNode):
     node_name = 'module'
 
     class StmtUse(Stmt):
-        def __init__(self, tree, cond, module_name):
+        def __init__(self, tree, condition, module_name):
             super().__init__(tree)
-            self.condition = cond
+            self.condition = condition
             self.module_name = module_name
             self.module = None
     class StmtMerge(Stmt):
-        def __init__(self, tree, cond, filename):
+        def __init__(self, tree, condition, filename):
             super().__init__(tree)
-            self.condition = cond
+            self.condition = condition
             self.filename = filename
     class StmtAssert(Stmt):
-        def __init__(self, tree, cond, sym_name, value):
+        def __init__(self, tree, condition, assert_condition, message):
             super().__init__(tree)
-            self.condition = cond
-            self.sym_name = sym_name
-            self.value = value
+            self.condition = condition
+            self.assert_condition = assert_condition
+            self.message = message
     class StmtSet(Stmt):
-        def __init__(self, tree, cond, sym_name, value):
+        def __init__(self, tree, condition, sym_name, value):
             super().__init__(tree)
-            self.condition = cond
+            self.condition = condition
             self.sym_name = sym_name
             self.value = value
+    class StmtAddCmdline(Stmt):
+        def __init__(self, tree, condition, param):
+            super().__init__(tree)
+            self.condition = condition
+            self.param = param
 
     def __init__(self):
         self.name = None
@@ -498,6 +525,7 @@ class ConfigModule(BlockNode):
         self.merge_kconf_files = []
         self.assertions = []
         self.assignments = []
+        self.cmdline = []
         self.all_statements_in_order = []
 
     def parse_block_params(self, blck): # pylint: disable=arguments-differ
@@ -529,30 +557,36 @@ class ConfigModule(BlockNode):
                 cond = precondition & negate_previous()
                 self.parse_context(subcontexts[-1], precondition=cond)
 
+        def _get_cond(tree):
+            return Condition(precondition & find_condition(tree))
         def stmt_module_use(tree):
-            cond = Condition(precondition & find_condition(tree))
+            cond = _get_cond(tree)
             new_uses = [ConfigModule.StmtUse(tree, cond, i) for i in find_all_tokens(tree, 'IDENTIFIER')]
             self.uses.extend(new_uses)
             self.all_statements_in_order.extend(new_uses)
         def stmt_module_merge(tree):
-            cond = Condition(precondition & find_condition(tree))
-            stmt = ConfigModule.StmtMerge(tree, cond, find_named_token(tree, 'path'))
+            stmt = ConfigModule.StmtMerge(tree, _get_cond(tree), find_named_token(tree, 'path'))
             self.merge_kconf_files.append(stmt)
             self.all_statements_in_order.append(stmt)
         def stmt_module_assert(tree):
-            cond = Condition(precondition & find_condition(tree))
-            key = find_token(tree, 'KERNEL_OPTION')
-            value = find_named_token(tree, 'kernel_option_value', ignore_missing=True) or 'y'
-            stmt = ConfigModule.StmtAssert(tree, cond, key, value)
+            conditions = find_conditions(tree)
+            assert_condition = Condition(conditions[0])
+            stmt_condition = Condition(conditions[1] if len(conditions) > 1 else precondition)
+            message = find_named_token(tree, 'quoted_param', ignore_missing=True)
+            stmt = ConfigModule.StmtAssert(tree, stmt_condition, assert_condition, message)
             self.assertions.append(stmt)
             self.all_statements_in_order.append(stmt)
         def stmt_module_set(tree):
-            cond = Condition(precondition & find_condition(tree))
             key = find_token(tree, 'KERNEL_OPTION')
             value = find_named_token(tree, 'kernel_option_value', ignore_missing=True) or 'y'
-            stmt = ConfigModule.StmtSet(tree, cond, key, value)
+            stmt = ConfigModule.StmtSet(tree, _get_cond(tree), key, value)
             self.assignments.append(stmt)
             self.all_statements_in_order.append(stmt)
+        def stmt_module_add_cmdline(tree):
+            cond = _get_cond(tree)
+            new_params = [ConfigModule.StmtAddCmdline(tree, cond, i) for i in find_all_named_tokens(tree, 'quoted_param')]
+            self.cmdline.extend(new_params)
+            self.all_statements_in_order.extend(new_params)
 
         apply_tree_nodes(ctxt.children, [
                 stmt_module_if,
@@ -560,6 +594,7 @@ class ConfigModule(BlockNode):
                 stmt_module_merge,
                 stmt_module_assert,
                 stmt_module_set,
+                stmt_module_add_cmdline,
             ])
 
 class ConfigKernel(BlockNode):
@@ -567,17 +602,13 @@ class ConfigKernel(BlockNode):
 
     def __init__(self):
         self.module = ConfigModule()
-        self.cmdline = []
 
     def parse_context(self, ctxt):
         def ctxt_module(tree):
             self.module.parse_context(tree)
-        def stmt_kernel_add_cmdline(tree):
-            self.cmdline.extend(find_all_named_tokens(tree, 'param'))
 
         apply_tree_nodes(ctxt.children, [
                 ctxt_module,
-                stmt_kernel_add_cmdline,
             ])
 
 class ConfigGenkernel(BlockNode):
@@ -588,7 +619,7 @@ class ConfigGenkernel(BlockNode):
 
     def parse_context(self, ctxt):
         def stmt_genkernel_add_params(tree):
-            self.params.extend(find_all_named_tokens(tree, 'param'))
+            self.params.extend(find_all_named_tokens(tree, 'quoted_param'))
 
         apply_tree_nodes(ctxt.children, [
                 stmt_genkernel_add_params,
@@ -605,7 +636,7 @@ class ConfigInitramfs(BlockNode):
         def blck_genkernel(tree):
             self.genkernel.parse_tree(tree)
         def stmt_initramfs_add_cmdline(tree):
-            self.cmdline.extend(find_all_named_tokens(tree, 'param'))
+            self.cmdline.extend(find_all_named_tokens(tree, 'quoted_param'))
 
         apply_tree_nodes(ctxt.children, [
                 blck_genkernel,
