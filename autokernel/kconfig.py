@@ -6,8 +6,8 @@ import re
 import kconfiglib
 
 import sympy
-import sympy.logic.boolalg
-import sympy.logic.inference
+from sympy.logic import simplify_logic
+from sympy.logic.inference import satisfiable
 
 
 def symbol_can_be_user_assigned(sym):
@@ -233,10 +233,10 @@ class Expr:
         return self.expr_ignore_sym
 
     def simplify(self):
-        self.expr = sympy.logic.boolalg.simplify_logic(self.expr)
+        self.expr = simplify_logic(self.expr)
 
     def unsatisfied_deps(self):
-        configuration = sympy.logic.inference.satisfiable(self.expr)
+        configuration = satisfiable(self.expr)
         if not configuration:
             return False
 

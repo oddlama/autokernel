@@ -241,14 +241,40 @@ def main_check_config(args):
     kconfig_load_file_or_current_config(kconfig_cmp, args.compare_config)
 
     log.info("Comparing existing config (left) against generated config (right)")
-    for sym in kconfig_gen.syms:
+
+    gen_syms = [s.name for s in kconfig_gen.unique_defined_syms]
+    cmp_syms = [s.name for s in kconfig_cmp.unique_defined_syms]
+
+    def intersection(a, b):
+        return [i for i in a if i in b]
+    def comprehension(a, b):
+        return [i for i in a if i not in b]
+
+    common_syms = intersection(gen_syms, set(cmp_syms))
+    common_syms_set = set(common_syms)
+    only_gen_syms = comprehension(gen_syms, common_syms_set)
+    only_cmp_syms = comprehension(cmp_syms, common_syms_set)
+
+    for sym in common_syms:
         sym_gen = kconfig_gen.syms[sym]
         sym_cmp = kconfig_cmp.syms[sym]
         if sym_gen.str_value != sym_cmp.str_value:
-            print("{} → {} {}".format(
+            print("(changed) {} → {} {}".format(
                 autokernel.kconfig.value_to_str(sym_cmp.str_value),
                 autokernel.kconfig.value_to_str(sym_gen.str_value),
                 sym))
+
+    for sym in only_gen_syms:
+        sym_gen = kconfig_gen.syms[sym]
+        print("(new) {} {}".format(
+            autokernel.kconfig.value_to_str(sym_gen.str_value),
+            sym))
+
+    for sym in only_cmp_syms:
+        sym_cmp = kconfig_cmp.syms[sym]
+        print("(removed) {} {}".format(
+            autokernel.kconfig.value_to_str(sym_cmp.str_value),
+            sym))
 
 def main_generate_config(args, config=None):
     """
@@ -651,7 +677,12 @@ def detect_modules(kconfig):
         """
         mod = Module("{:04d}_{}".format(next_local_module_id(), node.get_canonical_name()))
         for o in opts:
-            sym = kconfig.syms[o]
+            try:
+                sym = kconfig.syms[o]
+            except KeyError:
+                log.warn("Skipping unknown symbol {}".format(o))
+                continue
+
             m = module_creator.add_module_for_sym(sym)
             if m is False:
                 log.warn("Skipping module {} (unsatisfiable dependencies)".format(mod.name))
@@ -748,7 +779,11 @@ def main_info(args):
             sym_name = config_symbol
 
         # Print symbol
-        sym = kconfig.syms[sym_name]
+        try:
+            sym = kconfig.syms[sym_name]
+        except KeyError:
+            die("Symbol '{}' does not exist".format(sym_name))
+
         print(sym)
         print(sym.env_var)
 
@@ -776,7 +811,11 @@ def main_deps(args):
         else:
             sym_name = config_symbol
 
-        sym = kconfig.syms[sym_name]
+        try:
+            sym = kconfig.syms[sym_name]
+        except KeyError:
+            die("Symbol '{}' does not exist".format(sym_name))
+
         mod = module_creator.add_module_for_sym(sym)
         if mod is False:
             log.warn("Skipping {} (unsatisfiable dependencies)".format(sym.name))
