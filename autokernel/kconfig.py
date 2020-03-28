@@ -65,45 +65,50 @@ def detect_arch():
     arch = re.sub('riscv.*',   'riscv',   arch)
     return arch
 
-kernel_environment_variables_loaded = False
-kernel_arch = None
-kernel_version = None
-def load_environment_variables(kernel_dir):
+def initialize_environment():
     """
-    Loads important environment variables from the given kernel source tree.
+    Initializes important environment variables, if not set by the user.
+    like
     """
-    global kernel_environment_variables_loaded # pylint: disable=global-statement
-    if kernel_environment_variables_loaded:
-        return
-
-    log.info("Loading kernel environment variables for '{}'".format(kernel_dir))
-
-    global kernel_arch # pylint: disable=global-statement
-    kernel_arch = detect_arch()
-    log.info("Detected kernel_arch: {}".format(kernel_arch))
-
-    global kernel_version # pylint: disable=global-statement
-    kernel_version = subprocess.run(['make', 'kernelversion'], cwd=kernel_dir, check=True, stdout=subprocess.PIPE).stdout.decode().strip().splitlines()[0]
-    log.info("Detected kernel_version: {}".format(kernel_version))
-
-    set_env_default("ARCH", kernel_arch)
-    set_env_default("SRCARCH", kernel_arch)
     set_env_default("CC", "gcc")
     set_env_default("HOSTCC", "gcc")
     set_env_default("HOSTCXX", "g++")
 
-    os.environ["KERNELVERSION"] = kernel_version
-    os.environ["CC_VERSION_TEXT"] = subprocess.run(['gcc', '--version'], check=True, stdout=subprocess.PIPE).stdout.decode().strip().splitlines()[0]
+    if "CC_VERSION_TEXT" not in os.environ:
+        os.environ["CC_VERSION_TEXT"] = subprocess.run(['gcc', '--version'], check=True, stdout=subprocess.PIPE).stdout.decode().strip().splitlines()[0]
 
-    kernel_environment_variables_loaded = True
+_arch = None
+def get_arch():
+    """
+    Returns arch of the current host as the kernel would interpret it
+    """
+    global _arch
+    if not _arch:
+        _arch = detect_arch()
+    return _arch
+
+_kernel_version = {}
+def get_kernel_version(kernel_dir):
+    """
+    Returns the kernel version for the given kernel_dir.
+    """
+    kernel_dir_canon = os.path.realpath(kernel_dir)
+    if kernel_dir_canon in _kernel_version:
+        return _kernel_version[kernel_dir_canon]
+
+    _kernel_version[kernel_dir_canon] = subprocess.run(['make', 'kernelversion'], cwd=kernel_dir_canon, check=True, stdout=subprocess.PIPE).stdout.decode().strip().splitlines()[0]
+    return _kernel_version[kernel_dir_canon]
 
 def load_kconfig(kernel_dir):
     kconfig_file = os.path.join(kernel_dir, "Kconfig")
     if not os.path.isfile(kconfig_file):
         raise ValueError("'{}' must point to a valid Kconfig file!".format(kconfig_file))
 
-    log.info("Loading '{}'".format(kconfig_file))
+    kver = get_kernel_version(kernel_dir)
+    log.info("Loading '{}' (version {})".format(kconfig_file, kver))
     os.environ['srctree'] = kernel_dir
+    os.environ["ARCH"] = os.environ["SRCARCH"] = get_arch()
+    os.environ["KERNELVERSION"] = kver
     kconfig = kconfiglib.Kconfig(os.path.realpath(kconfig_file), warn_to_stderr=False)
 
     for w in kconfig.warnings:

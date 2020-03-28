@@ -230,7 +230,8 @@ class UniqueProperty:
         return self._get()
 
 special_var_cmp_mode = {
-    '$KERNEL_VERSION': 'semver'
+    '$KERNEL_VERSION': 'semver',
+    '$ARCH': 'string',
 }
 
 def get_special_var_cmp_mode(var):
@@ -238,9 +239,11 @@ def get_special_var_cmp_mode(var):
         log.die("Unknown special variable '{}'".format(var))
     return special_var_cmp_mode[var]
 
-def resolve_special_variable(var):
+def resolve_special_variable(kconfig, var):
     if var == '$KERNEL_VERSION':
-        return atk_kconfig.kernel_version
+        return atk_kconfig.get_kernel_version(kconfig.srctree)
+    elif var == '$ARCH':
+        return atk_kconfig.get_arch()
     else:
         log.die("Unknown special variable '{}'".format(var))
 
@@ -323,7 +326,7 @@ class Condition:
                     var_cmp_mode = None
                     if var_special:
                         var_cmp_mode = get_special_var_cmp_mode(var)
-                        var = resolve_special_variable(var)
+                        var = resolve_special_variable(kconfig, var)
 
                     return (var, var_quoted, var_special, var_is_sym, var_cmp_mode)
 
