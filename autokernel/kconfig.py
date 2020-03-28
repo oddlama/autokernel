@@ -82,7 +82,7 @@ def get_arch():
     """
     Returns arch of the current host as the kernel would interpret it
     """
-    global _arch
+    global _arch # pylint: disable=global-statement
     if not _arch:
         _arch = detect_arch()
     return _arch

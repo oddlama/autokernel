@@ -304,7 +304,7 @@ class Lkddb:
         source = m.group('source')
 
         if source.startswith('arch/'):
-            if not source.startswith('arch/{}/'.format(atk_kconfig.kernel_arch)):
+            if not source.startswith('arch/{}/'.format(atk_kconfig.get_arch())):
                 # We skip entries that do not match our architecture
                 return None, None, None
 

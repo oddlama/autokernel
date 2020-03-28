@@ -277,26 +277,32 @@ def main_check_config(args):
     only_gen_syms = comprehension(gen_syms, common_syms_set)
     only_cmp_syms = comprehension(cmp_syms, common_syms_set)
 
-    for sym in only_gen_syms:
-        sym_gen = kconfig_gen.syms[sym]
-        print(indicator_add + " {} {}".format(
-            autokernel.kconfig.value_to_str(sym_gen.str_value),
-            sym))
 
-    for sym in only_cmp_syms:
-        sym_cmp = kconfig_cmp.syms[sym]
-        print(indicator_del + " {} {}".format(
-            autokernel.kconfig.value_to_str(sym_cmp.str_value),
-            sym))
+    supress_new, supress_del, supress_chg = args.suppress_columns
 
-    for sym in common_syms:
-        sym_gen = kconfig_gen.syms[sym]
-        sym_cmp = kconfig_cmp.syms[sym]
-        if sym_gen.str_value != sym_cmp.str_value:
-            print(indicator_mod + " {} → {} {}".format(
-                autokernel.kconfig.value_to_str(sym_cmp.str_value),
+    if not supress_new:
+        for sym in only_gen_syms:
+            sym_gen = kconfig_gen.syms[sym]
+            print(indicator_add + " {} {}".format(
                 autokernel.kconfig.value_to_str(sym_gen.str_value),
                 sym))
+
+    if not supress_del:
+        for sym in only_cmp_syms:
+            sym_cmp = kconfig_cmp.syms[sym]
+            print(indicator_del + " {} {}".format(
+                autokernel.kconfig.value_to_str(sym_cmp.str_value),
+                sym))
+
+    if not supress_chg:
+        for sym in common_syms:
+            sym_gen = kconfig_gen.syms[sym]
+            sym_cmp = kconfig_cmp.syms[sym]
+            if sym_gen.str_value != sym_cmp.str_value:
+                print(indicator_mod + " {} → {} {}".format(
+                    autokernel.kconfig.value_to_str(sym_cmp.str_value),
+                    autokernel.kconfig.value_to_str(sym_gen.str_value),
+                    sym))
 
 def main_generate_config(args, config=None):
     """
@@ -805,7 +811,7 @@ def main_info(args):
         try:
             sym = kconfig.syms[sym_name]
         except KeyError:
-            die("Symbol '{}' does not exist".format(sym_name))
+            log.die("Symbol '{}' does not exist".format(sym_name))
 
         print(sym)
         print(sym.env_var)
@@ -837,7 +843,7 @@ def main_deps(args):
         try:
             sym = kconfig.syms[sym_name]
         except KeyError:
-            die("Symbol '{}' does not exist".format(sym_name))
+            log.die("Symbol '{}' does not exist".format(sym_name))
 
         mod = module_creator.add_module_for_sym(sym)
         if mod is False:
@@ -876,6 +882,30 @@ def check_kernel_dir(value):
 
     return value
 
+def suppress_columns_list(value):
+    """
+    Checks if the given value is a csv of columns to suppress.
+    """
+    valid_values_new = ['new', 'n']
+    valid_values_del = ['del', 'd']
+    valid_values_chg = ['changed', 'chg', 'c']
+    valid_values = valid_values_new + valid_values_del + valid_values_chg
+
+    supress_new = False
+    supress_del = False
+    supress_chg = False
+    for i in value.split(','):
+        if i in valid_values_new:
+            supress_new = True
+        elif i in valid_values_del:
+            supress_del = True
+        elif i in valid_values_chg:
+            supress_chg = True
+        else:
+            raise argparse.ArgumentTypeError("'{}' is not a valid suppression type. Must be one of [{}]".format(i, ', '.join(["'{}'".format(v) for v in valid_values])))
+
+    return (supress_new, supress_del, supress_chg)
+
 class ArgumentParserError(Exception):
     pass
 
@@ -913,7 +943,9 @@ def main():
     parser_check.add_argument('-c', '--compare-config', dest='compare_config', type=check_file_exists,
             help="The .config file to compare the generated configuration against.")
     parser_check.add_argument('-k', '--compare-kernel-dir', dest='compare_kernel_dir', type=check_kernel_dir,
-            help="The corresponding kernel directory fpr the given comparison config. Only valid together with -c.")
+            help="The kernel directory for the given comparison config.")
+    parser_check.add_argument('--suppress', dest='suppress_columns', type=suppress_columns_list,
+            help="Comma separated list of columns to suppress. 'new' or 'n' supresses new symbols, 'del' or 'd' suppresses removed symbols, 'changed', 'chg' or 'c' supresses changed symbols.")
     parser_check.set_defaults(func=main_check_config)
 
     # Config generation options
