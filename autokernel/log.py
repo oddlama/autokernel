@@ -44,7 +44,7 @@ def _print_info(msg):
     print(_fmt_info.format(msg))
 
 def _print_warn(msg):
-    print(_fmt_warn.format(msg))
+    print(_fmt_warn.format(msg), file=sys.stderr)
 
 def _print_error(msg):
     print(_fmt_error.format(msg), file=sys.stderr)

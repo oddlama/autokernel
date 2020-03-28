@@ -3,7 +3,7 @@ import sys
 import re
 import lark
 import lark.exceptions
-import sympy
+import kconfiglib
 
 from . import log
 from . import kconfig as atk_kconfig
@@ -58,18 +58,24 @@ def msg_error(msg):
     return log.color("[1;31m") + "error:" + log.color_reset + " " + msg
 
 def print_message_with_file_location(file, message, line, column_range):
-    print((log.color("[1m") + "{}:{}:{}:" + log.color_reset + " {}").format(
-        file, line, column_range[0], message), file=sys.stderr)
-    with open(file, 'r') as f:
-        line_str = f.readlines()[line - 1]
-        print_line_with_highlight(line_str, line, highlight=column_range)
+    if not file:
+        print(message, file=sys.stderr)
+    else:
+        print((log.color("[1m") + "{}:{}:{}:" + log.color_reset + " {}").format(
+            file, line, column_range[0], message), file=sys.stderr)
+        with open(file, 'r') as f:
+            line_str = f.readlines()[line - 1]
+            print_line_with_highlight(line_str, line, highlight=column_range)
 
 def print_message_at(definition, msg):
-    meta, file = definition
-    if meta.line == meta.end_line:
-        print_message_with_file_location(file, msg, meta.line, (meta.column, meta.end_column))
+    if definition:
+        meta, file = definition
+        if meta.line == meta.end_line:
+            print_message_with_file_location(file, msg, meta.line, (meta.column, meta.end_column))
+        else:
+            print_message_with_file_location(file, msg, meta.line, (meta.column, meta.column + 1))
     else:
-        print_message_with_file_location(file, msg, meta.line, (meta.column, meta.column + 1))
+        print_message_with_file_location(None, msg, None, None)
 
 def print_warn_at(definition, msg):
     print_message_at(definition, msg_warn(msg))
@@ -171,11 +177,11 @@ def find_all_tokens(tree, token_name, strip_quotes=False):
             for c in tree.children \
                 if c.__class__ == lark.Token and c.type == token_name]
 
-def find_all_named_tokens(tree, token_name):
+def find_all_named_tokens_raw(tree, token_name):
     """
     Finds all tokens by subrule name in the children of the given tree.
     """
-    return [remove_quotes(str(c.children[0].children[0])) if c.children[0].data == 'string_quoted' else str(c.children[0]) \
+    return [(remove_quotes(str(c.children[0].children[0])), True) if c.children[0].data == 'string_quoted' else (str(c.children[0]), False) \
             for c in tree.children
                 if c.__class__ == lark.Tree
                 and c.data == token_name
@@ -184,6 +190,12 @@ def find_all_named_tokens(tree, token_name):
                 and c.children[0].__class__ == lark.Tree
                 and len(c.children[0].children) == 1
                 and c.children[0].children[0].__class__ == lark.Token]
+
+def find_all_named_tokens(tree, token_name):
+    """
+    Finds all tokens by subrule name in the children of the given tree.
+    """
+    return [i[0] for i in find_all_named_tokens_raw(tree, token_name)]
 
 class UniqueProperty:
     """
@@ -230,8 +242,10 @@ class UniqueProperty:
         return self._get()
 
 special_var_cmp_mode = {
-    '$KERNEL_VERSION': 'semver',
-    '$ARCH': 'string',
+    '$kernel_version': 'semver',
+    '$arch':  'string',
+    '$false': 'string',
+    '$true':  'string',
 }
 
 def get_special_var_cmp_mode(var):
@@ -240,10 +254,14 @@ def get_special_var_cmp_mode(var):
     return special_var_cmp_mode[var]
 
 def resolve_special_variable(kconfig, var):
-    if var == '$KERNEL_VERSION':
+    if var == '$kernel_version':
         return atk_kconfig.get_kernel_version(kconfig.srctree)
-    elif var == '$ARCH':
+    elif var == '$arch':
         return atk_kconfig.get_arch()
+    elif var == '$true':
+        return 'y'
+    elif var == '$false':
+        return 'n'
     else:
         log.die("Unknown special variable '{}'".format(var))
 
@@ -256,31 +274,21 @@ def semver_to_int(ver):
 
     return (int(t[0]) << 64) + (int(t[1]) << 32) + int(t[2])
 
-def compare_variables(lhs, rhs, op, cmp_mode, hint_at):
-    if cmp_mode == 'string':
-        if op not in ['EXPR_CMP_NEQ', 'EXPR_CMP_EQ']:
-            die_print_error_at(hint_at, "invalid comparison '{}' between '{}' and '{}' (type 'string')".format(op, lhs, rhs))
-    elif cmp_mode == 'int':
-        try:
-            lhs = int(lhs)
-        except ValueError:
-            die_print_error_at(hint_at, "invalid left-hand-side comparison operand '{}', expected type 'int'".format(lhs))
 
-        try:
-            rhs = int(rhs)
-        except ValueError:
-            die_print_error_at(hint_at, "invalid right-hand-side comparison operand '{}', expected type 'int'".format(rhs))
-    elif cmp_mode == 'semver':
-        try:
-            lhs = semver_to_int(lhs)
-        except ValueError:
-            die_print_error_at(hint_at, "invalid left-hand-side comparison operand '{}', expected type 'semver'".format(lhs))
+def check_tristate(v, hint_at):
+    if v not in ['n', 'm', 'y']:
+        die_print_error_at(hint_at, "invalid argument '{}' is not a tristate ('n', 'm', 'y')".format(v))
+    return v
 
-        try:
-            rhs = semver_to_int(rhs)
-        except ValueError:
-            die_print_error_at(hint_at, "invalid right-hand-side comparison operand '{}', expected type 'semver'".format(rhs))
+_variable_parse_functors = {
+    'string': str,
+    'int': int,
+    'hex': lambda x: int(x, 16),
+    'tristate': check_tristate,
+    'semver': semver_to_int,
+}
 
+def compare_op(op, lhs, rhs):
     if op == 'EXPR_CMP_GE':
         return lhs > rhs
     elif op == 'EXPR_CMP_GEQ':
@@ -294,119 +302,220 @@ def compare_variables(lhs, rhs, op, cmp_mode, hint_at):
     elif op == 'EXPR_CMP_EQ':
         return lhs == rhs
 
+def compare_variables(resolved_vars, op, cmp_mode, hint_at):
+    # Assert that the comparison mode is supported for the given type
+    if cmp_mode == 'string':
+        if op not in ['EXPR_CMP_NEQ', 'EXPR_CMP_EQ']:
+            die_print_error_at(hint_at, "invalid comparison '{}' for type string".format(op))
+    elif cmp_mode == 'tristate':
+        if op not in ['EXPR_CMP_NEQ', 'EXPR_CMP_EQ']:
+            die_print_error_at(hint_at, "invalid comparison operator '{}' for type tristate".format(op))
+
+    # Parse variables to comparable types
+    parse_functor = _variable_parse_functors[cmp_mode]
+    parsed_variables = []
+    for i, var in enumerate(resolved_vars, start=1):
+        try:
+            parsed_variables.append(parse_functor(var.value))
+        except ValueError:
+            die_print_error_at(var.at, "could not convert operand #{} ({}) to {}".format(i, var.value, cmp_mode))
+
+    # Compare all variables in order
+    for i, rhs in enumerate(parsed_variables[1:]):
+        if not compare_op(op, parsed_variables[i - 1], rhs):
+            return False
+    return True
+
+class NegatedConditionView():
+    """
+    A negated view on a condition to prevent recalculation
+    """
+    def __init__(self, condition):
+        self.condition = condition
+
+    @property
+    def at(self):
+        return self.condition.at
+
+    def negate(self):
+        return self.condition
+
+    def evaluate(self, *args, **kwargs):
+        return not self.condition.evaluate(*args, **kwargs)
+
+class VarInfo:
+    def __init__(self, var, value, special, is_sym, cmp_mode):
+        self.var = var
+        self.value = value
+        self.special = special
+        self.is_sym = is_sym
+        self.cmp_mode =  cmp_mode
+
 class Condition:
-    def __init__(self, sympy_expr):
-        self.expr = sympy_expr
+    def __init__(self, tree):
+        self.at = (tree.meta, currently_parsed_filenames[-1]) if tree else None
+
+    def get_sym(sym_name, kconfig, symbol_changes):
+        try:
+            sym = kconfig.syms[sym_name]
+        except KeyError:
+            die_print_error_at(self.at, "symbol {} does not exist".format(sym_name))
+
+        # If the symbol hadn't been encountered before, pin the current value
+        if sym not in symbol_changes:
+            symbol_changes[sym] = (sym.str_value, self.at)
+
+        return sym
+
+    _sym_cmp_type = {
+        kconfiglib.UNKNOWN:  'unknown',
+        kconfiglib.BOOL:     'tristate',
+        kconfiglib.TRISTATE: 'tristate',
+        kconfiglib.STRING:   'string',
+        kconfiglib.INT:      'int',
+        kconfiglib.HEX:      'hex',
+    }
+    def resolve_var(var, kconfig, symbol_changes):
+        # Remember if var were special variables
+        var_special = var.startswith('$')
+
+        # Resolve symbols
+        var_is_sym = not var_quoted and not var_special and kernel_option_regex.match(var)
+        if var_is_sym:
+            value = self.get_sym(var).str_value
+            var_cmp_mode = _sym_cmp_type.get(value.orig_type, 'unknown')
+            if var_cmp_mode == 'unknown':
+                die_print_error_at(self.at, "cannot compare with symbol {} which is of unknown type".format(value.name))
+        elif var_special:
+            value = resolve_special_variable(kconfig, var)
+            var_cmp_mode = get_special_var_cmp_mode(var)
+        else:
+            value = var
+            # Normal strings will always inherit the mode
+            var_cmp_mode = None
+
+        return VarInfo(var, value, var_special, var_is_sym, var_cmp_mode)
+
+class CachedCondition(Condition):
+    """
+    Provides cached versions of negate() and evaluate(),
+    a deriving class must only implement _evaluate.
+    """
+    def __init__(self, tree):
+        super.__init__(tree)
         self.value = None
 
-    def evaluate(self, kconfig, symbol_changes, hint_at):
+    def negate(self):
+        return NegatedConditionView(self)
+
+    def evaluate(self, kconfig, symbol_changes):
         if self.value is None:
-            self.value = self._evaluate(kconfig, symbol_changes, hint_at)
+            self.value = self._evaluate(kconfig, symbol_changes)
         return self.value
 
-    def _evaluate(self, kconfig, symbol_changes, hint_at):
-        def get_sym(sym_name):
-            try:
-                sym = kconfig.syms[sym_name]
-            except KeyError:
-                die_print_error_at(hint_at, "referenced symbol {} does not exist".format(sym_name))
+    def _evaluate(self, kconfig, symbol_changes):
+        pass # Should be overwritten
 
-            # If the symbol hadn't been encountered before, pin the current value
-            if sym not in symbol_changes:
-                symbol_changes[sym] = (sym.str_value, hint_at)
+class ConditionConstant(Condition):
+    """
+    A condition that has a constant truth value
+    """
+    def __init__(self, value):
+        super().__init__(None)
+        self.value = value
 
-            return sym
+    def negate(self):
+        return NegatedConditionView(self)
 
-        subs = {}
-        for s in self.expr.free_symbols:
-            if s.name.count('\001') == 2:
-                lhs, op, rhs = s.name.split('\001')
-                if op not in ['EXPR_CMP_GE', 'EXPR_CMP_GEQ', 'EXPR_CMP_LE', 'EXPR_CMP_LEQ', 'EXPR_CMP_NEQ', 'EXPR_CMP_EQ']:
-                    die_print_error_at(hint_at, "invalid comparison op '{}'. This is a bug.".format(op))
+    def evaluate(self, kconfig, symbol_changes):
+        return self.value
 
-                def resolve_var(var):
-                    var_quoted = var[0] == "1"
-                    var = var[1:]
+class ConditionAnd(CachedCondition):
+    """
+    A condition that is true if all of its terms are true.
+    """
+    def __init__(self, tree, *args):
+        super().__init__(tree)
+        self.terms = args
 
-                    # Remember if var were special variables
-                    var_special = var.startswith('$')
+    def _evaluate(self, kconfig, symbol_changes):
+        # all() provides early-out
+        return all([t.evaluate(kconfig, symbol_changes) in self.terms])
 
-                    # Resolve symbols
-                    var_is_sym = not var_quoted and not var_special and kernel_option_regex.match(var)
-                    if var_is_sym:
-                        var = get_sym(var).str_value
+class ConditionOr(CachedCondition):
+    """
+    A condition that is true if any of its terms is true.
+    """
+    def __init__(self, tree, *args):
+        super().__init__(tree)
+        self.terms = args
 
-                    # Find cmp mode and replace variable if it is special
-                    var_cmp_mode = None
-                    if var_special:
-                        var_cmp_mode = get_special_var_cmp_mode(var)
-                        var = resolve_special_variable(kconfig, var)
+    def _evaluate(self, kconfig, symbol_changes):
+        # any() provides early-out
+        return any([t.evaluate(kconfig, symbol_changes) in self.terms])
 
-                    return (var, var_quoted, var_special, var_is_sym, var_cmp_mode)
+class ConditionVarComparison(CachedCondition):
+    """
+    A condition that determines its truth value based on a n-ary comparison (n >= 2)
+    """
+    def __init__(self, tree, comparion_op, *args):
+        super().__init__(tree)
+        self.comparion_op = comparion_op
+        self.vars = args
 
-                lhs, lhs_quoted, lhs_special, lhs_is_sym, lhs_cmp_mode = resolve_var(lhs)
-                rhs, rhs_quoted, rhs_special, rhs_is_sym, rhs_cmp_mode = resolve_var(rhs)
+        if self.comparion_op not in ['EXPR_CMP_GE', 'EXPR_CMP_GEQ', 'EXPR_CMP_LE', 'EXPR_CMP_LEQ', 'EXPR_CMP_NEQ', 'EXPR_CMP_EQ']:
+            raise ConfigParsingException(tree.meta, "Invalid comparison op '{}'. This is a bug that should be reported.".format(self.comparion_op))
 
-                # Find out final comparison mode
-                if lhs_special or rhs_special:
-                    # If both were special, we have to assert they resolved to the same cmp mode
-                    if lhs_cmp_mode and rhs_cmp_mode:
-                        if lhs_cmp_mode != rhs_cmp_mode:
-                            die_print_error_at(hint_at, "cannot compare special symbols of different type {} (type {}) to {} (type {})".format(lhs, lhs_cmp_mode, rhs, rhs_cmp_mode))
-                        cmp_mode = lhs_cmp_mode
-                    else:
-                        # One of the variables wasn't special, so we can use the one deduced comparison mode
-                        cmp_mode = lhs_cmp_mode or rhs_cmp_mode
-                else:
-                    # If both variables are not special, we have to find the comparison mode
-                    # based on if the arguments are quoted. If both are symbols, we use
-                    # string comparison. If either is not a symbol, we do string comparison if
-                    # the argument is quoted and integer comparison otherwise.
-                    if lhs_is_sym and rhs_is_sym:
-                        cmp_mode = 'string'
-                    else:
-                        if lhs_quoted or rhs_quoted:
-                            # Comparison against string
-                            cmp_mode = 'string'
-                        elif lhs_is_sym and rhs in ['y', 'm', 'n']:
-                            # Comparison against y,m,n value
-                            cmp_mode = 'string'
-                        elif rhs_is_sym and lhs in ['y', 'm', 'n']:
-                            # Comparison against y,m,n value
-                            cmp_mode = 'string'
-                        else:
-                            # Comparison against int
-                            cmp_mode = 'int'
+    def _evaluate(self, kconfig, symbol_changes):
+        resolved_vars = [self.resolve_var(v, kconfig, symbol_changes) for v in self.vars]
 
-                subs[s.name] = compare_variables(lhs, rhs, op, cmp_mode, hint_at)
-            else:
-                subs[s.name] = atk_kconfig.tri_to_bool(get_sym(s.name).tri_value)
-        return self.expr.subs(subs)
+        # The comparison mode is determined by the following schema:
+        # 1. Filter out None, as variables with mode None will inherit any other comparison type.
+        # 2. All other variables force a comparison mode. It is an error to use two variables
+        #    of different type in the same expression
 
-def parse_expr(tree):
+        resolved_vars_with_type = [v for v in resolved_vars if v.cmp_mode is not None]
+        if len(resolved_vars_with_type) == 0:
+            cmp_mode = 'string' # compare with string mode as fallback (e.g. when two literals were given)
+        elif len(resolved_vars_with_type) == 1:
+            cmp_mode = resolved_vars_with_type[0].cmp_mode
+        else:
+            die_print_error_at(self.at, "cannot compare variables of different types: [{}]".format(', '.join(["{} ({})".format(v.var, v.cmp_mode) for v in resolved_vars_with_type])))
+
+        return compare_variables(resolved_vars, self.comparion_op, cmp_mode, self.at)
+
+Condition.true = ConditionConstant(True)
+Condition.false = ConditionConstant(False)
+
+def parse_expr_condition(tree):
     if tree.data == 'expr':
-        return sympy.Or(*[parse_expr(c) for c in tree.children if c.__class__ == lark.Tree and c.data == 'expr_term'])
+        return ConditionOr(*[parse_expr_condition(c) for c in tree.children if c.__class__ == lark.Tree and c.data == 'expr_term'])
     if tree.data == 'expr_term':
-        return sympy.And(*[parse_expr(c) for c in tree.children if c.__class__ == lark.Tree and c.data == 'expr_factor'])
+        return ConditionAnd(*[parse_expr_condition(c) for c in tree.children if c.__class__ == lark.Tree and c.data == 'expr_factor'])
     elif tree.data == 'expr_factor':
         negated = find_first_child(tree, 'expr_op_neg') is not None
-        def negate_if_needed(s):
-            return sympy.Not(s) if negated else s
-
         expr_cmp = find_first_child(tree, 'expr_cmp')
         if expr_cmp:
-            lhs, lhs_quoted = find_named_token_raw(expr_cmp, 'expr_lhs')
-            rhs, rhs_quoted = find_named_token_raw(expr_cmp, 'expr_rhs')
-            operation = find_first_child(expr_cmp, 'expr_op_cmp').children[0].type
-            return negate_if_needed(sympy.Symbol("{}{}\001{}\001{}{}".format('1' if lhs_quoted else '0', lhs, operation, '1' if rhs_quoted else '0', rhs)))
+            operands = find_all_named_tokens_raw(expr_cmp, 'expr_param')
+            operation = None
+            # Find operation type and assert all operation types are equal
+            for c in expr_cmp.children:
+                if c.data == 'expr_op_cmp':
+                    op = c.children[0].type
+                    if operation is None:
+                        operation = op
+                    elif operation != op:
+                        raise ConfigParsingException(expr_cmp.meta, "All expression operands must be the same for n-ary comparisons")
+            return ConditionVarComparison(operation, operands).negate(negated)
 
         expr_id = find_first_child(tree, 'expr_id')
         if expr_id:
-            return negate_if_needed(sympy.Symbol(str(expr_id.children[0])))
+            # Implicit truth value is the same as writing 'SYM == "y"'
+            return ConditionVarComparison('EXPR_CMP_EQ', [(str(expr_id.children[0]), False), ('y', True)]).negate(negated)
 
         expr = find_first_child(tree, 'expr')
         if expr:
-            return negate_if_needed(parse_expr(expr))
+            return parse_expr_condition(expr).negate(negated)
 
         raise ConfigParsingException(tree.meta, "Invalid expression subtree '{}' in 'expr_factor'".format(tree.data))
     else:
@@ -422,14 +531,14 @@ def find_conditions(tree, name='expr'):
     """
     Returns all conditions in the direct subtree.
     """
-    return [parse_expr(expr) for expr in find_subtrees(tree, name)]
+    return [parse_expr_condition(expr) for expr in find_subtrees(tree, name)]
 
 def find_condition(tree, ignore_missing=True):
     conditions = find_conditions(tree)
 
     if len(conditions) == 0:
         if ignore_missing:
-            return sympy.true
+            return None
         else:
             raise ConfigParsingException(tree.meta, "Missing expression")
 
@@ -484,39 +593,35 @@ class BlockNode:
         self.parse_context(ctxt, *args, **kwargs)
 
 class Stmt:
-    def __init__(self, tree):
+    def __init__(self, tree, conditions):
         self.at = (tree.meta, currently_parsed_filenames[-1])
+        self.conditions = conditions
 
 class ConfigModule(BlockNode):
     node_name = 'module'
 
     class StmtUse(Stmt):
-        def __init__(self, tree, condition, module_name):
-            super().__init__(tree)
-            self.condition = condition
+        def __init__(self, tree, conditions, module_name):
+            super().__init__(tree, conditions)
             self.module_name = module_name
             self.module = None
     class StmtMerge(Stmt):
-        def __init__(self, tree, condition, filename):
-            super().__init__(tree)
-            self.condition = condition
+        def __init__(self, tree, conditions, filename):
+            super().__init__(tree, conditions)
             self.filename = filename
     class StmtAssert(Stmt):
-        def __init__(self, tree, condition, assert_condition, message):
-            super().__init__(tree)
-            self.condition = condition
+        def __init__(self, tree, conditions, assert_condition, message):
+            super().__init__(tree, conditions)
             self.assert_condition = assert_condition
             self.message = message
     class StmtSet(Stmt):
-        def __init__(self, tree, condition, sym_name, value):
-            super().__init__(tree)
-            self.condition = condition
+        def __init__(self, tree, conditions, sym_name, value):
+            super().__init__(tree, conditions)
             self.sym_name = sym_name
             self.value = value
     class StmtAddCmdline(Stmt):
-        def __init__(self, tree, condition, param):
-            super().__init__(tree)
-            self.condition = condition
+        def __init__(self, tree, conditions, param):
+            super().__init__(tree, conditions)
             self.param = param
 
     def __init__(self):
@@ -534,57 +639,58 @@ class ConfigModule(BlockNode):
 
         apply_tree_nodes(blck.children, [module_name], ignore_additional=True)
 
-    def parse_context(self, ctxt, precondition=sympy.true): # pylint: disable=arguments-differ
+    def parse_context(self, ctxt, preconditions=[Condition.true]): # pylint: disable=arguments-differ
         def stmt_module_if(tree):
             conditions = find_conditions(tree)
             subcontexts = find_subtrees(tree, 'ctxt_module')
             if len(subcontexts) - len(conditions) not in [0, 1]:
                 raise ConfigParsingException(tree.meta, "invalid amount of subcontexts(={}) and conditions(={}) for if block; this is a bug that should be reported.".format(len(subcontexts), len(conditions)))
 
-            previous_conditions = []
-            def negate_previous():
-                return sympy.Not(sympy.Or(*previous_conditions))
-
+            not_previous_conditions = []
             for c, s in zip(conditions, subcontexts):
                 # The condition for an else if block is the combined negation of all previous conditions,
                 # and its own condition
-                cond = precondition & negate_previous() & c
-                self.parse_context(s, precondition=cond)
-                previous_conditions.append(c)
+                conds = preconditions + not_previous_conditions + [c]
+                self.parse_context(s, preconditions=conds)
+                not_previous_conditions.append(c.negate())
 
             if len(subcontexts) > len(conditions):
                 # The condition for the else block is the combined negation of all previous conditions
-                cond = precondition & negate_previous()
-                self.parse_context(subcontexts[-1], precondition=cond)
+                conds = preconditions + not_previous_conditions
+                self.parse_context(subcontexts[-1], preconditions=conds)
 
-        def _get_cond(tree):
-            return Condition(precondition & find_condition(tree))
+        def _conds(tree):
+            c = find_condition(tree)
+            if c:
+                return preconditions + [c]
+            else:
+                return preconditions
         def stmt_module_use(tree):
-            cond = _get_cond(tree)
-            new_uses = [ConfigModule.StmtUse(tree, cond, i) for i in find_all_tokens(tree, 'IDENTIFIER')]
+            conds = _conds(tree)
+            new_uses = [ConfigModule.StmtUse(tree, conds, i) for i in find_all_tokens(tree, 'IDENTIFIER')]
             self.uses.extend(new_uses)
             self.all_statements_in_order.extend(new_uses)
         def stmt_module_merge(tree):
-            stmt = ConfigModule.StmtMerge(tree, _get_cond(tree), find_named_token(tree, 'path'))
+            stmt = ConfigModule.StmtMerge(tree, _conds(tree), find_named_token(tree, 'path'))
             self.merge_kconf_files.append(stmt)
             self.all_statements_in_order.append(stmt)
         def stmt_module_assert(tree):
             conditions = find_conditions(tree)
-            assert_condition = Condition(conditions[0])
-            stmt_condition = Condition(conditions[1] if len(conditions) > 1 else precondition)
+            assert_condition = conditions[0]
+            stmt_conditions = preconditions + ([conditions[1]] if len(conditions) > 1 else [])
             message = find_named_token(tree, 'quoted_param', ignore_missing=True)
-            stmt = ConfigModule.StmtAssert(tree, stmt_condition, assert_condition, message)
+            stmt = ConfigModule.StmtAssert(tree, stmt_conditions, assert_condition, message)
             self.assertions.append(stmt)
             self.all_statements_in_order.append(stmt)
         def stmt_module_set(tree):
             key = find_token(tree, 'KERNEL_OPTION')
             value = find_named_token(tree, 'kernel_option_value', ignore_missing=True) or 'y'
-            stmt = ConfigModule.StmtSet(tree, _get_cond(tree), key, value)
+            stmt = ConfigModule.StmtSet(tree, _conds(tree), key, value)
             self.assignments.append(stmt)
             self.all_statements_in_order.append(stmt)
         def stmt_module_add_cmdline(tree):
-            cond = _get_cond(tree)
-            new_params = [ConfigModule.StmtAddCmdline(tree, cond, i) for i in find_all_named_tokens(tree, 'quoted_param')]
+            conds = _conds(tree)
+            new_params = [ConfigModule.StmtAddCmdline(tree, conds, i) for i in find_all_named_tokens(tree, 'quoted_param')]
             self.cmdline.extend(new_params)
             self.all_statements_in_order.extend(new_params)
 

@@ -147,7 +147,7 @@ def apply_autokernel_config(kernel_dir, kconfig, config):
 
     # Asserts that the symbol has the given value
     def assert_symbol(stmt):
-        if not stmt.assert_condition.evaluate(kconfig, symbol_changes, stmt.at):
+        if not stmt.assert_condition.evaluate(kconfig, symbol_changes):
             if stmt.message:
                 autokernel.config.die_print_error_at(stmt.at, "assertion failed: {}".format(stmt.message))
             else:
@@ -208,9 +208,15 @@ def apply_autokernel_config(kernel_dir, kconfig, config):
             autokernel.config.ConfigModule.StmtAddCmdline: stmt_add_cmdline,
         }
 
+        def conditions_met(stmt):
+            for condition in stmt.conditions:
+                if not condition.evaluate(kconfig, symbol_changes):
+                    return False
+            return True
+
         for stmt in module.all_statements_in_order:
-            # Ensure the attached condition is met for the statement.
-            if stmt.condition.evaluate(kconfig, symbol_changes, stmt.at):
+            # Ensure all attached conditions are met for the statement.
+            if conditions_met(stmt):
                 dispatch_stmt[stmt.__class__](stmt)
 
     # Visit the root node and apply all symbol changes
