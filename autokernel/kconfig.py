@@ -31,7 +31,7 @@ def value_to_str(value):
 
 def tri_to_bool(tri):
     """
-    Converts a tristate to a boolean value (['n'] -> False, ['m', 'y'] -> True)
+    Converts a tristate to a boolean value (['n'] → False, ['m', 'y'] → True)
     """
     return tri != kconfiglib.STR_TO_TRI['n']
 

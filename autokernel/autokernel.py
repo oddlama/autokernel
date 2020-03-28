@@ -278,7 +278,7 @@ def main_check_config(args):
     only_cmp_syms = comprehension(cmp_syms, common_syms_set)
 
 
-    supress_new, supress_del, supress_chg = args.suppress_columns
+    supress_new, supress_del, supress_chg = (args.suppress_columns or (False, False, False))
 
     if not supress_new:
         for sym in only_gen_syms:
@@ -443,49 +443,28 @@ def check_config_against_detected_modules(kconfig, modules):
     log.info("The output format is: [current] OPTION_NAME = desired")
     log.info("HINT: Options are ordered by dependencies, i.e. applying")
     log.info("      them from top to buttom will work")
+    log.info("Indicators: (=) same, (~) changed")
     log.info("Detected options:")
 
     visited = set()
     visited_opts = set()
-    color = {
-        'n': "[1;31m",
-        'm': "[1;33m",
-        'y': "[1;32m",
-    }
 
-    def visit_opt(opt, v):
+    indicator_same = log.color('[32m=[m', '=')
+    indicator_changed = log.color('[33m~[m', '~')
+
+    def visit_opt(opt, new_value):
         # Ensure we visit only once
         if opt in visited_opts:
             return
         visited_opts.add(opt)
 
         sym = kconfig.syms[opt]
-        if v in kconfiglib.STR_TO_TRI:
-            sym_v = sym.tri_value
-            tri_v = kconfiglib.STR_TO_TRI[v]
+        changed = sym.str_value != new_value
 
-            if tri_v == sym_v:
-                # Match
-                v_color = color['y']
-            elif autokernel.kconfig.tri_to_bool(tri_v) == autokernel.kconfig.tri_to_bool(sym_v):
-                # Match, but mixed y and m
-                v_color = color['m']
-            else:
-                # Mismatch
-                v_color = color['n']
-
-            # Print option value
-            if log.use_color():
-                print("[{}{}[m] {} = {}".format(v_color, kconfiglib.TRI_TO_STR[sym_v], sym.name, v))
-            else:
-                print("[{}] {} = {}".format(kconfiglib.TRI_TO_STR[sym_v], sym.name, v))
+        if changed:
+            print(indicator_changed + " {} → {} {}".format(autokernel.kconfig.value_to_str(sym.str_value), autokernel.kconfig.value_to_str(new_value), sym.name))
         else:
-            # Print option assignment
-            col = color['y'] if sym.str_value == v else color['n']
-            if log.use_color():
-                print("{} = {}{}[m".format(sym.name, col, sym.str_value))
-            else:
-                print("{} = {}".format(sym.name, sym.str_value))
+            print(indicator_same + "       {} {}".format(autokernel.kconfig.value_to_str(sym.str_value), sym.name))
 
     def visit(m):
         # Ensure we visit only once

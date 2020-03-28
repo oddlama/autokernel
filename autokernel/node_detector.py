@@ -252,8 +252,9 @@ class ModaliasNode(SysfsNode):
         Finds and returns all modalias files in /sys
         """
 
-        # We use find here, because python raises an OSError when it reaches efivars directory. Probably
-        return filter(None, [i.decode() for i in subprocess.run(['find', '/sys', '-type', 'f', '-name', 'modalias', '-print0'], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).stdout.split(b'\0')])
+        # We use find here, because python raises an OSError when it reaches efivars directory.
+        # Also we use check=False, as these errors will cause find to always exit with status 1.
+        return filter(None, [i.decode() for i in subprocess.run(['find', '/sys', '-type', 'f', '-name', 'modalias', '-print0'], check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE).stdout.split(b'\0')])
 
 class PnpNode(SysfsNode):
     """
