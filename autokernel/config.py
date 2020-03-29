@@ -12,11 +12,6 @@ from autokernel import log
 kernel_option_regex = re.compile('^[_A-Z0-9]*[_A-Z][_A-Z0-9]*$')
 currently_parsed_filenames = []
 
-class ConfigParsingException(Exception):
-    def __init__(self, meta, message):
-        super().__init__(message)
-        self.meta = meta
-
 def def_at(tree):
     return (tree.meta, currently_parsed_filenames[-1]) if tree else None
 
@@ -44,10 +39,12 @@ def parse_bool(tree, s):
     elif s in ['false', '0', 'no', 'n']:
         return False
     else:
-        raise ConfigParsingException(tree.meta, "Invalid value for boolean")
+        die_print_error_at(def_at(tree), "invalid value for boolean")
 
-def redefinition_exception(tree, name):
-    return ConfigParsingException(tree.meta, "Duplicate definition of {}".format(name))
+def die_redefinition(new_at, previous_at, name):
+    autokernel.config.print_error_at(new_at, "redefinition of {}".format(name))
+    autokernel.config.print_hint_at(previous_at, "previously defined here")
+    sys.exit(1)
 
 def print_line_with_highlight(line, line_nr, highlight):
     tabs_before = line[:highlight[0]-1].count('\t')
@@ -66,7 +63,7 @@ def msg_error(msg):
 
 def print_message_with_file_location(file, message, line, column_range):
     if not file:
-        print(message, file=sys.stderr)
+        print(message + ' [location untracked]', file=sys.stderr)
     else:
         print((log.color("[1m") + "{}:{}:{}:" + log.color_reset + " {}").format(
             file, line, column_range[0], message), file=sys.stderr)
@@ -120,7 +117,7 @@ def apply_tree_nodes(nodes, callbacks, on_additional=None, ignore_additional=Fal
             elif on_additional:
                 on_additional(n)
             elif not ignore_additional:
-                raise ConfigParsingException(n.meta, "unprocessed rule '{}'; this is a bug that should be reported.".format(n.data))
+                die_print_error_at(def_at(n), "unprocessed rule '{}'; this is a bug that should be reported.".format(n.data))
 
 def find_first_child(tree, name):
     for c in tree.children:
@@ -138,7 +135,7 @@ def find_token(tree, token_name, ignore_missing=False, strip_quotes=False):
             return remove_quotes(str(c)) if strip_quotes else str(c)
 
     if not ignore_missing:
-        raise ConfigParsingException(tree.meta, "Missing token '{}'".format(token_name))
+        die_print_error_at(def_at(tree), "missing token '{}'".format(token_name))
     return None
 
 class TokenRawInfo:
@@ -155,24 +152,24 @@ def find_named_token_raw(tree, token_name, ignore_missing=False):
     for c in tree.children:
         if c.__class__ == lark.Tree and c.data == token_name:
             if len(c.children) != 1:
-                raise ConfigParsingException(c.meta, "Subrule token '{}' has too many children".format(token_name))
+                die_print_error_at(def_at(c), "subrule token '{}' has too many children".format(token_name))
 
             if c.children[0].data not in ['string', 'string_quoted']:
-                raise ConfigParsingException(c.meta, "Subrule token '{}.{}' has an invalid name (must be either 'string' or 'string_quoted')".format(token_name, c.children[0].data))
+                die_print_error_at(def_at(c), "subrule token '{}.{}' has an invalid name (must be either 'string' or 'string_quoted')".format(token_name, c.children[0].data))
 
             if c.children[0].__class__ != lark.Tree:
-                raise ConfigParsingException(c.meta, "Subrule token '{}.{}' has no children tree".format(token_name, c.children[0].data))
+                die_print_error_at(def_at(c), "subrule token '{}.{}' has no children tree".format(token_name, c.children[0].data))
 
             if len(c.children[0].children) != 1:
-                raise ConfigParsingException(c.meta, "Subrule token '{}.{}' has too many children".format(token_name, c.children[0].data))
+                die_print_error_at(def_at(c.children[0]), "subrule token '{}.{}' has too many children".format(token_name, c.children[0].data))
 
             if c.children[0].children[0].__class__ != lark.Token:
-                raise ConfigParsingException(c.meta, "Subrule token '{}.{}' has no children literal".format(token_name, c.children[0].data))
+                die_print_error_at(def_at(c.children[0]), "subrule token '{}.{}' has no children literal".format(token_name, c.children[0].data))
 
             return TokenRawInfo(c.children[0], str(c.children[0].children[0]), is_quoted=(c.children[0].data == 'string_quoted'))
 
     if not ignore_missing:
-        raise ConfigParsingException(tree.meta, "Missing token '{}'".format(token_name))
+        die_print_error_at(def_at(tree), "missing token '{}'".format(token_name))
     return TokenRawInfo(None, None, False)
 
 def find_named_token(tree, token_name, ignore_missing=False):
@@ -230,7 +227,7 @@ class UniqueProperty:
         ignore_missing = default_if_ignored is not None
 
         if self.defined():
-            raise redefinition_exception(tree, self.name)
+            die_redefinition(def_at(tree), self.at, self.name)
         if token:
             tok = find_token(tree, token, ignore_missing=ignore_missing)
         elif named_token:
@@ -518,7 +515,7 @@ class ConditionVarComparison(CachedCondition):
         self.vars = operands
 
         if self.compare_op not in _compare_op_to_str:
-            raise ConfigParsingException(tree.meta, "Invalid comparison op '{}'. This is a bug that should be reported.".format(_compare_op_to_str[self.compare_op]))
+            die_print_error_at(self.at, "Invalid comparison op '{}'. This is a bug that should be reported.".format(_compare_op_to_str[self.compare_op]))
 
     def _evaluate(self, kconfig):
         resolved_vars = [self.resolve_var(v, kconfig) for v in self.vars]
@@ -563,7 +560,7 @@ def parse_expr_condition(tree):
                     if operation is None:
                         operation = op
                     elif operation != op:
-                        raise ConfigParsingException(expr_cmp.meta, "All expression operands must be the same for n-ary comparisons")
+                        die_print_error_at(def_at(expr_cmp), "all expression operands must be the same for n-ary comparisons")
             return ConditionVarComparison(expr_cmp, operation, operands).negate(negated)
 
         expr_id = find_first_child(tree, 'expr_id')
@@ -577,9 +574,9 @@ def parse_expr_condition(tree):
         if expr:
             return parse_expr_condition(expr).negate(negated)
 
-        raise ConfigParsingException(tree.meta, "Invalid expression subtree '{}' in 'expr_factor'".format(tree.data))
+        die_print_error_at(def_at(tree), "invalid expression subtree '{}' in 'expr_factor'".format(tree.data))
     else:
-        raise ConfigParsingException(tree.meta, "Invalid expression subtree '{}'".format(tree.data))
+        die_print_error_at(def_at(tree), "invalid expression subtree '{}'".format(tree.data))
 
 def find_subtrees(tree, name):
     """
@@ -600,12 +597,12 @@ def find_condition(tree, ignore_missing=True):
         if ignore_missing:
             return None
         else:
-            raise ConfigParsingException(tree.meta, "Missing expression")
+            die_print_error_at(def_at(tree), "missing expression")
 
     if len(conditions) == 1:
         return conditions[0]
 
-    raise ConfigParsingException(tree.meta, "Expected exactly one expression, but got {}".format(len(conditions)))
+    die_print_error_at(def_at(tree), "expected exactly one expression, but got {}".format(len(conditions)))
 
 class BlockNode:
     """
@@ -631,11 +628,11 @@ class BlockNode:
         """
         Parses the given block tree node, and class parse_block_params and parse_context.
         """
-        if not hasattr(self, 'first_definition'):
+        if self.first_definition is None:
             self.first_definition = def_at(tree)
 
         if tree.data != ('blck_' + self.node_name):
-            raise ConfigParsingException(tree.meta, "{} cannot parse '{}'".format(self.__class__.__name__, tree.data))
+            die_print_error_at(def_at(tree), "{} cannot parse '{}'".format(self.__class__.__name__, tree.data))
 
         self.parse_block_params(tree, *args, **kwargs)
 
@@ -644,11 +641,11 @@ class BlockNode:
             if c.__class__ == lark.Tree:
                 if c.data == 'ctxt_' + self.node_name:
                     if ctxt:
-                        raise ConfigParsingException(c.meta, "'{}' must not have multiple children of type '{}'".format("blck_" + self.node_name, "ctxt_" + self.node_name))
+                        die_print_error_at(def_at(c), "'{}' must not have multiple children of type '{}'".format("blck_" + self.node_name, "ctxt_" + self.node_name))
                     ctxt = c
 
         if not ctxt:
-            raise ConfigParsingException(tree.meta, "'{}' must have exactly one child '{}'".format("blck_" + self.node_name, "ctxt_" + self.node_name))
+            die_print_error_at(def_at(tree), "'{}' must have exactly one child '{}'".format("blck_" + self.node_name, "ctxt_" + self.node_name))
 
         self.parse_context(ctxt, *args, **kwargs)
 
@@ -706,7 +703,7 @@ class ConfigModule(BlockNode):
             conditions = find_conditions(tree)
             subcontexts = find_subtrees(tree, 'ctxt_module')
             if len(subcontexts) - len(conditions) not in [0, 1]:
-                raise ConfigParsingException(tree.meta, "invalid amount of subcontexts(={}) and conditions(={}) for if block; this is a bug that should be reported.".format(len(subcontexts), len(conditions)))
+                die_print_error_at(def_at(tree), "invalid amount of subcontexts(={}) and conditions(={}) for if block; this is a bug that should be reported.".format(len(subcontexts), len(conditions)))
 
             not_previous_conditions = []
             for c, s in zip(conditions, subcontexts):
@@ -837,7 +834,7 @@ class ConfigInstall(BlockNode):
             self.target_dir.parse(tree, named_token='path')
         def stmt_install_target(tree):
             if self.target:
-                raise redefinition_exception(tree, 'target')
+                die_redefinition(def_at(tree), self.target.at, 'target')
             self.target = find_named_token(tree, 'path')
         def stmt_install_mount(tree):
             self.mount.append(find_named_token(tree, 'path'))
@@ -868,7 +865,7 @@ class ConfigBuild(BlockNode):
         def stmt_build_pack(tree):
             key = find_named_token(tree, 'key')
             if key not in self.pack:
-                raise ConfigParsingException(tree.meta, "Invalid parameter '{}'".format(key))
+                die_print_error_at(def_at(tree), "invalid parameter '{}'".format(key))
             self.pack[key].parse(tree, named_token='param', ignore_missing='true')
 
         apply_tree_nodes(ctxt.children, [
@@ -900,23 +897,19 @@ class Config(BlockNode):
                 try:
                     subtree = load_config_tree(filename)
                 except IOError as e:
-                    raise ConfigParsingException(tree.meta, str(e))
+                    die_print_error_at(def_at(tree), str(e))
 
-                try:
-                    currently_parsed_filenames.append(filename)
-                    self.parse_tree(subtree, restrict_to_modules=True)
-                    currently_parsed_filenames.pop()
-                except ConfigParsingException as e:
-                    die_print_parsing_exception(filename, e)
+                currently_parsed_filenames.append(filename)
+                self.parse_tree(subtree, restrict_to_modules=True)
+                currently_parsed_filenames.pop()
             else:
-                raise ConfigParsingException(tree.meta, "'{}' does not exist or is not a file".format(filename))
+                die_print_error_at(def_at(tree), "'{}' does not exist or is not a file".format(filename))
 
         def blck_module(tree):
             module = ConfigModule()
             module.parse_tree(tree)
             if module.name in self.modules:
-                dt, df = self.modules[module.name].first_definition
-                raise ConfigParsingException(tree.meta, "redefinition of module '{}' (previously defined in {}:{}:{})".format(module.name, df, dt.line, dt.column))
+                die_redefinition(def_at(tree), self.modules[module.name].first_definition, "module '{}'".format(module.name))
             self.modules[module.name] = module
         def blck_kernel(tree):
             self.kernel.parse_tree(tree)
@@ -932,14 +925,14 @@ class Config(BlockNode):
                 for filename in os.listdir(include_dir):
                     _include_module_file(tree, os.path.join(include_dir, filename))
             else:
-                raise ConfigParsingException(tree.meta, "'{}' is not a directory".format(include_dir))
+                die_print_error_at(def_at(tree), "'{}' is not a directory".format(include_dir))
         def stmt_root_include_module(tree):
             filename = os.path.join(os.path.dirname(currently_parsed_filenames[-1]), find_named_token(tree, 'path'))
             _include_module_file(tree, filename)
 
         if restrict_to_modules:
             def other(tree):
-                raise ConfigParsingException(tree.meta, "'{}' must not be used in a module config".format(tree.data))
+                die_print_error_at(def_at(tree), "'{}' must not be used in a module config".format(tree.data))
 
             apply_tree_nodes(ctxt.children, [
                     blck_module,
@@ -973,12 +966,10 @@ def load_config(config_file):
     """
     tree = load_config_tree(config_file)
     config = Config()
-    try:
-        currently_parsed_filenames.append(config_file)
-        config.parse_tree(tree)
-        currently_parsed_filenames.pop()
-    except ConfigParsingException as e:
-        die_print_parsing_exception(config_file, e)
+
+    currently_parsed_filenames.append(config_file)
+    config.parse_tree(tree)
+    currently_parsed_filenames.pop()
 
     def get_module(stmt):
         if stmt.module_name not in config.modules:
