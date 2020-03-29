@@ -152,7 +152,10 @@ quoted_string: ESCAPED_STRING -> string_quoted
 // meta
 // ================
 
-%import common.ESCAPED_STRING
+_STRING_INNER: /.*?/
+_STRING_ESC_INNER: _STRING_INNER /(?<!\\)(\\\\)*?/
+ESCAPED_STRING: "\"" _STRING_ESC_INNER "\"" | "'" _STRING_ESC_INNER "'"
+
 %import common.LETTER
 %import common.DIGIT
 %import common.WS

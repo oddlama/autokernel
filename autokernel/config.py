@@ -31,7 +31,7 @@ def remove_quotes(s):
     """
     Strips leading and trailing quotes from the string, if any.
     """
-    return s[1:-1] if s[0] == s[-1] == '"' else s
+    return s[1:-1] if s[0] == s[-1] and s[0] in ['"', "'"] else s
 
 def parse_bool(tree, s):
     if s in ['true', '1', 'yes', 'y']:
