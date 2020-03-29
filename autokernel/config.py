@@ -214,6 +214,7 @@ class UniqueProperty:
     value and raises an error if it is assigned more than once.
     """
     def __init__(self, name, default, convert_bool=False):
+        self.at = None
         self.name = name
         self.default = default
         self.value = None
@@ -228,6 +229,8 @@ class UniqueProperty:
 
         if self.defined():
             die_redefinition(def_at(tree), self.at, self.name)
+        self.at = def_at(tree)
+
         if token:
             tok = find_token(tree, token, ignore_missing=ignore_missing)
         elif named_token:
@@ -833,9 +836,7 @@ class ConfigInstall(BlockNode):
         def stmt_install_target_dir(tree):
             self.target_dir.parse(tree, named_token='path')
         def stmt_install_target(tree):
-            if self.target:
-                die_redefinition(def_at(tree), self.target.at, 'target')
-            self.target = find_named_token(tree, 'path')
+            self.target.parse(tree, named_token='path')
         def stmt_install_mount(tree):
             self.mount.append(find_named_token(tree, 'path'))
         def stmt_install_assert_mounted(tree):
