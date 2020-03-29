@@ -932,7 +932,7 @@ def main():
 
     # TODO umask (probably better as external advice, ala "use umask then execute this".)
 
-if __name__ == '__main__':
+def main_checked():
     try:
         main()
     except PermissionError as e:
@@ -941,3 +941,6 @@ if __name__ == '__main__':
         import traceback
         traceback.print_exc()
         log.die("Aborted because of previous errors")
+
+if __name__ == '__main__':
+    main_checked()

@@ -6,7 +6,9 @@ import os
 import bz2
 import re
 import shlex
-import urllib.request
+import requests
+from datetime import datetime, timezone
+import dateutil.parser
 
 
 class EntryParsingException(Exception):
@@ -247,10 +249,18 @@ class Lkddb:
         Downloads the newest lkddb file.
         """
 
-        # TODO renew
-        if not os.path.exists(self.lkddb_file):
+        def has_newer_version():
+            req = requests.head(self.lkddb_url)
+            url_time = req.headers['last-modified']
+            url_date = dateutil.parser.parse(url_time)
+            file_time = datetime.fromtimestamp(os.path.getmtime(self.lkddb_file), timezone.utc)
+            return url_date > file_time
+
+        if not os.path.exists(self.lkddb_file) or has_newer_version():
             log.info("Downloading lkddb database")
-            urllib.request.urlretrieve(self.lkddb_url, self.lkddb_file)
+            r = requests.get(self.lkddb_url, allow_redirects=True)
+            with open(self.lkddb_file, 'wb') as f:
+                f.write(r.content)
 
     def _load_db(self):
         """
