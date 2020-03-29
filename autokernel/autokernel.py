@@ -1,10 +1,10 @@
-#!/usr/bin/env python3
-
 import autokernel.kconfig
 import autokernel.config
 import autokernel.lkddb
 import autokernel.node_detector
+import autokernel.symbol_tracking
 from autokernel import log
+from autokernel.symbol_tracking import set_value_detect_conflicts
 
 import argparse
 import gzip
@@ -15,85 +15,6 @@ import sys
 import tempfile
 import kconfiglib
 from datetime import datetime, timezone
-
-
-# Monkeypatch Symbol.set_value, and Symbol._invalidate to detect conflicting changes.
-# Detection is only done when using the set_value_detect_conflicts instead of Symbol.set_value
-
-symbol_change_hint = None
-# Map symbol → (value, hint_at)
-symbol_changes = {}
-symbols_invalidated = {}
-
-saved_set_value = kconfiglib.Symbol.set_value
-saved_invalidate = kconfiglib.Symbol._invalidate # pylint: disable=protected-access
-
-def register_symbol_change(symbol, new_value, inducing_change):
-    if symbol == inducing_change[0]:
-        log.verbose("{} {}".format(autokernel.kconfig.value_to_str(new_value), symbol.name))
-        symbol_changes[symbol] = (new_value, symbol_change_hint[1])
-    else:
-        log.verbose("{} {} (implicitly triggered by {} = {})".format(
-            autokernel.kconfig.value_to_str(new_value),
-            symbol.name, inducing_change[0].name, inducing_change[1]))
-
-def track_symbol_changes(symbol, old_value, new_value, inducing_change):
-    if old_value == new_value:
-        register_symbol_change(symbol, new_value, inducing_change)
-        return
-
-    # Bot normal and implicit changes can trigger conflicts
-    if symbol in symbol_changes and symbol_changes[symbol][0] != new_value:
-        _, hint_at = symbol_change_hint
-        autokernel.config.die_print_error_at(hint_at, "conflicting {} for symbol {} (previously set to {}, now {})".format(
-            "change" if symbol == inducing_change[0] else "implicit change",
-            symbol.name,
-            autokernel.kconfig.value_to_str(symbol_changes[symbol][0]),
-            autokernel.kconfig.value_to_str(new_value)))
-
-    # Implicit changes will not be recorded by register_symbol_change, but
-    # they can trigger conflicting changes above.
-    # This prevents them from changing an option that was previously set by the user.
-    register_symbol_change(symbol, new_value, inducing_change)
-
-def set_value_proxy_detect_conflicts(sym, value):
-    # Additional logic only if called through wrapper
-    if not symbol_change_hint:
-        return saved_set_value(sym, value)
-
-    symbols_invalidated.clear()
-    ret = saved_set_value(sym, value)
-
-    # Process invalidated symbols and check for conflicting changes.
-    track_symbol_changes(sym, sym.str_value, value, (sym, value))
-    for s in symbols_invalidated:
-        # Skip self-invalidation
-        if s == sym:
-            continue
-
-        # We will only track implicit changes if they changed the value.
-        if symbols_invalidated[s] == s.str_value:
-            continue
-
-        track_symbol_changes(s, symbols_invalidated[s], s.str_value, (sym, value))
-
-    return ret
-
-def monkey_invalidate(sym):
-    # Remember old value
-    symbols_invalidated[sym] = sym.str_value
-    return saved_invalidate(sym)
-
-kconfiglib.Symbol.set_value = set_value_proxy_detect_conflicts
-kconfiglib.Symbol._invalidate = monkey_invalidate # pylint: disable=protected-access
-
-def set_value_detect_conflicts(sym, value, hint_name, hint_definition):
-    # Remember which symbol caused a chain of changes
-    global symbol_change_hint # pylint: disable=global-statement
-    symbol_change_hint = (hint_name, hint_definition)
-    ret = sym.set_value(value)
-    symbol_change_hint = None
-    return ret
 
 
 def has_proc_config_gz():
@@ -147,21 +68,21 @@ def apply_autokernel_config(kernel_dir, kconfig, config):
 
     # Asserts that the symbol has the given value
     def assert_symbol(stmt):
-        if not stmt.assert_condition.evaluate(kconfig, symbol_changes):
+        if not stmt.assert_condition.evaluate(kconfig):
             if stmt.message:
                 autokernel.config.die_print_error_at(stmt.at, "assertion failed: {}".format(stmt.message))
             else:
                 autokernel.config.die_print_error_at(stmt.at, "assertion failed")
 
     # Sets a symbols value if and asserts that there are no conflicting double assignments
-    def set_symbol(stmt, hint_name):
+    def set_symbol(stmt):
         # Get the kconfig symbol, and change the value
         sym = get_sym(stmt)
 
         if not autokernel.kconfig.symbol_can_be_user_assigned(sym):
             autokernel.config.print_warn_at(stmt.at, "symbol {} can't be user-assigned".format(sym.name))
 
-        if not set_value_detect_conflicts(sym, stmt.value, 'module ' + hint_name, stmt.at):
+        if not set_value_detect_conflicts(sym, stmt.value, stmt.at):
             autokernel.config.die_print_error_at(stmt.at, "invalid value {} for symbol {}".format(autokernel.kconfig.value_to_str(stmt.value), sym.name))
 
         if sym.str_value != stmt.value:
@@ -173,7 +94,7 @@ def apply_autokernel_config(kernel_dir, kconfig, config):
     kernel_cmdline = []
 
     # Reset symbol_changes
-    symbol_changes.clear()
+    autokernel.symbol_tracking.symbol_changes.clear()
 
     # Visit all module nodes and apply configuration changes
     visited = set()
@@ -195,7 +116,7 @@ def apply_autokernel_config(kernel_dir, kconfig, config):
             assert_symbol(stmt)
 
         def stmt_set(stmt):
-            set_symbol(stmt, module.name or 'kernel')
+            set_symbol(stmt)
 
         def stmt_add_cmdline(stmt):
             kernel_cmdline.append(stmt.param)
@@ -210,7 +131,7 @@ def apply_autokernel_config(kernel_dir, kconfig, config):
 
         def conditions_met(stmt):
             for condition in stmt.conditions:
-                if not condition.evaluate(kconfig, symbol_changes):
+                if not condition.evaluate(kconfig):
                     return False
             return True
 
@@ -221,7 +142,7 @@ def apply_autokernel_config(kernel_dir, kconfig, config):
 
     # Visit the root node and apply all symbol changes
     visit(config.kernel.module)
-    log.info("  Changed {} symbols".format(len(symbol_changes)))
+    log.info("  Changed {} symbols".format(len(autokernel.symbol_tracking.symbol_changes)))
 
     return kernel_cmdline
 

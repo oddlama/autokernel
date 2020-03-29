@@ -1,7 +1,6 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 # For using the tool without installation via setuptools
-
 import os
 import sys
 import inspect

@@ -5,8 +5,9 @@ import lark
 import lark.exceptions
 import kconfiglib
 
-from . import log
-from . import kconfig as atk_kconfig
+import autokernel.kconfig
+import autokernel.symbol_tracking
+from autokernel import log
 
 kernel_option_regex = re.compile('^[_A-Z0-9]*[_A-Z][_A-Z0-9]*$')
 currently_parsed_filenames = []
@@ -54,6 +55,9 @@ def print_line_with_highlight(line, line_nr, highlight):
     print("{:5d} | {}".format(line_nr, line[:-1].replace('\t', '    ')))
     print("      | {}".format(" " * ((highlight[0] - 1) + tabs_before * 3) + log.color("[1;34m") + "^" + "~" * ((highlight[1] - highlight[0] - 1) + tabs_in_highlight * 3) + log.color_reset))
 
+def msg_hint(msg):
+    return log.color("[1;34m") + "hint:" + log.color_reset + " " + msg
+
 def msg_warn(msg):
     return log.color("[1;33m") + "warning:" + log.color_reset + " " + msg
 
@@ -79,6 +83,9 @@ def print_message_at(definition, msg):
             print_message_with_file_location(file, msg, meta.line, (meta.column, meta.column + 1))
     else:
         print_message_with_file_location(None, msg, None, None)
+
+def print_hint_at(definition, msg):
+    print_message_at(definition, msg_hint(msg))
 
 def print_warn_at(definition, msg):
     print_message_at(definition, msg_warn(msg))
@@ -262,9 +269,9 @@ def get_special_var_cmp_mode(hint_at, var):
 
 def resolve_special_variable(hint_at, kconfig, var):
     if var == '$kernel_version':
-        return atk_kconfig.get_kernel_version(kconfig.srctree)
+        return autokernel.kconfig.get_kernel_version(kconfig.srctree)
     elif var == '$arch':
-        return atk_kconfig.get_arch()
+        return autokernel.kconfig.get_arch()
     elif var == '$true':
         return 'y'
     elif var == '$false':
@@ -381,15 +388,15 @@ class Condition:
     def __init__(self, tree):
         self.at = def_at(tree)
 
-    def get_sym(self, sym_name, kconfig, symbol_changes):
+    def get_sym(self, sym_name, kconfig):
         try:
             sym = kconfig.syms[sym_name]
         except KeyError:
             die_print_error_at(self.at, "symbol {} does not exist".format(sym_name))
 
         # If the symbol hadn't been encountered before, pin the current value
-        if sym not in symbol_changes:
-            symbol_changes[sym] = (sym.str_value, self.at)
+        if sym not in autokernel.symbol_tracking.symbol_changes:
+            autokernel.symbol_tracking.symbol_changes[sym] = autokernel.symbol_tracking.SymbolChange(sym.str_value, self.at, 'used in condition')
 
         return sym
 
@@ -402,7 +409,7 @@ class Condition:
         kconfiglib.HEX:      'hex',
     }
 
-    def resolve_var(self, var, kconfig, symbol_changes):
+    def resolve_var(self, var, kconfig):
         # Remember if var was a special variable
         var_special = var.value.startswith('$')
 
@@ -413,7 +420,7 @@ class Condition:
                 sym_name = var.value[len('CONFIG_'):]
             else:
                 sym_name = var.value
-            sym = self.get_sym(sym_name, kconfig, symbol_changes)
+            sym = self.get_sym(sym_name, kconfig)
             value = sym.str_value
             var_cmp_mode = Condition._sym_cmp_type.get(sym.orig_type, 'unknown')
             if var_cmp_mode == 'unknown':
@@ -440,12 +447,12 @@ class CachedCondition(Condition):
     def negate(self, do_negate=True):
         return NegatedConditionView(self) if do_negate else self
 
-    def evaluate(self, kconfig, symbol_changes):
+    def evaluate(self, kconfig):
         if self.value is None:
-            self.value = self._evaluate(kconfig, symbol_changes) # pylint: disable=assignment-from-no-return
+            self.value = self._evaluate(kconfig) # pylint: disable=assignment-from-no-return
         return self.value
 
-    def _evaluate(self, kconfig, symbol_changes):
+    def _evaluate(self, kconfig):
         # pylint: disable=unused-argument
         pass # Should be overwritten
 
@@ -460,7 +467,7 @@ class ConditionConstant(Condition):
     def negate(self, do_negate=True):
         return NegatedConditionView(self) if do_negate else self
 
-    def evaluate(self, kconfig, symbol_changes):
+    def evaluate(self, kconfig):
         # pylint: disable=unused-argument
         return self.value
 
@@ -475,9 +482,9 @@ class ConditionAnd(CachedCondition):
         super().__init__(tree)
         self.terms = args
 
-    def _evaluate(self, kconfig, symbol_changes):
+    def _evaluate(self, kconfig):
         for t in self.terms:
-            if not t.evaluate(kconfig, symbol_changes):
+            if not t.evaluate(kconfig):
                 return False
         return True
 
@@ -492,9 +499,9 @@ class ConditionOr(CachedCondition):
         super().__init__(tree)
         self.terms = args
 
-    def _evaluate(self, kconfig, symbol_changes):
+    def _evaluate(self, kconfig):
         for t in self.terms:
-            if t.evaluate(kconfig, symbol_changes):
+            if t.evaluate(kconfig):
                 return True
         return False
 
@@ -513,8 +520,8 @@ class ConditionVarComparison(CachedCondition):
         if self.compare_op not in _compare_op_to_str:
             raise ConfigParsingException(tree.meta, "Invalid comparison op '{}'. This is a bug that should be reported.".format(_compare_op_to_str[self.compare_op]))
 
-    def _evaluate(self, kconfig, symbol_changes):
-        resolved_vars = [self.resolve_var(v, kconfig, symbol_changes) for v in self.vars]
+    def _evaluate(self, kconfig):
+        resolved_vars = [self.resolve_var(v, kconfig) for v in self.vars]
 
         # The comparison mode is determined by the following schema:
         # 1. Filter out None, as variables with mode None will inherit any other comparison type.
