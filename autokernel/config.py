@@ -8,13 +8,16 @@ import kconfiglib
 from . import log
 from . import kconfig as atk_kconfig
 
-kernel_option_regex = re.compile('^[_A-Z0-9]+$')
+kernel_option_regex = re.compile('^[_A-Z0-9]*[_A-Z][_A-Z0-9]*$')
 currently_parsed_filenames = []
 
 class ConfigParsingException(Exception):
     def __init__(self, meta, message):
         super().__init__(message)
         self.meta = meta
+
+def def_at(tree):
+    return (tree.meta, currently_parsed_filenames[-1]) if tree else None
 
 _lark = None
 def get_lark_parser():
@@ -131,6 +134,12 @@ def find_token(tree, token_name, ignore_missing=False, strip_quotes=False):
         raise ConfigParsingException(tree.meta, "Missing token '{}'".format(token_name))
     return None
 
+class TokenRawInfo:
+    def __init__(self, tree, value, is_quoted):
+        self.at = def_at(tree)
+        self.value = remove_quotes(value) if is_quoted else value
+        self.was_quoted = is_quoted
+
 def find_named_token_raw(tree, token_name, ignore_missing=False):
     """
     Finds a token by subrule name in the children of the given tree. Raises
@@ -153,21 +162,18 @@ def find_named_token_raw(tree, token_name, ignore_missing=False):
             if c.children[0].children[0].__class__ != lark.Token:
                 raise ConfigParsingException(c.meta, "Subrule token '{}.{}' has no children literal".format(token_name, c.children[0].data))
 
-            if c.children[0].data == 'string':
-                return (str(c.children[0].children[0]), False)
-            elif c.children[0].data == 'string_quoted':
-                return (remove_quotes(str(c.children[0].children[0])), True)
+            return TokenRawInfo(c.children[0], str(c.children[0].children[0]), is_quoted=(c.children[0].data == 'string_quoted'))
 
     if not ignore_missing:
         raise ConfigParsingException(tree.meta, "Missing token '{}'".format(token_name))
-    return (None, None)
+    return TokenRawInfo(None, None, False)
 
 def find_named_token(tree, token_name, ignore_missing=False):
     """
     Finds a token by subrule name in the children of the given tree. Raises
     an exception if the token is not found. Strips quotes if it was a quoted string.
     """
-    return find_named_token_raw(tree, token_name, ignore_missing=ignore_missing)[0]
+    return find_named_token_raw(tree, token_name, ignore_missing=ignore_missing).value
 
 def find_all_tokens(tree, token_name, strip_quotes=False):
     """
@@ -180,8 +186,9 @@ def find_all_tokens(tree, token_name, strip_quotes=False):
 def find_all_named_tokens_raw(tree, token_name):
     """
     Finds all tokens by subrule name in the children of the given tree.
+    returns tuple (str, tree_token, was_quoted)
     """
-    return [(remove_quotes(str(c.children[0].children[0])), True) if c.children[0].data == 'string_quoted' else (str(c.children[0]), False) \
+    return [TokenRawInfo(c.children[0], str(c.children[0].children[0]), is_quoted=(c.children[0].data == 'string_quoted')) \
             for c in tree.children
                 if c.__class__ == lark.Tree
                 and c.data == token_name
@@ -195,7 +202,7 @@ def find_all_named_tokens(tree, token_name):
     """
     Finds all tokens by subrule name in the children of the given tree.
     """
-    return [i[0] for i in find_all_named_tokens_raw(tree, token_name)]
+    return [i.value for i in find_all_named_tokens_raw(tree, token_name)]
 
 class UniqueProperty:
     """
@@ -248,12 +255,12 @@ special_var_cmp_mode = {
     '$true':  'string',
 }
 
-def get_special_var_cmp_mode(var):
+def get_special_var_cmp_mode(hint_at, var):
     if var not in special_var_cmp_mode:
-        log.die("Unknown special variable '{}'".format(var))
+        die_print_error_at(hint_at, "unknown special variable '{}'".format(var))
     return special_var_cmp_mode[var]
 
-def resolve_special_variable(kconfig, var):
+def resolve_special_variable(hint_at, kconfig, var):
     if var == '$kernel_version':
         return atk_kconfig.get_kernel_version(kconfig.srctree)
     elif var == '$arch':
@@ -263,66 +270,82 @@ def resolve_special_variable(kconfig, var):
     elif var == '$false':
         return 'n'
     else:
-        log.die("Unknown special variable '{}'".format(var))
+        die_print_error_at(hint_at, "unknown special variable '{}'".format(var))
 
-def semver_to_int(ver):
-    t = ver.split('-')[0].split('.')
+def check_str(v):
+    return v.value
+
+def semver_to_int(v):
+    t = v.value.split('-')[0].split('.')
     if len(t) < 3:
-        t.extend([0] * (3 - len(t)))
+        t.extend(['0'] * (3 - len(t)))
     elif len(t) > 3:
-        raise ValueError("Invalid semver '{}'".format(ver))
+        raise ValueError("invalid semver: too many tokens")
 
     return (int(t[0]) << 64) + (int(t[1]) << 32) + int(t[2])
 
+def check_tristate(v):
+    if v.value not in ['n', 'm', 'y']:
+        raise ValueError("invalid argument: '{}' is not a tristate ('n', 'm', 'y')".format(v))
+    return v.value
 
-def check_tristate(v, hint_at):
-    if v not in ['n', 'm', 'y']:
-        die_print_error_at(hint_at, "invalid argument '{}' is not a tristate ('n', 'm', 'y')".format(v))
-    return v
+def check_int(v):
+    return int(v.value)
+
+def check_hex(v):
+    if not v.is_sym and not v.value.startswith("0x"):
+        raise ValueError("invalid argument: missing 0x prefix for hex variable")
+    if v.value == '':
+        return 0
+    return int(v.value, 16)
 
 _variable_parse_functors = {
-    'string': str,
-    'int': int,
-    'hex': lambda x: int(x, 16),
+    'string': check_str,
+    'int': check_int,
+    'hex': check_hex,
     'tristate': check_tristate,
     'semver': semver_to_int,
 }
 
-def compare_op(op, lhs, rhs):
-    if op == 'EXPR_CMP_GE':
-        return lhs > rhs
-    elif op == 'EXPR_CMP_GEQ':
-        return lhs >= rhs
-    elif op == 'EXPR_CMP_LE':
-        return lhs < rhs
-    elif op == 'EXPR_CMP_LEQ':
-        return lhs <= rhs
-    elif op == 'EXPR_CMP_NEQ':
-        return lhs != rhs
-    elif op == 'EXPR_CMP_EQ':
-        return lhs == rhs
+_compare_op_to_str = {
+    'EXPR_CMP_GE':  '>',
+    'EXPR_CMP_GEQ': '>=',
+    'EXPR_CMP_LE':  '<',
+    'EXPR_CMP_LEQ': '<=',
+    'EXPR_CMP_NEQ': '!=',
+    'EXPR_CMP_EQ':  '==',
+}
+
+_compare_op_to_functor = {
+    'EXPR_CMP_GE':  lambda a, b: a >  b,
+    'EXPR_CMP_GEQ': lambda a, b: a >= b,
+    'EXPR_CMP_LE':  lambda a, b: a <  b,
+    'EXPR_CMP_LEQ': lambda a, b: a <= b,
+    'EXPR_CMP_NEQ': lambda a, b: a != b,
+    'EXPR_CMP_EQ':  lambda a, b: a == b,
+}
 
 def compare_variables(resolved_vars, op, cmp_mode, hint_at):
     # Assert that the comparison mode is supported for the given type
     if cmp_mode == 'string':
         if op not in ['EXPR_CMP_NEQ', 'EXPR_CMP_EQ']:
-            die_print_error_at(hint_at, "invalid comparison '{}' for type string".format(op))
+            die_print_error_at(hint_at, "invalid comparison '{}' for type string".format(_compare_op_to_str[op]))
     elif cmp_mode == 'tristate':
         if op not in ['EXPR_CMP_NEQ', 'EXPR_CMP_EQ']:
-            die_print_error_at(hint_at, "invalid comparison operator '{}' for type tristate".format(op))
+            die_print_error_at(hint_at, "invalid comparison operator '{}' for type tristate".format(_compare_op_to_str[op]))
 
     # Parse variables to comparable types
     parse_functor = _variable_parse_functors[cmp_mode]
     parsed_variables = []
     for i, var in enumerate(resolved_vars, start=1):
         try:
-            parsed_variables.append(parse_functor(var.value))
-        except ValueError:
-            die_print_error_at(var.at, "could not convert operand #{} ({}) to {}".format(i, var.value, cmp_mode))
+            parsed_variables.append(parse_functor(var))
+        except ValueError as e:
+            die_print_error_at(var.var.at, "could not convert operand #{} '{}' to {}: {}".format(i, var.var.value, cmp_mode, str(e)))
 
     # Compare all variables in order
-    for i, rhs in enumerate(parsed_variables[1:]):
-        if not compare_op(op, parsed_variables[i - 1], rhs):
+    for i, rhs in enumerate(parsed_variables[1:], start=1):
+        if not _compare_op_to_functor[op](parsed_variables[i - 1], rhs):
             return False
     return True
 
@@ -337,11 +360,14 @@ class NegatedConditionView():
     def at(self):
         return self.condition.at
 
-    def negate(self):
-        return self.condition
+    def negate(self, do_negate=True):
+        return self.condition if do_negate else self
 
     def evaluate(self, *args, **kwargs):
         return not self.condition.evaluate(*args, **kwargs)
+
+    def __str__(self):
+        return "not {}".format(self.condition)
 
 class VarInfo:
     def __init__(self, var, value, special, is_sym, cmp_mode):
@@ -353,9 +379,9 @@ class VarInfo:
 
 class Condition:
     def __init__(self, tree):
-        self.at = (tree.meta, currently_parsed_filenames[-1]) if tree else None
+        self.at = def_at(tree)
 
-    def get_sym(sym_name, kconfig, symbol_changes):
+    def get_sym(self, sym_name, kconfig, symbol_changes):
         try:
             sym = kconfig.syms[sym_name]
         except KeyError:
@@ -375,22 +401,28 @@ class Condition:
         kconfiglib.INT:      'int',
         kconfiglib.HEX:      'hex',
     }
-    def resolve_var(var, kconfig, symbol_changes):
-        # Remember if var were special variables
-        var_special = var.startswith('$')
+
+    def resolve_var(self, var, kconfig, symbol_changes):
+        # Remember if var was a special variable
+        var_special = var.value.startswith('$')
 
         # Resolve symbols
-        var_is_sym = not var_quoted and not var_special and kernel_option_regex.match(var)
+        var_is_sym = not var.was_quoted and not var_special and kernel_option_regex.match(var.value)
         if var_is_sym:
-            value = self.get_sym(var).str_value
-            var_cmp_mode = _sym_cmp_type.get(value.orig_type, 'unknown')
+            if var.value.startswith('CONFIG_'):
+                sym_name = var.value[len('CONFIG_'):]
+            else:
+                sym_name = var.value
+            sym = self.get_sym(sym_name, kconfig, symbol_changes)
+            value = sym.str_value
+            var_cmp_mode = Condition._sym_cmp_type.get(sym.orig_type, 'unknown')
             if var_cmp_mode == 'unknown':
-                die_print_error_at(self.at, "cannot compare with symbol {} which is of unknown type".format(value.name))
+                die_print_error_at(var.at, "cannot compare with symbol {} which is of unknown type".format(sym.name))
         elif var_special:
-            value = resolve_special_variable(kconfig, var)
-            var_cmp_mode = get_special_var_cmp_mode(var)
+            value = resolve_special_variable(var.at, kconfig, var.value)
+            var_cmp_mode = get_special_var_cmp_mode(var.at, var.value)
         else:
-            value = var
+            value = var.value
             # Normal strings will always inherit the mode
             var_cmp_mode = None
 
@@ -402,18 +434,19 @@ class CachedCondition(Condition):
     a deriving class must only implement _evaluate.
     """
     def __init__(self, tree):
-        super.__init__(tree)
+        super().__init__(tree)
         self.value = None
 
-    def negate(self):
-        return NegatedConditionView(self)
+    def negate(self, do_negate=True):
+        return NegatedConditionView(self) if do_negate else self
 
     def evaluate(self, kconfig, symbol_changes):
         if self.value is None:
-            self.value = self._evaluate(kconfig, symbol_changes)
+            self.value = self._evaluate(kconfig, symbol_changes) # pylint: disable=assignment-from-no-return
         return self.value
 
     def _evaluate(self, kconfig, symbol_changes):
+        # pylint: disable=unused-argument
         pass # Should be overwritten
 
 class ConditionConstant(Condition):
@@ -424,11 +457,15 @@ class ConditionConstant(Condition):
         super().__init__(None)
         self.value = value
 
-    def negate(self):
-        return NegatedConditionView(self)
+    def negate(self, do_negate=True):
+        return NegatedConditionView(self) if do_negate else self
 
     def evaluate(self, kconfig, symbol_changes):
+        # pylint: disable=unused-argument
         return self.value
+
+    def __str__(self):
+        return "true" if self.value else "false"
 
 class ConditionAnd(CachedCondition):
     """
@@ -439,8 +476,13 @@ class ConditionAnd(CachedCondition):
         self.terms = args
 
     def _evaluate(self, kconfig, symbol_changes):
-        # all() provides early-out
-        return all([t.evaluate(kconfig, symbol_changes) in self.terms])
+        for t in self.terms:
+            if not t.evaluate(kconfig, symbol_changes):
+                return False
+        return True
+
+    def __str__(self):
+        return '(' + ' and '.join([str(t) for t in self.terms]) + ')'
 
 class ConditionOr(CachedCondition):
     """
@@ -451,20 +493,25 @@ class ConditionOr(CachedCondition):
         self.terms = args
 
     def _evaluate(self, kconfig, symbol_changes):
-        # any() provides early-out
-        return any([t.evaluate(kconfig, symbol_changes) in self.terms])
+        for t in self.terms:
+            if t.evaluate(kconfig, symbol_changes):
+                return True
+        return False
+
+    def __str__(self):
+        return '(' + ' or '.join([str(t) for t in self.terms]) + ')'
 
 class ConditionVarComparison(CachedCondition):
     """
     A condition that determines its truth value based on a n-ary comparison (n >= 2)
     """
-    def __init__(self, tree, comparion_op, *args):
+    def __init__(self, tree, compare_op, operands):
         super().__init__(tree)
-        self.comparion_op = comparion_op
-        self.vars = args
+        self.compare_op = compare_op
+        self.vars = operands
 
-        if self.comparion_op not in ['EXPR_CMP_GE', 'EXPR_CMP_GEQ', 'EXPR_CMP_LE', 'EXPR_CMP_LEQ', 'EXPR_CMP_NEQ', 'EXPR_CMP_EQ']:
-            raise ConfigParsingException(tree.meta, "Invalid comparison op '{}'. This is a bug that should be reported.".format(self.comparion_op))
+        if self.compare_op not in _compare_op_to_str:
+            raise ConfigParsingException(tree.meta, "Invalid comparison op '{}'. This is a bug that should be reported.".format(_compare_op_to_str[self.compare_op]))
 
     def _evaluate(self, kconfig, symbol_changes):
         resolved_vars = [self.resolve_var(v, kconfig, symbol_changes) for v in self.vars]
@@ -480,18 +527,22 @@ class ConditionVarComparison(CachedCondition):
         elif len(resolved_vars_with_type) == 1:
             cmp_mode = resolved_vars_with_type[0].cmp_mode
         else:
-            die_print_error_at(self.at, "cannot compare variables of different types: [{}]".format(', '.join(["{} ({})".format(v.var, v.cmp_mode) for v in resolved_vars_with_type])))
+            die_print_error_at(self.at, "cannot compare variables of different types: [{}]".format(', '.join(["{} ({})".format(v.var.value, v.cmp_mode) for v in resolved_vars_with_type])))
 
-        return compare_variables(resolved_vars, self.comparion_op, cmp_mode, self.at)
+        return compare_variables(resolved_vars, self.compare_op, cmp_mode, self.at)
+
+    def __str__(self):
+        op_str = ' {} '.format(_compare_op_to_str[self.compare_op])
+        return '(' + op_str.join([v.value for v in self.vars]) + ')'
 
 Condition.true = ConditionConstant(True)
 Condition.false = ConditionConstant(False)
 
 def parse_expr_condition(tree):
     if tree.data == 'expr':
-        return ConditionOr(*[parse_expr_condition(c) for c in tree.children if c.__class__ == lark.Tree and c.data == 'expr_term'])
+        return ConditionOr(tree, *[parse_expr_condition(c) for c in tree.children if c.__class__ == lark.Tree and c.data == 'expr_term'])
     if tree.data == 'expr_term':
-        return ConditionAnd(*[parse_expr_condition(c) for c in tree.children if c.__class__ == lark.Tree and c.data == 'expr_factor'])
+        return ConditionAnd(tree, *[parse_expr_condition(c) for c in tree.children if c.__class__ == lark.Tree and c.data == 'expr_factor'])
     elif tree.data == 'expr_factor':
         negated = find_first_child(tree, 'expr_op_neg') is not None
         expr_cmp = find_first_child(tree, 'expr_cmp')
@@ -506,12 +557,14 @@ def parse_expr_condition(tree):
                         operation = op
                     elif operation != op:
                         raise ConfigParsingException(expr_cmp.meta, "All expression operands must be the same for n-ary comparisons")
-            return ConditionVarComparison(operation, operands).negate(negated)
+            return ConditionVarComparison(expr_cmp, operation, operands).negate(negated)
 
         expr_id = find_first_child(tree, 'expr_id')
         if expr_id:
             # Implicit truth value is the same as writing 'SYM == "y"'
-            return ConditionVarComparison('EXPR_CMP_EQ', [(str(expr_id.children[0]), False), ('y', True)]).negate(negated)
+            lhs = TokenRawInfo(expr_id, str(expr_id.children[0]), is_quoted=False)
+            rhs = TokenRawInfo(expr_id, '"y"', is_quoted=True)
+            return ConditionVarComparison(expr_id, 'EXPR_CMP_EQ', [lhs, rhs]).negate(negated)
 
         expr = find_first_child(tree, 'expr')
         if expr:
@@ -572,7 +625,7 @@ class BlockNode:
         Parses the given block tree node, and class parse_block_params and parse_context.
         """
         if not hasattr(self, 'first_definition'):
-            self.first_definition = (tree.meta, currently_parsed_filenames[-1])
+            self.first_definition = def_at(tree)
 
         if tree.data != ('blck_' + self.node_name):
             raise ConfigParsingException(tree.meta, "{} cannot parse '{}'".format(self.__class__.__name__, tree.data))
@@ -594,7 +647,7 @@ class BlockNode:
 
 class Stmt:
     def __init__(self, tree, conditions):
-        self.at = (tree.meta, currently_parsed_filenames[-1])
+        self.at = def_at(tree)
         self.conditions = conditions
 
 class ConfigModule(BlockNode):
@@ -639,7 +692,9 @@ class ConfigModule(BlockNode):
 
         apply_tree_nodes(blck.children, [module_name], ignore_additional=True)
 
-    def parse_context(self, ctxt, preconditions=[Condition.true]): # pylint: disable=arguments-differ
+    def parse_context(self, ctxt, preconditions=None): # pylint: disable=arguments-differ
+        if preconditions is None:
+            preconditions = [Condition.true]
         def stmt_module_if(tree):
             conditions = find_conditions(tree)
             subcontexts = find_subtrees(tree, 'ctxt_module')
@@ -847,7 +902,7 @@ class Config(BlockNode):
                 except ConfigParsingException as e:
                     die_print_parsing_exception(filename, e)
             else:
-                raise ConfigParsingException(tree.meta, "'{}' does not exist or is not a file.".format(filename))
+                raise ConfigParsingException(tree.meta, "'{}' does not exist or is not a file".format(filename))
 
         def blck_module(tree):
             module = ConfigModule()
