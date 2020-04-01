@@ -721,10 +721,7 @@ class ConfigModule(BlockNode):
 
         def _conds(tree):
             c = find_condition(tree)
-            if c:
-                return preconditions + [c]
-            else:
-                return preconditions
+            return preconditions + [c] if c else preconditions
         def stmt_module_use(tree):
             conds = _conds(tree)
             new_uses = [ConfigModule.StmtUse(tree, conds, i) for i in find_all_tokens(tree, 'IDENTIFIER')]
