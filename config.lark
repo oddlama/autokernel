@@ -49,6 +49,7 @@ _expr_ws: WS expr
 // ================
 
 module_name: IDENTIFIER
+TRY:         "try"
 
 blck_module: "module" WS module_name "{" ctxt_module "}"
 ctxt_module: ( tok_ignore
@@ -59,11 +60,11 @@ ctxt_module: ( tok_ignore
              | stmt_module_set
              | stmt_module_add_cmdline )*
 stmt_module_if:          "if"     _expr_ws "{" ctxt_module "}" ( "else" WS "if" _expr_ws "{" ctxt_module "}" )* [ "else" WS "{" ctxt_module "}" ]
-stmt_module_use:         "use"    ( WS IDENTIFIER )+                          [ WS "if" _expr_ws ] ";"
-stmt_module_merge:       "merge"  WS path                                     [ WS "if" _expr_ws ] ";"
-stmt_module_assert:      "assert" _expr_ws [ WS quoted_param ]                [ WS "if" _expr_ws ] ";"
-stmt_module_set:         "set"    WS KERNEL_OPTION [ WS kernel_option_value ] [ WS "if" _expr_ws ] ";"
-stmt_module_add_cmdline: "add_cmdline" ( WS quoted_param )+                   [ WS "if" _expr_ws ] ";"
+stmt_module_use:         "use"    ( WS IDENTIFIER )+                                 [ WS "if" _expr_ws ] ";"
+stmt_module_merge:       "merge"  WS path                                            [ WS "if" _expr_ws ] ";"
+stmt_module_assert:      "assert" _expr_ws [ WS quoted_param ]                       [ WS "if" _expr_ws ] ";"
+stmt_module_set:         [ TRY ] "set" WS KERNEL_OPTION [ WS kernel_option_value ]   [ WS "if" _expr_ws ] ";"
+stmt_module_add_cmdline: "add_cmdline" ( WS quoted_param )+                          [ WS "if" _expr_ws ] ";"
 
 // kernel
 // ================

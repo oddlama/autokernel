@@ -58,6 +58,11 @@ def apply_autokernel_config(kernel_dir, kconfig, config):
     """
     log.info("Applying autokernel configuration")
 
+    # Build cmdline on demand
+    kernel_cmdline = []
+    # Reset symbol_changes
+    autokernel.symbol_tracking.symbol_changes.clear()
+
     # Asserts that the symbol has the given value
     def get_sym(stmt):
         # Get the kconfig symbol, and change the value
@@ -82,19 +87,23 @@ def apply_autokernel_config(kernel_dir, kconfig, config):
         if not autokernel.kconfig.symbol_can_be_user_assigned(sym):
             autokernel.config.print_warn_at(stmt.at, "symbol {} can't be user-assigned".format(sym.name))
 
+        # Skip assignment if value is already pinned and the statement is in try mode.
+        if stmt.has_try and sym in autokernel.symbol_tracking.symbol_changes:
+            log.verbose("skipping {} {}".format(autokernel.kconfig.value_to_str(stmt.value), sym.name))
+            return
+
         if not set_value_detect_conflicts(sym, stmt.value, stmt.at):
             autokernel.config.die_print_error_at(stmt.at, "invalid value {} for symbol {}".format(autokernel.kconfig.value_to_str(stmt.value), sym.name))
 
         if sym.str_value != stmt.value:
-            autokernel.config.print_warn_at(stmt.at, "symbol assignment failed: {} from {} → {}".format(
-                sym.name,
-                autokernel.kconfig.value_to_str(sym.str_value),
-                autokernel.kconfig.value_to_str(stmt.value)))
-
-    kernel_cmdline = []
-
-    # Reset symbol_changes
-    autokernel.symbol_tracking.symbol_changes.clear()
+            if not stmt.has_try:
+                # Only warn if it wasn't a try
+                autokernel.config.print_warn_at(stmt.at, "symbol assignment failed: {} from {} → {}".format(
+                    sym.name,
+                    autokernel.kconfig.value_to_str(sym.str_value),
+                    autokernel.kconfig.value_to_str(stmt.value)))
+            else:
+                log.verbose("failed try set {} {} (symbol is currently not assignable to the chosen value)".format(autokernel.kconfig.value_to_str(stmt.value), sym.name))
 
     # Visit all module nodes and apply configuration changes
     visited = set()

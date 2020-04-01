@@ -62,14 +62,11 @@ def msg_error(msg):
     return log.color("[1;31m") + "error:" + log.color_reset + " " + msg
 
 def print_message_with_file_location(file, message, line, column_range):
-    if not file:
-        print(message + ' [location untracked]', file=sys.stderr)
-    else:
-        print((log.color("[1m") + "{}:{}:{}:" + log.color_reset + " {}").format(
-            file, line, column_range[0], message), file=sys.stderr)
-        with open(file, 'r') as f:
-            line_str = f.readlines()[line - 1]
-            print_line_with_highlight(line_str, line, highlight=column_range)
+    print((log.color("[1m") + "{}:{}:{}:" + log.color_reset + " {}").format(
+        file, line, column_range[0], message), file=sys.stderr)
+    with open(file, 'r') as f:
+        line_str = f.readlines()[line - 1]
+        print_line_with_highlight(line_str, line, highlight=column_range)
 
 def print_message_at(definition, msg):
     if definition:
@@ -79,7 +76,7 @@ def print_message_at(definition, msg):
         else:
             print_message_with_file_location(file, msg, meta.line, (meta.column, meta.column + 1))
     else:
-        print_message_with_file_location(None, msg, None, None)
+        print(msg + ' [location untracked]', file=sys.stderr)
 
 def print_hint_at(definition, msg):
     print_message_at(definition, msg_hint(msg))
@@ -675,10 +672,11 @@ class ConfigModule(BlockNode):
             self.assert_condition = assert_condition
             self.message = message
     class StmtSet(Stmt):
-        def __init__(self, tree, conditions, sym_name, value):
+        def __init__(self, tree, conditions, sym_name, value, has_try):
             super().__init__(tree, conditions)
             self.sym_name = sym_name
             self.value = value
+            self.has_try = has_try
     class StmtAddCmdline(Stmt):
         def __init__(self, tree, conditions, param):
             super().__init__(tree, conditions)
@@ -745,9 +743,10 @@ class ConfigModule(BlockNode):
             self.assertions.append(stmt)
             self.all_statements_in_order.append(stmt)
         def stmt_module_set(tree):
+            has_try = find_token(tree, 'TRY', ignore_missing=True) is not None
             key = find_token(tree, 'KERNEL_OPTION')
             value = find_named_token(tree, 'kernel_option_value', ignore_missing=True) or 'y'
-            stmt = ConfigModule.StmtSet(tree, _conds(tree), key, value)
+            stmt = ConfigModule.StmtSet(tree, _conds(tree), key, value, has_try)
             self.assignments.append(stmt)
             self.all_statements_in_order.append(stmt)
         def stmt_module_add_cmdline(tree):
