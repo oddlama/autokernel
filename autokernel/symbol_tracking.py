@@ -5,9 +5,6 @@ import autokernel.kconfig
 from autokernel import log
 
 
-# Monkeypatch Symbol.set_value, and Symbol._invalidate to detect conflicting changes.
-# Detection is only done when using the set_value_detect_conflicts instead of Symbol.set_value
-
 class SymbolChange:
     def __init__(self, value, at, reason):
         self.value = value
@@ -19,7 +16,9 @@ symbol_change_hint_at = None
 symbol_changes = {}
 symbols_invalidated = {}
 
-saved_set_value = kconfiglib.Symbol.set_value
+# Monkeypatch Symbol._invalidate to detect conflicting changes.
+# Detection is only done when using the set_value_detect_conflicts
+# instead of Symbol.set_value
 saved_invalidate = kconfiglib.Symbol._invalidate # pylint: disable=protected-access
 
 def register_symbol_change(symbol, new_value, inducing_change, reason='explicitly set'):
@@ -35,7 +34,7 @@ def track_symbol_changes(symbol, new_value, inducing_change):
     # Both normal and implicit changes can trigger conflicts
     if symbol in symbol_changes and symbol_changes[symbol].value != new_value:
         sc = symbol_changes[symbol]
-        autokernel.config.print_error_at(symbol_change_hint_at, "conflicting {}: {} {}".format(
+        autokernel.config.print_error_at(symbol_change_hint_at, "conflicting {} {} {}".format(
             "change" if symbol == inducing_change[0] else "implicit change",
             autokernel.kconfig.value_to_str(new_value),
             symbol.name))
@@ -51,10 +50,10 @@ def track_symbol_changes(symbol, new_value, inducing_change):
 def set_value_proxy_detect_conflicts(sym, value):
     # Additional logic only if called through wrapper
     if not symbol_change_hint_at:
-        return saved_set_value(sym, value)
+        return sym.set_value(value)
 
     symbols_invalidated.clear()
-    ret = saved_set_value(sym, value)
+    ret = sym.set_value(value)
 
     # Process invalidated symbols and check for conflicting changes.
     track_symbol_changes(sym, value, (sym, value))
@@ -76,13 +75,12 @@ def monkey_invalidate(sym):
     symbols_invalidated[sym] = sym.str_value
     return saved_invalidate(sym)
 
-kconfiglib.Symbol.set_value = set_value_proxy_detect_conflicts
 kconfiglib.Symbol._invalidate = monkey_invalidate # pylint: disable=protected-access
 
 def set_value_detect_conflicts(sym, value, hint_at):
     # Remember which symbol caused a chain of changes
     global symbol_change_hint_at # pylint: disable=global-statement
     symbol_change_hint_at = hint_at
-    ret = sym.set_value(value)
+    ret = set_value_proxy_detect_conflicts(sym, value)
     symbol_change_hint_at = None
     return ret

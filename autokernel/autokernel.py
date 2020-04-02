@@ -153,6 +153,11 @@ def apply_autokernel_config(kernel_dir, kconfig, config):
     visit(config.kernel.module)
     log.info("  Changed {} symbols".format(len(autokernel.symbol_tracking.symbol_changes)))
 
+    # Lastly, invalidate all non-assigned symbols to process new default value conditions
+    for sym in kconfig.unique_defined_syms:
+        if sym.user_value is None:
+            sym._invalidate()
+
     return kernel_cmdline
 
 def main_check_config(args):
@@ -296,6 +301,7 @@ def main_build(args, config=None):
         # Load configuration file
         config = autokernel.config.load_config(args.autokernel_config)
 
+    # TODO provide own kconfig .... used later bc modified
     main_generate_config(args, config)
 
     # Build the kernel
@@ -889,9 +895,6 @@ def main():
     parser_info.add_argument('config_symbols', nargs='+',
             help="A list of configuration symbols to show infos for")
     parser_info.set_defaults(func=main_info)
-
-    #TODO autokernel search CONFIG_SYSVIPC
-    #TODO -l --limit [50]
 
     # Single config module generation options
     parser_deps = subparsers.add_parser('deps', help='Generates required modules to enable the given symbol')
