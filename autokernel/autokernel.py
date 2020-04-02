@@ -291,7 +291,10 @@ def build_kernel(args, config, pass_id):
 def build_initramfs(args, config):
     log.info("Building initramfs")
 
-    print("subprocess.run(['genkernel'], cwd={}), config={}".format(args.kernel_dir, config))
+    #TODO '--no-install', '--no-mountboot'
+    #TODO if builtin
+    #TODO     '--no-compress-initramfs'
+    print("subprocess.run(['genkernel', 'initramfs'], cwd={}), config={}".format(args.kernel_dir, config))
 
 def main_build(args, config=None):
     """
