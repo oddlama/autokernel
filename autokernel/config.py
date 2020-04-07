@@ -34,9 +34,9 @@ def remove_quotes(s):
     return s[1:-1] if s[0] == s[-1] and s[0] in ['"', "'"] else s
 
 def parse_bool(tree, s):
-    if s in ['true', '1', 'yes', 'y']:
+    if s in ['true', '1', 'yes', 'y', 'on']:
         return True
-    elif s in ['false', '0', 'no', 'n']:
+    elif s in ['false', '0', 'no', 'n', 'off']:
         return False
     else:
         die_print_error_at(def_at(tree), "invalid value for boolean")
@@ -229,9 +229,14 @@ class UniqueProperty:
         self.at = def_at(tree)
 
         if token:
-            tok = find_token(tree, token, ignore_missing=ignore_missing)
+            self.tok = find_token(tree, token, ignore_missing=ignore_missing)
+            self.was_quoted = False
+            self.at = tree
         elif named_token:
-            tok = find_named_token(tree, named_token, ignore_missing=ignore_missing)
+            rawtok = find_named_token_raw(tree, named_token, ignore_missing=ignore_missing)
+            tok = rawtok.value
+            self.was_quoted = rawtok.was_quoted
+            self.at = rawtok.at
         else:
             raise ValueError("Missing token identifier argument; this is a bug that should be reported.")
 
@@ -775,36 +780,30 @@ class ConfigKernel(BlockNode):
                 ctxt_module,
             ])
 
-class ConfigGenkernel(BlockNode):
-    node_name = 'genkernel'
-
-    def __init__(self):
-        self.params = []
-
-    def parse_context(self, ctxt):
-        def stmt_genkernel_add_params(tree):
-            self.params.extend(find_all_named_tokens(tree, 'quoted_param'))
-
-        apply_tree_nodes(ctxt.children, [
-                stmt_genkernel_add_params,
-            ])
-
 class ConfigInitramfs(BlockNode):
     node_name = 'initramfs'
 
     def __init__(self):
-        self.genkernel = ConfigGenkernel()
         self.cmdline = []
+        self.genkernel_params = []
+        self.enable = UniqueProperty('enable', default=False, convert_bool=True)
+        self.builtin = UniqueProperty('builtin', default=False, convert_bool=True)
 
     def parse_context(self, ctxt):
-        def blck_genkernel(tree):
-            self.genkernel.parse_tree(tree)
         def stmt_initramfs_add_cmdline(tree):
             self.cmdline.extend(find_all_named_tokens(tree, 'quoted_param'))
+        def stmt_initramfs_add_genkernel_params(tree):
+            self.genkernel_params.extend(find_all_named_tokens(tree, 'quoted_param'))
+        def stmt_initramfs_enable(tree):
+            self.enable.parse(tree, named_token='param')
+        def stmt_initramfs_builtin(tree):
+            self.builtin.parse(tree, named_token='param')
 
         apply_tree_nodes(ctxt.children, [
-                blck_genkernel,
                 stmt_initramfs_add_cmdline,
+                stmt_initramfs_add_genkernel_params,
+                stmt_initramfs_enable,
+                stmt_initramfs_builtin,
             ])
 
 class ConfigEfi(BlockNode):
@@ -821,8 +820,10 @@ class ConfigInstall(BlockNode):
 
     def __init__(self):
         self.efi = ConfigEfi()
-        self.target_dir = UniqueProperty('target_dir', default='/boot')
-        self.target = UniqueProperty('target', default='vmlinuz-{KV}')
+        self.target_dir       = UniqueProperty('target_dir',       default='/boot')
+        self.target_kernel    = UniqueProperty('target_kernel',    default="vmlinuz-{KERNEL_VERSION}")
+        self.target_initramfs = UniqueProperty('target_initramfs', default="initramfs-{KERNEL_VERSION}.img")
+        self.target_config    = UniqueProperty('target_config',    default="config-{KERNEL_VERSION}")
         self.mount = []
         self.assert_mounted = []
 
@@ -831,17 +832,29 @@ class ConfigInstall(BlockNode):
             self.efi.parse_tree(tree)
         def stmt_install_target_dir(tree):
             self.target_dir.parse(tree, named_token='path')
-        def stmt_install_target(tree):
-            self.target.parse(tree, named_token='path')
         def stmt_install_mount(tree):
             self.mount.append(find_named_token(tree, 'path'))
         def stmt_install_assert_mounted(tree):
             self.assert_mounted.append(find_named_token(tree, 'path'))
+        def stmt_install_target_kernel(tree):
+            self.target_kernel.parse(tree, named_token='path')
+            if not self.target_kernel.was_quoted:
+                self.target_kernel.value = parse_bool(self.target_kernel.at, self.target_kernel.value)
+        def stmt_install_target_initramfs(tree):
+            self.target_initramfs.parse(tree, named_token='path')
+            if not self.target_initramfs.was_quoted:
+                self.target_initramfs.value = parse_bool(self.target_initramfs.at, self.target_initramfs.value)
+        def stmt_install_target_config(tree):
+            self.target_config.parse(tree, named_token='path')
+            if not self.target_config.was_quoted:
+                self.target_config.value = parse_bool(self.target_config.at, self.target_config.value)
 
         apply_tree_nodes(ctxt.children, [
                 blck_efi,
                 stmt_install_target_dir,
-                stmt_install_target,
+                stmt_install_target_kernel,
+                stmt_install_target_initramfs,
+                stmt_install_target_config,
                 stmt_install_mount,
                 stmt_install_assert_mounted,
             ])
@@ -849,26 +862,11 @@ class ConfigInstall(BlockNode):
 class ConfigBuild(BlockNode):
     node_name = 'build'
 
-    def __init__(self):
-        self.enable_initramfs = UniqueProperty('initramfs', default=False, convert_bool=True)
-        self.pack = {
-                'initramfs': UniqueProperty('pack initramfs', default=False, convert_bool=True),
-                'cmdline': UniqueProperty('pack cmdline', default=False, convert_bool=True),
-            }
+    #def __init__(self):
+    #    pass
 
-    def parse_context(self, ctxt):
-        def stmt_build_initramfs(tree):
-            self.enable_initramfs.parse(tree, named_token='param')
-        def stmt_build_pack(tree):
-            key = find_named_token(tree, 'key')
-            if key not in self.pack:
-                die_print_error_at(def_at(tree), "invalid parameter '{}'".format(key))
-            self.pack[key].parse(tree, named_token='param', ignore_missing='true')
-
-        apply_tree_nodes(ctxt.children, [
-                stmt_build_initramfs,
-                stmt_build_pack,
-            ])
+    #def parse_context(self, ctxt):
+    #    pass
 
 class Config(BlockNode):
     node_name = 'root'
