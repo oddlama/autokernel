@@ -31,10 +31,11 @@ def check_execution_environment(args):
     """
     check_program_exists('uname')
     check_program_exists('mount')
+    check_program_exists('umount')
     check_program_exists('make')
 
     def _die_writable_config_by(component, name):
-        log.die("Refusing to run, because '{}' is writable by {}. This allows {} to replace the configuration '{}' and thus inject commands.".format(component, name, name, args.autokernel_config))
+        log.die("Refusing to run, because '{1}' is writable by {2}. This allows {2} to replace the configuration '{3}' and thus inject commands.".format(component, name, args.autokernel_config))
 
     cur_uid = os.geteuid()
 
@@ -349,6 +350,15 @@ def build_initramfs(args, config, modules_prefix, initramfs_output):
     except IOError as e:
         log.die("Could not copy initramfs from '{}' to '{}': {}".format(cmd_output_file, initramfs_output, str(e)))
 
+def install_modules(args, prefix="/"):
+    """
+    Installs the modules to the given prefix
+    """
+    try:
+        subprocess.run(['make', 'modules_install', 'INSTALL_MOD_PATH=' + prefix], cwd=args.kernel_dir, check=True, stdout=None)
+    except subprocess.CalledProcessError as e:
+        log.die("'make modules_install INSTALL_MOD_PATH={}' failed in {} with code {}".format(prefix, args.kernel_dir, e.returncode))
+
 def main_build(args, config=None):
     """
     Main function for the 'build' command.
@@ -367,10 +377,11 @@ def main_build(args, config=None):
 
     kernel_version = autokernel.kconfig.get_kernel_version(args.kernel_dir)
     # Config output is "{KERNEL_DIR}/.config"
-    config_output = os.path.join(args.kernel_dir, '.config')
-    # Initramfs basename "initramfs-{KERNEL_VERSION}.img"
-    initramfs_basename = 'initramfs-{}.img'.format(kernel_version)
-    # Initramfs output is "{KERNEL_DIR}/initramfs-{KERNEL_VERSION}.img"
+    config_output = os.path.join(args.kernel_dir, '.config.autokernel')
+    # Initramfs basename "initramfs-{KERNEL_VERSION}.cpio"
+    # The .cpio suffix is cruical, as the kernel makefile requires it to detect initramfs archives
+    initramfs_basename = 'initramfs-{}.cpio'.format(kernel_version)
+    # Initramfs output is "{KERNEL_DIR}/initramfs-{KERNEL_VERSION}.cpio"
     initramfs_output = os.path.join(args.kernel_dir, initramfs_basename)
 
     # Load symbols from Kconfig
@@ -394,6 +405,8 @@ def main_build(args, config=None):
                 header=generated_by_autokernel_header(),
                 save_old=False)
 
+        # Copy file to .config, which may get changed by the makefiles
+        shutil.copyfile(config_output, '.config')
         # Build the kernel
         build_kernel(args)
 
@@ -419,28 +432,19 @@ def main_build(args, config=None):
             else:
                 sym_cmdline.set_value(kernel_cmdline_str)
 
-    def preprocess_initramfs_source(sym_initramfs_source):
+    def check_initramfs_source(sym_initramfs_source):
         has_user_initramfs_source = sym_initramfs_source in autokernel.symbol_tracking.symbol_changes
 
         # Issue a warning, if a custom initramfs source does not contain "{INITRAMFS}", and we have our initramfs enabled.
         if has_user_initramfs_source \
-                and not sym_initramfs_source.str_value.contains('{INITRAMFS}') \
                 and config.initramfs.enabled \
                 and config.initramfs.builtin:
-            log.warn("INITRAMFS_SOURCE was set manually and doesn't contain an '{INITRAMFS}' token, although a custom initramfs should be built and integrated into the kernel.")
-
-            # Return None if the user explicitly set this to the empty string, meaning that
-            # no initramfs sources will be built into the kernel
-            if sym_initramfs_source.str_value == '':
-                return None
-
-        # Return the space separated list of initramfs sources
-        return sym_initramfs_source.str_value if has_user_initramfs_source else '{INITRAMFS}'
+            log.die("INITRAMFS_SOURCE was set manually although a custom initramfs should be built and integrated into the kernel.")
 
     # Set CMDLINE_BOOL and CMDLINE
     set_cmdline()
     # Preprocess INITRAMFS_SOURCE
-    initramfs_source_str = preprocess_initramfs_source(sym_initramfs_source)
+    check_initramfs_source(sym_initramfs_source)
 
     # Kernel build pass #1
     log.info("Building kernel")
@@ -468,24 +472,11 @@ def main_build(args, config=None):
                 initramfs_tmp_output = os.path.join(tmppath, initramfs_basename)
                 # Link to the initramfs output
                 os.symlink(os.path.realpath(initramfs_output), initramfs_tmp_output)
-                # On the second pass, we enable all initramfs source files, and replace
-                # the '{INITRAMFS}' token with the path to our initramfs
-                sym_initramfs_source.set_value(initramfs_source_str.replace('{INITRAMFS}', initramfs_tmp_output))
+                # On the second pass, we enable the initramfs cpio archive
+                sym_initramfs_source.set_value(initramfs_tmp_output)
 
                 # Rebuild the kernel to pack the new images
                 _build_kernel()
-
-                # Clean up
-                os.unlink(initramfs_tmp_output)
-
-def install_modules(args, prefix="/"):
-    """
-    Installs the modules to the given prefix
-    """
-    try:
-        subprocess.run(['make', 'modules_install', 'INSTALL_MOD_PATH=' + prefix], cwd=args.kernel_dir, check=True, stdout=None)
-    except subprocess.CalledProcessError as e:
-        log.die("'make modules_install INSTALL_MOD_PATH={}' failed in {} with code {}".format(prefix, args.kernel_dir, e.returncode))
 
 def main_install(args, config=None):
     """
@@ -495,12 +486,16 @@ def main_install(args, config=None):
         # Load configuration file
         config = autokernel.config.load_config(args.autokernel_config)
 
+    new_mounts = []
+
     # Mount
     for i in config.install.mount:
         if not os.access(i, os.R_OK):
             log.die("Permission denied on accessing '{}'. Aborting.".format(i))
 
         if not os.path.ismount(i):
+            log.info("Mounting {}".format(i))
+            new_mounts.append(i)
             try:
                 subprocess.run(['mount', '--', i], check=True)
             except subprocess.CalledProcessError as e:
@@ -514,25 +509,48 @@ def main_install(args, config=None):
         if not os.path.ismount(i):
             log.die("'{}' is not mounted. Aborting.".format(i))
 
-    def install_kernel(args, config):
-        log.info("Installing kernel")
+    kernel_version = autokernel.kconfig.get_kernel_version(args.kernel_dir)
+    def _replace_vars(p):
+        return p.replace('{KERNEL_VERSION}', kernel_version)
 
-        #if target is bool and false:
-        #    return
+    target_dir = _replace_vars(config.install.target_dir)
+    def install_kernel():
+        # If the target is disabled, return.
+        if not config.install.target_kernel:
+            return
 
-        # TODO always use a clear environment!!!
-        print(args.kernel_dir)
-        print(str(config.install.target_dir))
-        print(str(config.install.target).replace('$KERNEL_VERSION', autokernel.kconfig.get_kernel_version(args.kernel_dir)))
+        to = os.path.join(target_dir, _replace_vars(config.install.target_kernel))
+        log.info("Installing kernel:    {}".format(to))
 
-    def install_initramfs(args, config):
-        log.info("Installing initramfs")
-        print(args.kernel_dir)
-        print(config.install.target_dir)
+    def install_config():
+        # If the target is disabled, return.
+        if not config.install.target_config:
+            return
 
-    #install_kernel()
-    #install_config()
-    #install_initramfs()
+        to = os.path.join(target_dir, _replace_vars(config.install.target_config))
+        log.info("Installing config:    {}".format(to))
+
+    def install_initramfs():
+        # If the target is disabled, return.
+        if not config.install.target_config:
+            return
+
+        to = os.path.join(target_dir, _replace_vars(config.install.target_initramfs))
+        log.info("Installing initramfs: {}".format(to))
+
+    install_modules(args)
+    install_kernel()
+    install_config()
+    if config.initramfs.enabled:
+        install_initramfs()
+
+    # Undo what we have mounted
+    for i in reversed(new_mounts):
+        log.info("Unmounting {}".format(i))
+        try:
+            subprocess.run(['umount', '--', i], check=True)
+        except subprocess.CalledProcessError as e:
+            log.warn("Could not umount '{}' (returned {})".format(i, e.returncode))
 
 def main_build_all(args):
     """

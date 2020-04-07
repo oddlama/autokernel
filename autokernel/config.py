@@ -215,17 +215,18 @@ class UniqueProperty:
         self.was_quoted = False
         self.name = name
         self.default = default
-        self.value = None
+        self._value = None
         self.convert_bool = convert_bool
 
+    @property
     def defined(self):
-        return self.value is not None
+        return self._value is not None
 
     def parse(self, tree, token=None, named_token=None, ignore_missing=None):
         default_if_ignored = ignore_missing
         ignore_missing = default_if_ignored is not None
 
-        if self.defined():
+        if self.defined:
             die_redefinition(def_at(tree), self.at, self.name)
         self.at = def_at(tree)
 
@@ -245,18 +246,23 @@ class UniqueProperty:
             tok = tok or default_if_ignored
 
         if self.convert_bool:
-            self.value = parse_bool(tree, tok)
+            self._value = parse_bool(tree, tok)
         else:
-            self.value = tok
+            self._value = tok
 
-    def _get(self):
-        return self.default if self.value is None else self.value
+    @property
+    def value(self):
+        return self.default if self._value is None else self._value
+
+    @value.setter
+    def value(self, v):
+        self._value = v
 
     def __bool__(self):
-        return bool(self._get())
+        return bool(self.value)
 
     def __str__(self):
-        return self._get()
+        return str(self.value)
 
 def _parse_umask_property(prop):
     try:
@@ -1004,8 +1010,8 @@ def load_config(config_file):
     # Assert that command and command_output are set if initramfs is enabled.
     if config.initramfs.enabled:
         if len(config.initramfs.command) == 0:
-            log.die("Initramfs is enabled, but initramfs.command has not been specified!")
-        if config.initramfs.command_output.value is None:
-            log.die("Initramfs is enabled, but initramfs.command_output has not been specified!")
+            log.die("Initramfs is enabled, but initramfs.command has not been defined!")
+        if not config.initramfs.command_output.defined:
+            log.die("Initramfs is enabled, but initramfs.command_output has not been defined!")
 
     return config
