@@ -406,7 +406,7 @@ def main_build(args, config=None):
                 save_old=False)
 
         # Copy file to .config, which may get changed by the makefiles
-        shutil.copyfile(config_output, '.config')
+        shutil.copyfile(config_output, os.path.join(args.kernel_dir, '.config'))
         # Build the kernel
         build_kernel(args)
 
@@ -457,6 +457,7 @@ def main_build(args, config=None):
     if config.initramfs.enabled:
         with tempfile.TemporaryDirectory() as tmppath:
             # Temporarily install modules so the initramfs generator has access to them
+            log.info("Copying modules into temporary directory")
             tmp_modules_prefix = os.path.join(tmppath, 'modules')
             install_modules(args, prefix=tmp_modules_prefix)
 
@@ -511,7 +512,7 @@ def main_install(args, config=None):
 
     kernel_version = autokernel.kconfig.get_kernel_version(args.kernel_dir)
     def _replace_vars(p):
-        return p.replace('{KERNEL_VERSION}', kernel_version)
+        return str(p).replace('{KERNEL_VERSION}', kernel_version)
 
     target_dir = _replace_vars(config.install.target_dir)
     def install_kernel():
@@ -538,6 +539,7 @@ def main_install(args, config=None):
         to = os.path.join(target_dir, _replace_vars(config.install.target_initramfs))
         log.info("Installing initramfs: {}".format(to))
 
+    log.info("Installing modules:   /lib/modules")
     install_modules(args)
     install_kernel()
     install_config()
