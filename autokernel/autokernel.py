@@ -7,16 +7,18 @@ from autokernel import log
 from autokernel.symbol_tracking import set_value_detect_conflicts
 
 import argparse
-import gzip
-import os
+import glob
 import grp
+import gzip
+import kconfiglib
+import math
+import os
 import pwd
 import shutil
 import stat
 import subprocess
 import sys
 import tempfile
-import kconfiglib
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -334,6 +336,9 @@ def build_initramfs(args, config, modules_prefix, initramfs_output):
         p = p.replace('{KERNEL_DIR}', args.kernel_dir)
         p = p.replace('{KERNEL_VERSION}', kernel_version)
         p = p.replace('{MODULES_PREFIX}', modules_prefix)
+        p = p.replace('{UNAME_ARCH}', autokernel.kconfig.get_uname_arch())
+        p = p.replace('{ARCH}', autokernel.kconfig.get_arch())
+        p = p.replace('{INITRAMFS_OUTPUT}', initramfs_output)
         return p
 
     try:
@@ -343,21 +348,25 @@ def build_initramfs(args, config, modules_prefix, initramfs_output):
     except subprocess.CalledProcessError as e:
         log.die("{} failed in {} with code {}".format(command[0], args.kernel_dir, e.returncode))
 
-    cmd_output_file = _replace_vars(config.initramfs.command_output.value)
-    try:
-        # Move the output file as stated in the configuration to the kernel tree
-        shutil.move(cmd_output_file, initramfs_output)
-    except IOError as e:
-        log.die("Could not copy initramfs from '{}' to '{}': {}".format(cmd_output_file, initramfs_output, str(e)))
+    if config.initramfs.command_output:
+        cmd_output_file = _replace_vars(config.initramfs.command_output.value)
+        try:
+            # Move the output file as stated in the configuration to the kernel tree
+            shutil.move(cmd_output_file, initramfs_output)
+        except IOError as e:
+            log.die("Could not copy initramfs from '{}' to '{}': {}".format(cmd_output_file, initramfs_output, str(e)))
 
 def install_modules(args, prefix="/"):
     """
     Installs the modules to the given prefix
     """
+    # Use correct 022 umask when installing modules
+    saved_umask = os.umask(0o022)
     try:
         subprocess.run(['make', 'modules_install', 'INSTALL_MOD_PATH=' + prefix], cwd=args.kernel_dir, check=True, stdout=None)
     except subprocess.CalledProcessError as e:
         log.die("'make modules_install INSTALL_MOD_PATH={}' failed in {} with code {}".format(prefix, args.kernel_dir, e.returncode))
+    os.umask(saved_umask)
 
 def main_build(args, config=None):
     """
@@ -368,7 +377,7 @@ def main_build(args, config=None):
         config = autokernel.config.load_config(args.autokernel_config)
 
     # Set umask for build
-    os.umask(config.build.umask.value)
+    saved_umask = os.umask(config.build.umask.value)
 
     # Clean the kernel dir, if the user wants that
     if args.clean:
@@ -467,17 +476,12 @@ def main_build(args, config=None):
             # Pack the initramfs into the kernel if desired
             if config.initramfs.builtin:
                 log.info("Rebuilding kernel to pack external resources")
-
-                # Initramfs tmp output will be a link to the initramfs. This asserts that there are no spaces
-                # in the filename when packing the initramfs into the kernel (the config field accepts a space separated list of filenames... great decision.)
-                initramfs_tmp_output = os.path.join(tmppath, initramfs_basename)
-                # Link to the initramfs output
-                os.symlink(os.path.realpath(initramfs_output), initramfs_tmp_output)
-                # On the second pass, we enable the initramfs cpio archive
-                sym_initramfs_source.set_value(initramfs_tmp_output)
-
+                # On the second pass, we enable the initramfs cpio archive, which is now in the kernel_dir
+                sym_initramfs_source.set_value(initramfs_basename)
                 # Rebuild the kernel to pack the new images
                 _build_kernel()
+
+    os.umask(saved_umask)
 
 def main_install(args, config=None):
     """
@@ -487,9 +491,11 @@ def main_install(args, config=None):
         # Load configuration file
         config = autokernel.config.load_config(args.autokernel_config)
 
-    new_mounts = []
+    # Use correct umask when installing
+    saved_umask = os.umask(config.install.umask.value)
 
     # Mount
+    new_mounts = []
     for i in config.install.mount:
         if not os.access(i, os.R_OK):
             log.die("Permission denied on accessing '{}'. Aborting.".format(i))
@@ -512,39 +518,113 @@ def main_install(args, config=None):
 
     kernel_version = autokernel.kconfig.get_kernel_version(args.kernel_dir)
     def _replace_vars(p):
-        return str(p).replace('{KERNEL_VERSION}', kernel_version)
+        p = str(p)
+        p = p.replace('{KERNEL_VERSION}', kernel_version)
+        p = p.replace('{UNAME_ARCH}', autokernel.kconfig.get_uname_arch())
+        p = p.replace('{ARCH}', autokernel.kconfig.get_arch())
+        return p
 
     target_dir = _replace_vars(config.install.target_dir)
-    def install_kernel():
-        # If the target is disabled, return.
-        if not config.install.target_kernel:
+    # Config output is "{KERNEL_DIR}/.config"
+    config_output = os.path.join(args.kernel_dir, '.config.autokernel')
+    # Initramfs basename "initramfs-{KERNEL_VERSION}.cpio"
+    # The .cpio suffix is cruical, as the kernel makefile requires it to detect initramfs archives
+    initramfs_basename = 'initramfs-{}.cpio'.format(kernel_version)
+    # Initramfs output is "{KERNEL_DIR}/initramfs-{KERNEL_VERSION}.cpio"
+    initramfs_output = os.path.join(args.kernel_dir, initramfs_basename)
+    # bzImage output
+    bzimage_output = os.path.join(args.kernel_dir, 'arch', autokernel.kconfig.get_uname_arch(), 'boot/bzImage')
+
+    def _purge_old(path):
+        keep_old = config.install.keep_old.value
+        # Disable purging on negative count
+        if keep_old < 0:
             return
 
-        to = os.path.join(target_dir, _replace_vars(config.install.target_kernel))
-        log.info("Installing kernel:    {}".format(to))
-
-    def install_config():
-        # If the target is disabled, return.
-        if not config.install.target_config:
+        # Disable purging for non versionated paths
+        if not '{KERNEL_VERSION}' in path:
             return
 
-        to = os.path.join(target_dir, _replace_vars(config.install.target_config))
-        log.info("Installing config:    {}".format(to))
-
-    def install_initramfs():
-        # If the target is disabled, return.
-        if not config.install.target_config:
+        tokens = path.split('{KERNEL_VERSION}')
+        if len(tokens) > 2:
+            log.warn("Cannot purge path with more than one {{KERNEL_VERSION}} token: '{}'".format(path))
             return
 
-        to = os.path.join(target_dir, _replace_vars(config.install.target_initramfs))
-        log.info("Installing initramfs: {}".format(to))
+        def _version_sorter(i):
+            suffix = i[len(tokens[0]):]
+            has_old = '.old' in suffix
+            if has_old:
+                suffix_split = suffix.split('.old')
+                suffix, suffix_old = suffix_split[0], suffix_split[1]
+                old_num = int(suffix_old[1:] or '0')
+            else:
+                old_num = math.inf
+            semver = suffix[:-len(tokens[1])] if len(tokens[1]) > 0 else suffix
+            val = autokernel.config.semver_to_int(semver)
+            return val, old_num
 
-    log.info("Installing modules:   /lib/modules")
-    install_modules(args)
-    install_kernel()
-    install_config()
+        has_slash_in_suffix = '/' in tokens[1]
+        wildcard_path = tokens[0] + '*' + (tokens[1].replace('/', '*/', 1) if has_slash_in_suffix else tokens[1] + '*')
+        for i in sorted(glob.glob(wildcard_path), key=_version_sorter)[:-(keep_old + 1)]:
+            # For security, we will not call rmtree on a path that doesn't end with a slash,
+            # or if the realpath has less then two slash characters in it.
+            # Otherwise we only call unlink
+            if i[-1] == '/' and os.path.realpath(i).count('/') >= 2:
+                try:
+                    shutil.rmtree(i)
+                except OSError as e:
+                    log.warn("Could not remove {}: {}".format(i, str(e)))
+            else:
+                try:
+                    os.unlink(i)
+                except IOError as e:
+                    log.warn("Could not remove {}: {}".format(i, str(e)))
+
+    def _move_to_old(path):
+        dst = path + '.old'
+        if os.path.exists(dst):
+            num = 1
+            while os.path.exists(dst):
+                dst = "{}.old.{:d}".format(path, num)
+                num += 1
+        shutil.move(path, dst)
+
+    def _install(name, src, target_var):
+        # If the target is disabled, return.
+        if not target_var:
+            return
+
+        # Figure out destination, and move existing filed if necessary
+        dst = os.path.join(target_dir, _replace_vars(target_var))
+        if os.path.exists(dst):
+            _move_to_old(dst)
+
+        # Create directory if it doesn't exist
+        Path(os.path.dirname(dst)).mkdir(parents=True, exist_ok=True)
+
+        log.info("Installing {:<11s} {}".format(name + ':', dst))
+        # Install target file
+        shutil.copyfile(src, dst)
+        # Purge old files
+        _purge_old(os.path.join(target_dir, str(target_var)))
+
+    # Move target_dir, if it is dynamic
+    if '{KERNEL_VERSION}' in str(config.install.target_dir) and os.path.exists(target_dir):
+        _move_to_old(target_dir)
+
+    # Install modules
+    log.info("Installing modules:    /lib/modules")
+    #TODO install_modules(args)
+    _purge_old("/lib/modules/{KERNEL_VERSION}/")
+
+    # Install targets
+    _install('bzimage', bzimage_output, config.install.target_kernel)
+    _install('config',  config_output,  config.install.target_config)
     if config.initramfs.enabled:
-        install_initramfs()
+        _install('initramfs', initramfs_output, config.install.target_initramfs)
+
+    # Purge old target_dirs (will only be done if it is dynamic)
+    _purge_old(str(config.install.target_dir) + '/')
 
     # Undo what we have mounted
     for i in reversed(new_mounts):
@@ -553,6 +633,9 @@ def main_install(args, config=None):
             subprocess.run(['umount', '--', i], check=True)
         except subprocess.CalledProcessError as e:
             log.warn("Could not umount '{}' (returned {})".format(i, e.returncode))
+
+    # Restore old umask
+    os.umask(saved_umask)
 
 def main_build_all(args):
     """

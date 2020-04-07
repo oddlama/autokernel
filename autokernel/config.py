@@ -270,8 +270,15 @@ def _parse_umask_property(prop):
     except ValueError as e:
         die_print_error_at(prop.at, "Invalid value for umask: {}".format(str(e)))
 
+def _parse_int_property(prop):
+    try:
+        prop.value = int(prop.value)
+    except ValueError as e:
+        die_print_error_at(prop.at, "Invalid value for integer: {}".format(str(e)))
+
 special_var_cmp_mode = {
     '$kernel_version': 'semver',
+    '$uname_arch': 'string',
     '$arch':  'string',
     '$false': 'string',
     '$true':  'string',
@@ -285,6 +292,8 @@ def get_special_var_cmp_mode(hint_at, var):
 def resolve_special_variable(hint_at, kconfig, var):
     if var == '$kernel_version':
         return autokernel.kconfig.get_kernel_version(kconfig.srctree)
+    elif var == '$uname_arch':
+        return autokernel.kconfig.get_uname_arch()
     elif var == '$arch':
         return autokernel.kconfig.get_arch()
     elif var == '$true':
@@ -298,7 +307,7 @@ def check_str(v):
     return v.value
 
 def semver_to_int(v):
-    t = v.value.split('-')[0].split('.')
+    t = v.split('-')[0].split('.')
     if len(t) < 3:
         t.extend(['0'] * (3 - len(t)))
     elif len(t) > 3:
@@ -326,7 +335,7 @@ _variable_parse_functors = {
     'int': check_int,
     'hex': check_hex,
     'tristate': check_tristate,
-    'semver': semver_to_int,
+    'semver': lambda v: semver_to_int(v.value),
 }
 
 _compare_op_to_str = {
@@ -837,12 +846,14 @@ class ConfigInstall(BlockNode):
 
     def __init__(self):
         self.efi = ConfigEfi()
+        self.umask            = UniqueProperty('umask',            default='0077')
         self.target_dir       = UniqueProperty('target_dir',       default='/boot')
         self.target_kernel    = UniqueProperty('target_kernel',    default="bzImage-{KERNEL_VERSION}")
         self.target_config    = UniqueProperty('target_config',    default="config-{KERNEL_VERSION}")
-        self.target_initramfs = UniqueProperty('target_initramfs', default="initramfs-{KERNEL_VERSION}.img")
+        self.target_initramfs = UniqueProperty('target_initramfs', default="initramfs-{KERNEL_VERSION}.cpio")
         self.mount = []
         self.assert_mounted = []
+        self.keep_old  = UniqueProperty('keep_old', default=(-1))
 
     def parse_context(self, ctxt):
         def _parse_target(tree, target):
@@ -855,34 +866,42 @@ class ConfigInstall(BlockNode):
 
         def blck_efi(tree):
             self.efi.parse_tree(tree)
+        def stmt_install_umask(tree):
+            self.umask.parse(tree, named_token='param')
+            _parse_umask_property(self.umask)
         def stmt_install_target_dir(tree):
             self.target_dir.parse(tree, named_token='path')
-        def stmt_install_mount(tree):
-            self.mount.append(find_named_token(tree, 'path'))
-        def stmt_install_assert_mounted(tree):
-            self.assert_mounted.append(find_named_token(tree, 'path'))
         def stmt_install_target_kernel(tree):
             _parse_target(tree, self.target_kernel)
         def stmt_install_target_config(tree):
             _parse_target(tree, self.target_config)
         def stmt_install_target_initramfs(tree):
             _parse_target(tree, self.target_initramfs)
+        def stmt_install_mount(tree):
+            self.mount.append(find_named_token(tree, 'path'))
+        def stmt_install_assert_mounted(tree):
+            self.assert_mounted.append(find_named_token(tree, 'path'))
+        def stmt_install_keep_old(tree):
+            self.keep_old.parse(tree, named_token='param')
+            _parse_int_property(self.keep_old)
 
         apply_tree_nodes(ctxt.children, [
                 blck_efi,
+                stmt_install_umask,
                 stmt_install_target_dir,
                 stmt_install_target_kernel,
                 stmt_install_target_config,
                 stmt_install_target_initramfs,
                 stmt_install_mount,
                 stmt_install_assert_mounted,
+                stmt_install_keep_old,
             ])
 
 class ConfigBuild(BlockNode):
     node_name = 'build'
 
     def __init__(self):
-        self.umask = UniqueProperty('umask', default="0077")
+        self.umask = UniqueProperty('umask', default='0022')
 
     def parse_context(self, ctxt):
         def stmt_build_umask(tree):
@@ -1011,7 +1030,7 @@ def load_config(config_file):
     if config.initramfs.enabled:
         if len(config.initramfs.command) == 0:
             log.die("Initramfs is enabled, but initramfs.command has not been defined!")
-        if not config.initramfs.command_output.defined:
-            log.die("Initramfs is enabled, but initramfs.command_output has not been defined!")
+        if not config.initramfs.command_output and not any(['{INITRAMFS_OUTPUT}' in a for a in config.initramfs.command]):
+            log.die("Initramfs is enabled, and neither {INITRAMFS_OUTPUT} was used in the command, nor initramfs.command_output has been defined!")
 
     return config

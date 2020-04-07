@@ -49,8 +49,11 @@ def set_env_default(var, default_value):
     if var not in os.environ:
         os.environ[var] = default_value
 
+def detect_uname_arch():
+    return subprocess.run(['uname', '-m'], check=True, stdout=subprocess.PIPE).stdout.decode().strip().splitlines()[0]
+
 def detect_arch():
-    arch = subprocess.run(['uname', '-m'], check=True, stdout=subprocess.PIPE).stdout.decode().strip().splitlines()[0]
+    arch = get_uname_arch()
     arch = re.sub('i.86',      'x86',     arch)
     arch = re.sub('x86_64',    'x86',     arch)
     arch = re.sub('sun4u',     'sparc64', arch)
@@ -86,6 +89,17 @@ def get_arch():
     if not _arch:
         _arch = detect_arch()
     return _arch
+
+
+_uname_arch = None
+def get_uname_arch():
+    """
+    Returns arch of the current host as the kernel would interpret it
+    """
+    global _uname_arch # pylint: disable=global-statement
+    if not _uname_arch:
+        _uname_arch = detect_uname_arch()
+    return _uname_arch
 
 _kernel_version = {}
 def get_kernel_version(kernel_dir):

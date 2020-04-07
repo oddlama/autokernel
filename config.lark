@@ -101,18 +101,22 @@ ctxt_efi: ( tok_ignore )*
 blck_install: "install" "{" ctxt_install "}"
 ctxt_install: ( tok_ignore
               | blck_efi
+              | stmt_install_umask
               | stmt_install_target_dir
               | stmt_install_target_kernel
               | stmt_install_target_config
               | stmt_install_target_initramfs
               | stmt_install_mount
-              | stmt_install_assert_mounted )*
+              | stmt_install_assert_mounted
+              | stmt_install_keep_old )*
+stmt_install_umask:            "umask"            WS param ";"
 stmt_install_target_dir:       "target_dir"       WS path ";"
 stmt_install_target_kernel:    "target_kernel"    WS path ";"
 stmt_install_target_config:    "target_config"    WS path ";"
 stmt_install_target_initramfs: "target_initramfs" WS path ";"
 stmt_install_mount:            "mount"            WS path ";"
 stmt_install_assert_mounted:   "assert_mounted"   WS path ";"
+stmt_install_keep_old:         "keep_old"         WS param ";"
 
 // build
 // ================
