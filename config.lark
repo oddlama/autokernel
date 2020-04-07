@@ -80,11 +80,11 @@ blck_initramfs: "initramfs" "{" ctxt_initramfs "}"
 ctxt_initramfs: ( tok_ignore
                 | stmt_initramfs_add_cmdline
                 | stmt_initramfs_add_genkernel_params
-                | stmt_initramfs_enable
+                | stmt_initramfs_enabled
                 | stmt_initramfs_builtin )*
 stmt_initramfs_add_cmdline:          "add_cmdline"  ( WS quoted_param )+ ";"
 stmt_initramfs_add_genkernel_params: "add_genkernel_params" ( WS quoted_param )+ ";"
-stmt_initramfs_enable:               "enable"         WS param ";"
+stmt_initramfs_enabled:              "enabled"        WS param ";"
 stmt_initramfs_builtin:              "builtin"        WS param ";"
 
 // efi
@@ -101,14 +101,14 @@ ctxt_install: ( tok_ignore
               | blck_efi
               | stmt_install_target_dir
               | stmt_install_target_kernel
-              | stmt_install_target_initramfs
               | stmt_install_target_config
+              | stmt_install_target_initramfs
               | stmt_install_mount
               | stmt_install_assert_mounted )*
 stmt_install_target_dir:       "target_dir"       WS path ";"
 stmt_install_target_kernel:    "target_kernel"    WS path ";"
-stmt_install_target_initramfs: "target_initramfs" WS path ";"
 stmt_install_target_config:    "target_config"    WS path ";"
+stmt_install_target_initramfs: "target_initramfs" WS path ";"
 stmt_install_mount:            "mount"            WS path ";"
 stmt_install_assert_mounted:   "assert_mounted"   WS path ";"
 
@@ -116,7 +116,9 @@ stmt_install_assert_mounted:   "assert_mounted"   WS path ";"
 // ================
 
 blck_build: "build" "{" ctxt_build "}"
-ctxt_build: ( tok_ignore )*
+ctxt_build: ( tok_ignore
+            | stmt_build_umask )*
+stmt_build_umask: "umask" WS param ";"
 
 // root
 // ================

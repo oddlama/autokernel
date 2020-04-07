@@ -212,6 +212,7 @@ class UniqueProperty:
     """
     def __init__(self, name, default, convert_bool=False):
         self.at = None
+        self.was_quoted = False
         self.name = name
         self.default = default
         self.value = None
@@ -229,7 +230,7 @@ class UniqueProperty:
         self.at = def_at(tree)
 
         if token:
-            self.tok = find_token(tree, token, ignore_missing=ignore_missing)
+            tok = find_token(tree, token, ignore_missing=ignore_missing)
             self.was_quoted = False
             self.at = tree
         elif named_token:
@@ -256,6 +257,12 @@ class UniqueProperty:
 
     def __str__(self):
         return self._get()
+
+def _parse_umask_property(prop):
+    try:
+        prop.value = int(prop.value, 8)
+    except ValueError as e:
+        die_print_error_at(prop.at, "Invalid value for umask: {}".format(str(e)))
 
 special_var_cmp_mode = {
     '$kernel_version': 'semver',
@@ -786,7 +793,7 @@ class ConfigInitramfs(BlockNode):
     def __init__(self):
         self.cmdline = []
         self.genkernel_params = []
-        self.enable = UniqueProperty('enable', default=False, convert_bool=True)
+        self.enabled = UniqueProperty('enabled', default=False, convert_bool=True)
         self.builtin = UniqueProperty('builtin', default=False, convert_bool=True)
 
     def parse_context(self, ctxt):
@@ -794,15 +801,15 @@ class ConfigInitramfs(BlockNode):
             self.cmdline.extend(find_all_named_tokens(tree, 'quoted_param'))
         def stmt_initramfs_add_genkernel_params(tree):
             self.genkernel_params.extend(find_all_named_tokens(tree, 'quoted_param'))
-        def stmt_initramfs_enable(tree):
-            self.enable.parse(tree, named_token='param')
+        def stmt_initramfs_enabled(tree):
+            self.enabled.parse(tree, named_token='param')
         def stmt_initramfs_builtin(tree):
             self.builtin.parse(tree, named_token='param')
 
         apply_tree_nodes(ctxt.children, [
                 stmt_initramfs_add_cmdline,
                 stmt_initramfs_add_genkernel_params,
-                stmt_initramfs_enable,
+                stmt_initramfs_enabled,
                 stmt_initramfs_builtin,
             ])
 
@@ -822,12 +829,20 @@ class ConfigInstall(BlockNode):
         self.efi = ConfigEfi()
         self.target_dir       = UniqueProperty('target_dir',       default='/boot')
         self.target_kernel    = UniqueProperty('target_kernel',    default="vmlinuz-{KERNEL_VERSION}")
-        self.target_initramfs = UniqueProperty('target_initramfs', default="initramfs-{KERNEL_VERSION}.img")
         self.target_config    = UniqueProperty('target_config',    default="config-{KERNEL_VERSION}")
+        self.target_initramfs = UniqueProperty('target_initramfs', default="initramfs-{KERNEL_VERSION}.img")
         self.mount = []
         self.assert_mounted = []
 
     def parse_context(self, ctxt):
+        def _parse_target(tree, target):
+            target.parse(tree, named_token='path')
+            # Parse disable
+            if not target.was_quoted:
+                target.value = parse_bool(target.at, target.value)
+                if target.value is not False:
+                    die_print_error_at(target.at, "You can only disable targets!")
+
         def blck_efi(tree):
             self.efi.parse_tree(tree)
         def stmt_install_target_dir(tree):
@@ -837,24 +852,18 @@ class ConfigInstall(BlockNode):
         def stmt_install_assert_mounted(tree):
             self.assert_mounted.append(find_named_token(tree, 'path'))
         def stmt_install_target_kernel(tree):
-            self.target_kernel.parse(tree, named_token='path')
-            if not self.target_kernel.was_quoted:
-                self.target_kernel.value = parse_bool(self.target_kernel.at, self.target_kernel.value)
-        def stmt_install_target_initramfs(tree):
-            self.target_initramfs.parse(tree, named_token='path')
-            if not self.target_initramfs.was_quoted:
-                self.target_initramfs.value = parse_bool(self.target_initramfs.at, self.target_initramfs.value)
+            _parse_target(tree, self.target_kernel)
         def stmt_install_target_config(tree):
-            self.target_config.parse(tree, named_token='path')
-            if not self.target_config.was_quoted:
-                self.target_config.value = parse_bool(self.target_config.at, self.target_config.value)
+            _parse_target(tree, self.target_config)
+        def stmt_install_target_initramfs(tree):
+            _parse_target(tree, self.target_initramfs)
 
         apply_tree_nodes(ctxt.children, [
                 blck_efi,
                 stmt_install_target_dir,
                 stmt_install_target_kernel,
-                stmt_install_target_initramfs,
                 stmt_install_target_config,
+                stmt_install_target_initramfs,
                 stmt_install_mount,
                 stmt_install_assert_mounted,
             ])
@@ -862,11 +871,17 @@ class ConfigInstall(BlockNode):
 class ConfigBuild(BlockNode):
     node_name = 'build'
 
-    #def __init__(self):
-    #    pass
+    def __init__(self):
+        self.umask = UniqueProperty('umask', default="0077")
 
-    #def parse_context(self, ctxt):
-    #    pass
+    def parse_context(self, ctxt):
+        def stmt_build_umask(tree):
+            self.umask.parse(tree, named_token='param')
+            _parse_umask_property(self.umask)
+
+        apply_tree_nodes(ctxt.children, [
+                stmt_build_umask,
+            ])
 
 class Config(BlockNode):
     node_name = 'root'

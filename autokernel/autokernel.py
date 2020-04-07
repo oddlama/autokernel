@@ -17,6 +17,18 @@ import kconfiglib
 from datetime import datetime, timezone
 
 
+def check_program_exists(exe):
+    if shutil.which(exe) is None:
+        log.die("Missing program '{}'. Please ensure that it is installed.".format(exe))
+
+def check_execution_environment():
+    """
+    Checks that some required external programs exist
+    """
+    check_program_exists('uname')
+    check_program_exists('mount')
+    check_program_exists('make')
+
 def has_proc_config_gz():
     """
     Checks if /proc/config.gz exists
@@ -151,12 +163,12 @@ def apply_autokernel_config(kernel_dir, kconfig, config):
 
     # Visit the root node and apply all symbol changes
     visit(config.kernel.module)
-    log.info("  Changed {} symbols".format(len(autokernel.symbol_tracking.symbol_changes)))
+    log.verbose("  Changed {} symbols".format(len(autokernel.symbol_tracking.symbol_changes)))
 
     # Lastly, invalidate all non-assigned symbols to process new default value conditions
     for sym in kconfig.unique_defined_syms:
         if sym.user_value is None:
-            sym._invalidate()
+            sym._invalidate() # pylint: disable=protected-access
 
     return kernel_cmdline
 
@@ -264,7 +276,7 @@ def main_generate_config(args, config=None):
     # Load symbols from Kconfig
     kconfig = autokernel.kconfig.load_kconfig(args.kernel_dir)
     # Apply autokernel configuration
-    generate_config_info = apply_autokernel_config(args.kernel_dir, kconfig, config)
+    apply_autokernel_config(args.kernel_dir, kconfig, config)
 
     # Write configuration to file
     kconfig.write_config(
@@ -274,27 +286,31 @@ def main_generate_config(args, config=None):
 
     log.info("Configuration written to '{}'".format(args.output))
 
-def build_kernel(args, config, pass_id):
-    if pass_id == 'initial':
-        log.info("Building kernel")
-    elif pass_id == 'pack':
-        log.info("Rebuilding kernel to pack external resources")
-    else:
-        raise ValueError("pass_id has an invalid value '{}'".format(pass_id))
+def clean_kernel_dir(args):
+    """
+    Clean the kernel tree (call make distclean)
+    """
+    try:
+        subprocess.run(['make', 'distclean'], cwd=args.kernel_dir, check=True)
+    except subprocess.CalledProcessError as e:
+        log.die("'make distclean' failed in {} with code {}".format(args.kernel_dir, e.returncode))
 
-    # TODO cleaning capabilities?
+def build_kernel(args):
+    """
+    Build the kernel (call make)
+    """
     try:
         subprocess.run(['make'], cwd=args.kernel_dir, check=True)
     except subprocess.CalledProcessError as e:
-        log.die("make failed in {} with code {}".format(args.kernel_dir, e.returncode))
+        log.die("'make' failed in {} with code {}".format(args.kernel_dir, e.returncode))
 
-def build_initramfs(args, config):
+def build_initramfs(args, initramfs_output):
     log.info("Building initramfs")
 
-    #TODO '--no-install', '--no-mountboot'
-    #TODO if builtin
-    #TODO     '--no-compress-initramfs'
-    print("subprocess.run(['genkernel', 'initramfs'], cwd={}), config={}".format(args.kernel_dir, config))
+    try:
+        subprocess.run(['genkernel', '--no-install', '--no-mountboot', '--no-compress-initramfs', 'initramfs'], cwd=args.kernel_dir, check=True)
+    except subprocess.CalledProcessError as e:
+        log.die("make failed in {} with code {}".format(args.kernel_dir, e.returncode))
 
 def main_build(args, config=None):
     """
@@ -304,32 +320,123 @@ def main_build(args, config=None):
         # Load configuration file
         config = autokernel.config.load_config(args.autokernel_config)
 
-    # TODO provide own kconfig .... used later bc modified
-    main_generate_config(args, config)
+    # Check that genkernel is installed
+    if config.initramfs.enabled:
+        check_program_exists('genkernel')
 
-    # Build the kernel
-    build_kernel(args, config, pass_id='initial')
+    # Set umask for build
+    os.umask(config.build.umask.value)
+
+    # Clean the kernel dir, if the user wants that
+    if args.clean:
+        log.info("Cleaning kernel directory")
+        clean_kernel_dir(args)
+
+    kernel_version = autokernel.kconfig.get_kernel_version(args.kernel_dir)
+    # Config output is "{KERNEL_DIR}/.config"
+    config_output = os.path.join(args.kernel_dir, '.config')
+    # Initramfs basename "initramfs-{KERNEL_VERSION}.img"
+    initramfs_basename = 'initramfs-{}.img'.format(kernel_version)
+    # Initramfs output is "{KERNEL_DIR}/initramfs-{KERNEL_VERSION}.img"
+    initramfs_output = os.path.join(args.kernel_dir, initramfs_basename)
+
+    # Load symbols from Kconfig
+    kconfig = autokernel.kconfig.load_kconfig(args.kernel_dir)
+    sym_cmdline_bool = kconfig.syms['CMDLINE_BOOL']
+    sym_cmdline = kconfig.syms['CMDLINE']
+    sym_initramfs_source = kconfig.syms['INITRAMFS_SOURCE']
+
+    # Set some defaults
+    sym_cmdline_bool.set_value('y')
+    sym_cmdline.set_value('')
+    sym_initramfs_source.set_value('{INITRAMFS}')
+
+    # Apply autokernel configuration
+    kernel_cmdline = apply_autokernel_config(args.kernel_dir, kconfig, config)
+
+    def _build_kernel():
+        # Write configuration to file
+        kconfig.write_config(
+                filename=config_output,
+                header=generated_by_autokernel_header(),
+                save_old=False)
+
+        # Build the kernel
+        build_kernel(args)
+
+    def set_cmdline():
+        kernel_cmdline_str = ' '.join(kernel_cmdline)
+
+        has_user_cmdline_bool = sym_cmdline_bool in autokernel.symbol_tracking.symbol_changes
+        has_user_cmdline = sym_cmdline in autokernel.symbol_tracking.symbol_changes
+
+        if has_user_cmdline_bool and sym_cmdline_bool.str_value == 'n':
+            # The user has explicitly disabled the builtin commandline,
+            # so there is no need to set it.
+            pass
+        else:
+            sym_cmdline_bool.set_value('y')
+
+            # Issue a warning, if a custom cmdline does not contain "{CMDLINE}", and we have gathered add_cmdline options.
+            if has_user_cmdline and not sym_cmdline.str_value.contains('{CMDLINE}') and len(kernel_cmdline) > 0:
+                log.warn("CMDLINE was set manually and doesn't contain a '{CMDLINE}' token, although add_cmdline has also been used.")
+
+            if has_user_cmdline:
+                sym_cmdline.set_value(sym_cmdline.str_value.replace('{CMDLINE}', kernel_cmdline_str))
+            else:
+                sym_cmdline.set_value(kernel_cmdline_str)
+
+    def preprocess_initramfs_source(sym_initramfs_source):
+        has_user_initramfs_source = sym_initramfs_source in autokernel.symbol_tracking.symbol_changes
+
+        # Issue a warning, if a custom initramfs source does not contain "{INITRAMFS}", and we have our initramfs enabled.
+        if has_user_initramfs_source \
+                and not sym_initramfs_source.str_value.contains('{INITRAMFS}') \
+                and config.initramfs.enabled \
+                and config.initramfs.builtin:
+            log.warn("INITRAMFS_SOURCE was set manually and doesn't contain an '{INITRAMFS}' token, although a custom initramfs should be built and integrated into the kernel.")
+
+            # Return None if the user explicitly set this to the empty string, meaning that
+            # no initramfs sources will be built into the kernel
+            if sym_initramfs_source.str_value == '':
+                return None
+
+        # Return the space separated list of initramfs sources
+        return sym_initramfs_source.str_value if has_user_initramfs_source else '{INITRAMFS}'
+
+    # Set CMDLINE_BOOL and CMDLINE
+    set_cmdline()
+    # Preprocess INITRAMFS_SOURCE
+    initramfs_source_str = preprocess_initramfs_source(sym_initramfs_source)
+
+    # Kernel build pass #1
+    log.info("Building kernel")
+    # On the first pass, disable all initramfs sources
+    sym_initramfs_source.set_value('')
+    # Start the build process
+    _build_kernel()
 
     # Build the initramfs, if enabled
-    if config.build.enable_initramfs:
-        build_initramfs(args, config)
+    if config.initramfs.enabled:
+        # Build the initramfs
+        build_initramfs(args, initramfs_output)
 
         # Pack the initramfs into the kernel if desired
-        if config.build.pack['initramfs']:
-            build_kernel(args, config, pass_id='pack')
+        if config.initramfs.builtin:
+            with tempfile.TemporaryDirectory() as tmppath:
+                log.info("Rebuilding kernel to pack external resources")
 
-def install_kernel(args, config):
-    log.info("Installing kernel")
+                # Initramfs tmp output will be a link to the initramfs. This asserts that there are no spaces
+                # in the filename when packing the initramfs into the kernel (the config field accepts a space separated list of filenames... great decision.)
+                initramfs_tmp_output = tmppath / initramfs_basename
+                # Link to the initramfs output
+                os.symlink(initramfs_output, initramfs_tmp_output)
+                # On the second pass, we enable all initramfs source files, and replace
+                # the '{INITRAMFS}' token with the path to our initramfs
+                sym_initramfs_source.set_value(initramfs_source_str.replace('{INITRAMFS}', initramfs_tmp_output))
 
-    # TODO always use a clear environment!!!
-    print(args.kernel_dir)
-    print(str(config.install.target_dir))
-    print(str(config.install.target).replace('$KERNEL_VERSION', autokernel.kconfig.get_kernel_version(args.kernel_dir)))
-
-def install_initramfs(args, config):
-    log.info("Installing initramfs")
-    print(args.kernel_dir)
-    print(config.install.target_dir)
+                # Rebuild the kernel to pack the new images
+                _build_kernel()
 
 def main_install(args, config=None):
     """
@@ -358,11 +465,25 @@ def main_install(args, config=None):
         if not os.path.ismount(i):
             log.die("'{}' is not mounted. Aborting.".format(i))
 
-    install_kernel(args, config)
+    def install_kernel(args, config):
+        log.info("Installing kernel")
 
-    # Install the initramfs, if enabled and not packed
-    if config.build.enable_initramfs and not config.build.pack['initramfs']:
-        install_initramfs(args, config)
+        #if target is bool and false:
+        #    return
+
+        # TODO always use a clear environment!!!
+        print(args.kernel_dir)
+        print(str(config.install.target_dir))
+        print(str(config.install.target).replace('$KERNEL_VERSION', autokernel.kconfig.get_kernel_version(args.kernel_dir)))
+
+    def install_initramfs(args, config):
+        log.info("Installing initramfs")
+        print(args.kernel_dir)
+        print(config.install.target_dir)
+
+    #install_kernel()
+    #install_config()
+    #install_initramfs()
 
 def main_build_all(args):
     """
@@ -698,6 +819,10 @@ def main_detect(args):
                 log.die("This kernel does not expose /proc/config.gz. Please provide the path to a valid config file manually.")
             log.info("Checking generated config against currently running kernel")
 
+    # Ensure that some required external programs are installed
+    check_program_exists('find')
+    check_program_exists('findmnt')
+
     # Load symbols from Kconfig
     kconfig = autokernel.kconfig.load_kconfig(args.kernel_dir)
     # Detect system nodes and create modules
@@ -883,6 +1008,8 @@ def main():
 
     # Build options
     parser_build = subparsers.add_parser('build', help='Generates the configuration, and then builds the kernel (and initramfs if required) in the kernel tree.')
+    parser_build.add_argument('-c', '--clean', dest='clean', action='store_true',
+            help="Clean the kernel tree before building")
     parser_build.set_defaults(func=main_build)
 
     # Installation options
@@ -891,6 +1018,8 @@ def main():
 
     # Full build options
     parser_all = subparsers.add_parser('all', help='First builds and then installs the kernel.')
+    parser_all.add_argument('-c', '--clean', dest='clean', action='store_true',
+            help="Clean the kernel tree before building")
     parser_all.set_defaults(func=main_build_all)
 
     # Show symbol infos
@@ -937,15 +1066,15 @@ def main():
 
     # Initialize important environment variables
     autokernel.kconfig.initialize_environment()
+    # Assert that some required programs exist
+    check_execution_environment()
 
-    # Fallback to main_build_all() if no mode is given
+    # Fallback to main_build_all() if no mode is given.
     if 'func' not in args:
         main_build_all(args)
     else:
         # Execute the mode's function
         args.func(args)
-
-    # TODO umask (probably better as external advice, ala "use umask then execute this".)
 
 def main_checked():
     try:

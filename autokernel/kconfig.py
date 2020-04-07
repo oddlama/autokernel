@@ -75,7 +75,7 @@ def initialize_environment():
     set_env_default("HOSTCXX", "g++")
 
     if "CC_VERSION_TEXT" not in os.environ:
-        os.environ["CC_VERSION_TEXT"] = subprocess.run(['gcc', '--version'], check=True, stdout=subprocess.PIPE).stdout.decode().strip().splitlines()[0]
+        os.environ["CC_VERSION_TEXT"] = subprocess.run([os.environ['CC'], '--version'], check=True, stdout=subprocess.PIPE).stdout.decode().strip().splitlines()[0]
 
 _arch = None
 def get_arch():
