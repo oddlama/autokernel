@@ -792,25 +792,29 @@ class ConfigInitramfs(BlockNode):
 
     def __init__(self):
         self.cmdline = []
-        self.genkernel_params = []
+        self.command = []
+        self.command_output = UniqueProperty('command_output', default=None)
         self.enabled = UniqueProperty('enabled', default=False, convert_bool=True)
         self.builtin = UniqueProperty('builtin', default=False, convert_bool=True)
 
     def parse_context(self, ctxt):
         def stmt_initramfs_add_cmdline(tree):
             self.cmdline.extend(find_all_named_tokens(tree, 'quoted_param'))
-        def stmt_initramfs_add_genkernel_params(tree):
-            self.genkernel_params.extend(find_all_named_tokens(tree, 'quoted_param'))
         def stmt_initramfs_enabled(tree):
             self.enabled.parse(tree, named_token='param')
         def stmt_initramfs_builtin(tree):
             self.builtin.parse(tree, named_token='param')
+        def stmt_initramfs_command(tree):
+            self.command.extend(find_all_named_tokens(tree, 'quoted_param'))
+        def stmt_initramfs_command_output(tree):
+            self.command_output.parse(tree, named_token='path')
 
         apply_tree_nodes(ctxt.children, [
                 stmt_initramfs_add_cmdline,
-                stmt_initramfs_add_genkernel_params,
                 stmt_initramfs_enabled,
                 stmt_initramfs_builtin,
+                stmt_initramfs_command,
+                stmt_initramfs_command_output,
             ])
 
 class ConfigEfi(BlockNode):
@@ -828,7 +832,7 @@ class ConfigInstall(BlockNode):
     def __init__(self):
         self.efi = ConfigEfi()
         self.target_dir       = UniqueProperty('target_dir',       default='/boot')
-        self.target_kernel    = UniqueProperty('target_kernel',    default="vmlinuz-{KERNEL_VERSION}")
+        self.target_kernel    = UniqueProperty('target_kernel',    default="bzImage-{KERNEL_VERSION}")
         self.target_config    = UniqueProperty('target_config',    default="config-{KERNEL_VERSION}")
         self.target_initramfs = UniqueProperty('target_initramfs', default="initramfs-{KERNEL_VERSION}.img")
         self.mount = []
@@ -996,5 +1000,12 @@ def load_config(config_file):
     kmod = config.kernel.module
     for u in kmod.uses:
         u.module = get_module(u)
+
+    # Assert that command and command_output are set if initramfs is enabled.
+    if config.initramfs.enabled:
+        if len(config.initramfs.command) == 0:
+            log.die("Initramfs is enabled, but initramfs.command has not been specified!")
+        if config.initramfs.command_output.value is None:
+            log.die("Initramfs is enabled, but initramfs.command_output has not been specified!")
 
     return config

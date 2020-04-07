@@ -9,6 +9,8 @@ from autokernel.symbol_tracking import set_value_detect_conflicts
 import argparse
 import gzip
 import os
+import grp
+import pwd
 import shutil
 import subprocess
 import sys
@@ -21,13 +23,29 @@ def check_program_exists(exe):
     if shutil.which(exe) is None:
         log.die("Missing program '{}'. Please ensure that it is installed.".format(exe))
 
-def check_execution_environment():
+def check_execution_environment(args):
     """
-    Checks that some required external programs exist
+    Checks that some required external programs exist, and some miscellaneous things.
     """
     check_program_exists('uname')
     check_program_exists('mount')
     check_program_exists('make')
+
+    def _die_writable_config_by(component, name):
+        log.die("Refusing to run, because '{}' is writable by {}. This allows {} to replace the selected configuration '{}' and thus inject commands.".format(component, name, name, args.autokernel_config))
+
+    cur_uid = os.geteuid()
+
+    # Ensure that the config file has the correct mode, to prevent command-injection by other users.
+    # No component of the path may be modifiable by anyone else but the current user (or root).
+    for component in Path(os.realpath(args.autokernel_config)).parents:
+        st = component.stat()
+        if st.st_uid != cur_uid and st.st_uid != 0 and st.st_mode & stat.S_IWUSR:
+            _die_writable_config_by(component, 'user {} ({})'.format(uid, pwd.getpwuid(uid).pw_name))
+        if st.st_gid != 0 and st.st_mode & stat.S_IWGRP:
+            _die_writable_config_by(component, 'group {} ({})'.format(gid, grp.getgrgid(gid).gr_name))
+        if st.st_mode & stat.S_IWOTH:
+            _die_writable_config_by(component, 'others')
 
 def has_proc_config_gz():
     """
@@ -304,13 +322,29 @@ def build_kernel(args):
     except subprocess.CalledProcessError as e:
         log.die("'make' failed in {} with code {}".format(args.kernel_dir, e.returncode))
 
-def build_initramfs(args, initramfs_output):
+def build_initramfs(args, modules_prefix, initramfs_output):
     log.info("Building initramfs")
 
+    def _replace_vars(p):
+        p = p.replace('{KERNEL_DIR}', args.kernel_dir)
+        p = p.replace('{MODULES_PREFIX}', modules_prefix)
+        return p
+
     try:
-        subprocess.run(['genkernel', '--no-install', '--no-mountboot', '--no-compress-initramfs', 'initramfs'], cwd=args.kernel_dir, check=True)
+        # Replace variables in command and run it
+        command = [_replace_vars(p) for p in config.initramfs.command]
+        subprocess.run(command, check=True)
     except subprocess.CalledProcessError as e:
         log.die("make failed in {} with code {}".format(args.kernel_dir, e.returncode))
+
+    try:
+        # Copy the output file as stated in the configuration to the kernel tree
+        shutil.copyfile(config.initramfs.command_output.value, initramfs_output)
+    except shutil.SameFileError as e:
+        # We don't recommended users to do this, but technically it works and so we won't complain.
+        pass
+    except IOError as e:
+        log.die("Could not copy initramfs from '{}' to '{}': {}".format(config.initramfs.command_output.value, initramfs_output, str(e)))
 
 def main_build(args, config=None):
     """
@@ -319,10 +353,6 @@ def main_build(args, config=None):
     if not config:
         # Load configuration file
         config = autokernel.config.load_config(args.autokernel_config)
-
-    # Check that genkernel is installed
-    if config.initramfs.enabled:
-        check_program_exists('genkernel')
 
     # Set umask for build
     os.umask(config.build.umask.value)
@@ -363,6 +393,7 @@ def main_build(args, config=None):
 
         # Build the kernel
         build_kernel(args)
+        install_modules(args)
 
     def set_cmdline():
         kernel_cmdline_str = ' '.join(kernel_cmdline)
@@ -418,12 +449,16 @@ def main_build(args, config=None):
 
     # Build the initramfs, if enabled
     if config.initramfs.enabled:
-        # Build the initramfs
-        build_initramfs(args, initramfs_output)
+        with tempfile.TemporaryDirectory() as tmppath:
+            # Temporarily install modules so the initramfs generator has access to them
+            tmp_modules_prefix = os.path.join(args.kernel_dir, tmppath / 'modules')
+            install_modules(prefix=tmp_modules_prefix)
 
-        # Pack the initramfs into the kernel if desired
-        if config.initramfs.builtin:
-            with tempfile.TemporaryDirectory() as tmppath:
+            # Build the initramfs
+            build_initramfs(args, modules_prefix=tmp_modules_prefix, output=initramfs_output)
+
+            # Pack the initramfs into the kernel if desired
+            if config.initramfs.builtin:
                 log.info("Rebuilding kernel to pack external resources")
 
                 # Initramfs tmp output will be a link to the initramfs. This asserts that there are no spaces
@@ -1013,7 +1048,7 @@ def main():
     parser_build.set_defaults(func=main_build)
 
     # Installation options
-    parser_install = subparsers.add_parser('install', help='Installs the finished kernel and requisites into the system.')
+    parser_install = subparsers.add_parser('install', help='Installs the finished kernel, modules and other resources on the system.')
     parser_install.set_defaults(func=main_install)
 
     # Full build options
@@ -1067,7 +1102,7 @@ def main():
     # Initialize important environment variables
     autokernel.kconfig.initialize_environment()
     # Assert that some required programs exist
-    check_execution_environment()
+    check_execution_environment(args)
 
     # Fallback to main_build_all() if no mode is given.
     if 'func' not in args:

@@ -79,13 +79,15 @@ ctxt_kernel: ( tok_ignore
 blck_initramfs: "initramfs" "{" ctxt_initramfs "}"
 ctxt_initramfs: ( tok_ignore
                 | stmt_initramfs_add_cmdline
-                | stmt_initramfs_add_genkernel_params
                 | stmt_initramfs_enabled
-                | stmt_initramfs_builtin )*
-stmt_initramfs_add_cmdline:          "add_cmdline"  ( WS quoted_param )+ ";"
-stmt_initramfs_add_genkernel_params: "add_genkernel_params" ( WS quoted_param )+ ";"
-stmt_initramfs_enabled:              "enabled"        WS param ";"
-stmt_initramfs_builtin:              "builtin"        WS param ";"
+                | stmt_initramfs_builtin
+                | stmt_initramfs_command
+                | stmt_initramfs_command_output )*
+stmt_initramfs_add_cmdline:    "add_cmdline"    ( WS quoted_param )+ ";"
+stmt_initramfs_enabled:        "enabled"        WS param ";"
+stmt_initramfs_builtin:        "builtin"        WS param ";"
+stmt_initramfs_command:        "command"        ( WS quoted_param )+ ";"
+stmt_initramfs_command_output: "command_output" WS path  ";"
 
 // efi
 // ================
