@@ -12,11 +12,13 @@ import os
 import grp
 import pwd
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
 import kconfiglib
 from datetime import datetime, timezone
+from pathlib import Path
 
 
 def check_program_exists(exe):
@@ -32,18 +34,19 @@ def check_execution_environment(args):
     check_program_exists('make')
 
     def _die_writable_config_by(component, name):
-        log.die("Refusing to run, because '{}' is writable by {}. This allows {} to replace the selected configuration '{}' and thus inject commands.".format(component, name, name, args.autokernel_config))
+        log.die("Refusing to run, because '{}' is writable by {}. This allows {} to replace the configuration '{}' and thus inject commands.".format(component, name, name, args.autokernel_config))
 
     cur_uid = os.geteuid()
 
     # Ensure that the config file has the correct mode, to prevent command-injection by other users.
     # No component of the path may be modifiable by anyone else but the current user (or root).
-    for component in Path(os.realpath(args.autokernel_config)).parents:
+    config_path = Path(os.path.realpath(args.autokernel_config))
+    for component in [config_path] + [p for p in config_path.parents]:
         st = component.stat()
         if st.st_uid != cur_uid and st.st_uid != 0 and st.st_mode & stat.S_IWUSR:
-            _die_writable_config_by(component, 'user {} ({})'.format(uid, pwd.getpwuid(uid).pw_name))
+            _die_writable_config_by(component, 'user {} ({})'.format(st.st_uid, pwd.getpwuid(st.st_uid).pw_name))
         if st.st_gid != 0 and st.st_mode & stat.S_IWGRP:
-            _die_writable_config_by(component, 'group {} ({})'.format(gid, grp.getgrgid(gid).gr_name))
+            _die_writable_config_by(component, 'group {} ({})'.format(st.st_gid, grp.getgrgid(st.st_gid).gr_name))
         if st.st_mode & stat.S_IWOTH:
             _die_writable_config_by(component, 'others')
 
@@ -322,11 +325,13 @@ def build_kernel(args):
     except subprocess.CalledProcessError as e:
         log.die("'make' failed in {} with code {}".format(args.kernel_dir, e.returncode))
 
-def build_initramfs(args, modules_prefix, initramfs_output):
+def build_initramfs(args, config, modules_prefix, initramfs_output):
     log.info("Building initramfs")
 
+    kernel_version = autokernel.kconfig.get_kernel_version(args.kernel_dir)
     def _replace_vars(p):
         p = p.replace('{KERNEL_DIR}', args.kernel_dir)
+        p = p.replace('{KERNEL_VERSION}', kernel_version)
         p = p.replace('{MODULES_PREFIX}', modules_prefix)
         return p
 
@@ -335,16 +340,14 @@ def build_initramfs(args, modules_prefix, initramfs_output):
         command = [_replace_vars(p) for p in config.initramfs.command]
         subprocess.run(command, check=True)
     except subprocess.CalledProcessError as e:
-        log.die("make failed in {} with code {}".format(args.kernel_dir, e.returncode))
+        log.die("{} failed in {} with code {}".format(command[0], args.kernel_dir, e.returncode))
 
+    cmd_output_file = _replace_vars(config.initramfs.command_output.value)
     try:
-        # Copy the output file as stated in the configuration to the kernel tree
-        shutil.copyfile(config.initramfs.command_output.value, initramfs_output)
-    except shutil.SameFileError as e:
-        # We don't recommended users to do this, but technically it works and so we won't complain.
-        pass
+        # Move the output file as stated in the configuration to the kernel tree
+        shutil.move(cmd_output_file, initramfs_output)
     except IOError as e:
-        log.die("Could not copy initramfs from '{}' to '{}': {}".format(config.initramfs.command_output.value, initramfs_output, str(e)))
+        log.die("Could not copy initramfs from '{}' to '{}': {}".format(cmd_output_file, initramfs_output, str(e)))
 
 def main_build(args, config=None):
     """
@@ -393,7 +396,6 @@ def main_build(args, config=None):
 
         # Build the kernel
         build_kernel(args)
-        install_modules(args)
 
     def set_cmdline():
         kernel_cmdline_str = ' '.join(kernel_cmdline)
@@ -451,11 +453,11 @@ def main_build(args, config=None):
     if config.initramfs.enabled:
         with tempfile.TemporaryDirectory() as tmppath:
             # Temporarily install modules so the initramfs generator has access to them
-            tmp_modules_prefix = os.path.join(args.kernel_dir, tmppath / 'modules')
-            install_modules(prefix=tmp_modules_prefix)
+            tmp_modules_prefix = os.path.join(tmppath, 'modules')
+            install_modules(args, prefix=tmp_modules_prefix)
 
             # Build the initramfs
-            build_initramfs(args, modules_prefix=tmp_modules_prefix, output=initramfs_output)
+            build_initramfs(args, config, tmp_modules_prefix, initramfs_output)
 
             # Pack the initramfs into the kernel if desired
             if config.initramfs.builtin:
@@ -463,15 +465,27 @@ def main_build(args, config=None):
 
                 # Initramfs tmp output will be a link to the initramfs. This asserts that there are no spaces
                 # in the filename when packing the initramfs into the kernel (the config field accepts a space separated list of filenames... great decision.)
-                initramfs_tmp_output = tmppath / initramfs_basename
+                initramfs_tmp_output = os.path.join(tmppath, initramfs_basename)
                 # Link to the initramfs output
-                os.symlink(initramfs_output, initramfs_tmp_output)
+                os.symlink(os.path.realpath(initramfs_output), initramfs_tmp_output)
                 # On the second pass, we enable all initramfs source files, and replace
                 # the '{INITRAMFS}' token with the path to our initramfs
                 sym_initramfs_source.set_value(initramfs_source_str.replace('{INITRAMFS}', initramfs_tmp_output))
 
                 # Rebuild the kernel to pack the new images
                 _build_kernel()
+
+                # Clean up
+                os.unlink(initramfs_tmp_output)
+
+def install_modules(args, prefix="/"):
+    """
+    Installs the modules to the given prefix
+    """
+    try:
+        subprocess.run(['make', 'modules_install', 'INSTALL_MOD_PATH=' + prefix], cwd=args.kernel_dir, check=True, stdout=None)
+    except subprocess.CalledProcessError as e:
+        log.die("'make modules_install INSTALL_MOD_PATH={}' failed in {} with code {}".format(prefix, args.kernel_dir, e.returncode))
 
 def main_install(args, config=None):
     """
@@ -1021,7 +1035,7 @@ def main():
     # Output options
     output_options = parser.add_mutually_exclusive_group()
     output_options.add_argument('-q', '--quiet', dest='quiet', action='store_true',
-            help="Disables any additional output except for errors.")
+            help="Disables any additional output except for errors, and output from tools.")
     output_options.add_argument('-v', '--verbose', dest='verbose', action='store_true',
             help="Enables verbose output.")
 
@@ -1106,6 +1120,7 @@ def main():
 
     # Fallback to main_build_all() if no mode is given.
     if 'func' not in args:
+        args.clean = False
         main_build_all(args)
     else:
         # Execute the mode's function
