@@ -54,6 +54,14 @@ def check_execution_environment(args):
         if st.st_mode & stat.S_IWOTH:
             _die_writable_config_by(component, 'others')
 
+def replace_common_vars(args, p):
+    p = str(p)
+    p = p.replace('{KERNEL_DIR}', args.kernel_dir)
+    p = p.replace('{KERNEL_VERSION}', autokernel.kconfig.get_kernel_version(args.kernel_dir))
+    p = p.replace('{UNAME_ARCH}', autokernel.kconfig.get_uname_arch())
+    p = p.replace('{ARCH}', autokernel.kconfig.get_arch())
+    return p
+
 def has_proc_config_gz():
     """
     Checks if /proc/config.gz exists
@@ -88,7 +96,7 @@ def generated_by_autokernel_header():
 def vim_config_modeline_header():
     return "# vim: set ft=ruby ts=4 sw=4 sts=-1 noet:\n"
 
-def apply_autokernel_config(kernel_dir, kconfig, config):
+def apply_autokernel_config(args, kconfig, config):
     """
     Applies the given autokernel configuration to a freshly loaded kconfig object,
     and returns gathered extra information such as the resulting kernel cmdline
@@ -154,7 +162,7 @@ def apply_autokernel_config(kernel_dir, kconfig, config):
             visit(stmt.module)
 
         def stmt_merge(stmt):
-            filename = stmt.filename.replace('{KERNEL_DIR}', kernel_dir)
+            filename = replace_common_vars(args, stmt.filename)
             log.verbose("Merging external kconf '{}'".format(filename))
             kconfig.load_config(os.path.realpath(filename), replace=False)
 
@@ -203,12 +211,12 @@ def apply_autokernel_config(kernel_dir, kconfig, config):
 
     return kernel_cmdline
 
-def execute_hook(name, hook, _replace_vars):
+def execute_hook(args, name, hook, _replace_vars):
     if len(hook.value) > 0:
         log.info("Executing {}: [{}]".format(name, ' '.join(["'{}'".format(i) for i in hook.value])))
         try:
             # Replace variables in command and run it
-            command = [_replace_vars(p) for p in hook.value]
+            command = [_replace_vars(args, p) for p in hook.value]
             subprocess.run(command, check=True)
         except subprocess.CalledProcessError as e:
             log.die("{} failed with code {}. Aborting.".format(name, e.returncode))
@@ -245,7 +253,7 @@ def main_check_config(args):
     # Load symbols from Kconfig
     kconfig_gen = autokernel.kconfig.load_kconfig(args.kernel_dir)
     # Apply autokernel configuration
-    apply_autokernel_config(args.kernel_dir, kconfig_gen, config)
+    apply_autokernel_config(args, kconfig_gen, config)
 
     # Load symbols from Kconfig
     kconfig_cmp = autokernel.kconfig.load_kconfig(args.compare_kernel_dir)
@@ -317,7 +325,7 @@ def main_generate_config(args, config=None):
     # Load symbols from Kconfig
     kconfig = autokernel.kconfig.load_kconfig(args.kernel_dir)
     # Apply autokernel configuration
-    apply_autokernel_config(args.kernel_dir, kconfig, config)
+    apply_autokernel_config(args, kconfig, config)
 
     # Write configuration to file
     kconfig.write_config(
@@ -348,25 +356,16 @@ def build_kernel(args):
 def build_initramfs(args, config, modules_prefix, initramfs_output):
     log.info("Building initramfs")
 
-    kernel_version = autokernel.kconfig.get_kernel_version(args.kernel_dir)
-    def _replace_vars(p):
-        p = p.replace('{KERNEL_DIR}', args.kernel_dir)
-        p = p.replace('{KERNEL_VERSION}', kernel_version)
+    def _replace_vars(args, p):
+        p = replace_common_vars(args, p)
         p = p.replace('{MODULES_PREFIX}', modules_prefix)
-        p = p.replace('{UNAME_ARCH}', autokernel.kconfig.get_uname_arch())
-        p = p.replace('{ARCH}', autokernel.kconfig.get_arch())
         p = p.replace('{INITRAMFS_OUTPUT}', initramfs_output)
         return p
 
-    try:
-        # Replace variables in command and run it
-        command = [_replace_vars(p) for p in config.initramfs.command.value]
-        subprocess.run(command, check=True)
-    except subprocess.CalledProcessError as e:
-        log.die("{} failed in {} with code {}".format(command[0], args.kernel_dir, e.returncode))
-
+    # Execute initramfs command
+    execute_hook(args, 'initramfs.command', config.initramfs.command, _replace_vars)
     if config.initramfs.command_output:
-        cmd_output_file = _replace_vars(config.initramfs.command_output.value)
+        cmd_output_file = _replace_vars(args, config.initramfs.command_output.value)
         try:
             # Move the output file as stated in the configuration to the kernel tree
             shutil.move(cmd_output_file, initramfs_output)
@@ -393,16 +392,8 @@ def main_build(args, config=None):
         # Load configuration file
         config = autokernel.config.load_config(args.autokernel_config)
 
-    kernel_version = autokernel.kconfig.get_kernel_version(args.kernel_dir)
-    def _replace_vars(p):
-        p = str(p)
-        p = p.replace('{KERNEL_VERSION}', kernel_version)
-        p = p.replace('{UNAME_ARCH}', autokernel.kconfig.get_uname_arch())
-        p = p.replace('{ARCH}', autokernel.kconfig.get_arch())
-        return p
-
     # Execute pre hook
-    execute_hook('build.hooks.pre', config.build.hooks.pre, _replace_vars)
+    execute_hook(args, 'build.hooks.pre', config.build.hooks.pre, replace_common_vars)
 
     # Set umask for build
     saved_umask = os.umask(config.build.umask.value)
@@ -433,7 +424,7 @@ def main_build(args, config=None):
     sym_initramfs_source.set_value('{INITRAMFS}')
 
     # Apply autokernel configuration
-    kernel_cmdline = apply_autokernel_config(args.kernel_dir, kconfig, config)
+    kernel_cmdline = apply_autokernel_config(args, kconfig, config)
 
     def _build_kernel():
         # Write configuration to file
@@ -512,7 +503,7 @@ def main_build(args, config=None):
     os.umask(saved_umask)
 
     # Execute post hook
-    execute_hook('build.hooks.post', config.build.hooks.post, _replace_vars)
+    execute_hook(args, 'build.hooks.post', config.build.hooks.post, replace_common_vars)
 
 def main_install(args, config=None):
     """
@@ -522,16 +513,8 @@ def main_install(args, config=None):
         # Load configuration file
         config = autokernel.config.load_config(args.autokernel_config)
 
-    kernel_version = autokernel.kconfig.get_kernel_version(args.kernel_dir)
-    def _replace_vars(p):
-        p = str(p)
-        p = p.replace('{KERNEL_VERSION}', kernel_version)
-        p = p.replace('{UNAME_ARCH}', autokernel.kconfig.get_uname_arch())
-        p = p.replace('{ARCH}', autokernel.kconfig.get_arch())
-        return p
-
     # Execute pre hook
-    execute_hook('install.hooks.pre', config.install.hooks.pre, _replace_vars)
+    execute_hook(args, 'install.hooks.pre', config.install.hooks.pre, replace_common_vars)
 
     # Use correct umask when installing
     saved_umask = os.umask(config.install.umask.value)
@@ -558,7 +541,8 @@ def main_install(args, config=None):
         if not os.path.ismount(i):
             log.die("'{}' is not mounted. Aborting.".format(i))
 
-    target_dir = _replace_vars(config.install.target_dir)
+    kernel_version = autokernel.kconfig.get_kernel_version(args.kernel_dir)
+    target_dir = replace_common_vars(args, config.install.target_dir)
     # Config output is "{KERNEL_DIR}/.config"
     config_output = os.path.join(args.kernel_dir, '.config.autokernel')
     # Initramfs basename "initramfs-{KERNEL_VERSION}.cpio"
@@ -629,7 +613,7 @@ def main_install(args, config=None):
             return
 
         # Figure out destination, and move existing filed if necessary
-        dst = os.path.join(target_dir, _replace_vars(target_var))
+        dst = os.path.join(target_dir, replace_common_vars(args, target_var))
         if os.path.exists(dst):
             _move_to_old(dst)
 
@@ -677,7 +661,7 @@ def main_install(args, config=None):
     os.umask(saved_umask)
 
     # Execute post hook
-    execute_hook('install.hooks.post', config.install.hooks.post, _replace_vars)
+    execute_hook(args, 'install.hooks.post', config.install.hooks.post, replace_common_vars)
 
 def main_build_all(args):
     """
@@ -1074,7 +1058,7 @@ def main_deps(args):
         # Load configuration file
         config = autokernel.config.load_config(args.autokernel_config)
         # Apply kernel config
-        apply_autokernel_config(args.kernel_dir, kconfig, config)
+        apply_autokernel_config(args, kconfig, config)
 
     # Create a module for the detected option
     module_creator = ModuleCreator()
