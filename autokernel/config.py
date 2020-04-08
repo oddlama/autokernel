@@ -877,20 +877,10 @@ class ConfigHooks(BlockNode):
                 stmt_hooks_post,
             ])
 
-class ConfigEfi(BlockNode):
-    node_name = 'efi'
-
-    def __init__(self):
-        pass
-
-    def parse_context(self, ctxt):
-        pass
-
 class ConfigInstall(BlockNode):
     node_name = 'install'
 
     def __init__(self):
-        self.efi              = ConfigEfi()
         self.hooks            = ConfigHooks()
         self.umask            = UniqueProperty('umask',            default='0077')
         self.target_dir       = UniqueProperty('target_dir',       default='/boot')
@@ -911,8 +901,6 @@ class ConfigInstall(BlockNode):
                 if target.value is not False:
                     die_print_error_at(target.at, "You can only disable targets!")
 
-        def blck_efi(tree):
-            self.efi.parse_tree(tree)
         def blck_hooks(tree):
             self.hooks.parse_tree(tree)
         def stmt_install_umask(tree):
@@ -937,7 +925,6 @@ class ConfigInstall(BlockNode):
             _parse_int_property(self.keep_old)
 
         apply_tree_nodes(ctxt.children, [
-                blck_efi,
                 blck_hooks,
                 stmt_install_umask,
                 stmt_install_target_dir,

@@ -97,18 +97,11 @@ ctxt_hooks: ( tok_ignore
 stmt_hooks_pre:  "pre"  ( WS quoted_param )+ ";"
 stmt_hooks_post: "post" ( WS quoted_param )+ ";"
 
-// efi
-// ================
-
-blck_efi: "efi" "{" ctxt_efi "}"
-ctxt_efi: ( tok_ignore )*
-
 // install
 // ================
 
 blck_install: "install" "{" ctxt_install "}"
 ctxt_install: ( tok_ignore
-              | blck_efi
               | blck_hooks
               | stmt_install_umask
               | stmt_install_target_dir
