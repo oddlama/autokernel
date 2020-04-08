@@ -228,12 +228,11 @@ class UniqueProperty:
 
         if self.defined:
             die_redefinition(def_at(tree), self.at, self.name)
-        self.at = def_at(tree)
 
         if token:
             tok = find_token(tree, token, ignore_missing=ignore_missing)
             self.was_quoted = False
-            self.at = tree
+            self.at = def_at(tree)
         elif named_token:
             rawtok = find_named_token_raw(tree, named_token, ignore_missing=ignore_missing)
             tok = rawtok.value
@@ -263,6 +262,38 @@ class UniqueProperty:
 
     def __str__(self):
         return str(self.value)
+
+class UniqueListProperty:
+    """
+    A list property that tracks if it has been changed, stores a default
+    value and raises an error if it is assigned more than once.
+    """
+    def __init__(self, name, default):
+        self.at = None
+        self.name = name
+        self.default = default
+        self._value = None
+
+    @property
+    def defined(self):
+        return self._value is not None
+
+    def parse(self, tree, tokens_name):
+        if self.defined:
+            die_redefinition(def_at(tree), self.at, self.name)
+        self.at = def_at(tree)
+        self._value = find_all_named_tokens(tree, tokens_name)
+
+    @property
+    def value(self):
+        return self.default if self._value is None else self._value
+
+    @value.setter
+    def value(self, v):
+        self._value = v
+
+    def __bool__(self):
+        return bool(self.value)
 
 def _parse_umask_property(prop):
     try:
@@ -806,30 +837,44 @@ class ConfigInitramfs(BlockNode):
     node_name = 'initramfs'
 
     def __init__(self):
-        self.cmdline = []
-        self.command = []
+        self.command = UniqueListProperty('command', default=[])
         self.command_output = UniqueProperty('command_output', default=None)
         self.enabled = UniqueProperty('enabled', default=False, convert_bool=True)
         self.builtin = UniqueProperty('builtin', default=False, convert_bool=True)
 
     def parse_context(self, ctxt):
-        def stmt_initramfs_add_cmdline(tree):
-            self.cmdline.extend(find_all_named_tokens(tree, 'quoted_param'))
         def stmt_initramfs_enabled(tree):
             self.enabled.parse(tree, named_token='param')
         def stmt_initramfs_builtin(tree):
             self.builtin.parse(tree, named_token='param')
         def stmt_initramfs_command(tree):
-            self.command.extend(find_all_named_tokens(tree, 'quoted_param'))
+            self.command.parse(tree, 'quoted_param')
         def stmt_initramfs_command_output(tree):
             self.command_output.parse(tree, named_token='path')
 
         apply_tree_nodes(ctxt.children, [
-                stmt_initramfs_add_cmdline,
                 stmt_initramfs_enabled,
                 stmt_initramfs_builtin,
                 stmt_initramfs_command,
                 stmt_initramfs_command_output,
+            ])
+
+class ConfigHooks(BlockNode):
+    node_name = 'hooks'
+
+    def __init__(self):
+        self.pre  = UniqueListProperty('pre',  default=[])
+        self.post = UniqueListProperty('post', default=[])
+
+    def parse_context(self, ctxt):
+        def stmt_hooks_pre(tree):
+            self.pre.parse(tree, 'quoted_param')
+        def stmt_hooks_post(tree):
+            self.post.parse(tree, 'quoted_param')
+
+        apply_tree_nodes(ctxt.children, [
+                stmt_hooks_pre,
+                stmt_hooks_post,
             ])
 
 class ConfigEfi(BlockNode):
@@ -845,16 +890,17 @@ class ConfigInstall(BlockNode):
     node_name = 'install'
 
     def __init__(self):
-        self.efi = ConfigEfi()
+        self.efi              = ConfigEfi()
+        self.hooks            = ConfigHooks()
         self.umask            = UniqueProperty('umask',            default='0077')
         self.target_dir       = UniqueProperty('target_dir',       default='/boot')
         self.target_kernel    = UniqueProperty('target_kernel',    default="bzImage-{KERNEL_VERSION}")
         self.target_config    = UniqueProperty('target_config',    default="config-{KERNEL_VERSION}")
         self.target_initramfs = UniqueProperty('target_initramfs', default="initramfs-{KERNEL_VERSION}.cpio")
         self.modules_prefix   = UniqueProperty('modules_prefix',   default='/')
-        self.mount = []
-        self.assert_mounted = []
-        self.keep_old  = UniqueProperty('keep_old', default=(-1))
+        self.mount            = []
+        self.assert_mounted   = []
+        self.keep_old         = UniqueProperty('keep_old', default=(-1))
 
     def parse_context(self, ctxt):
         def _parse_target(tree, target):
@@ -867,6 +913,8 @@ class ConfigInstall(BlockNode):
 
         def blck_efi(tree):
             self.efi.parse_tree(tree)
+        def blck_hooks(tree):
+            self.hooks.parse_tree(tree)
         def stmt_install_umask(tree):
             self.umask.parse(tree, named_token='param')
             _parse_umask_property(self.umask)
@@ -890,6 +938,7 @@ class ConfigInstall(BlockNode):
 
         apply_tree_nodes(ctxt.children, [
                 blck_efi,
+                blck_hooks,
                 stmt_install_umask,
                 stmt_install_target_dir,
                 stmt_install_target_kernel,
@@ -905,14 +954,18 @@ class ConfigBuild(BlockNode):
     node_name = 'build'
 
     def __init__(self):
+        self.hooks = ConfigHooks()
         self.umask = UniqueProperty('umask', default='0022')
 
     def parse_context(self, ctxt):
+        def blck_hooks(tree):
+            self.hooks.parse_tree(tree)
         def stmt_build_umask(tree):
             self.umask.parse(tree, named_token='param')
             _parse_umask_property(self.umask)
 
         apply_tree_nodes(ctxt.children, [
+                blck_hooks,
                 stmt_build_umask,
             ])
 
@@ -1032,9 +1085,9 @@ def load_config(config_file):
 
     # Assert that command and command_output are set if initramfs is enabled.
     if config.initramfs.enabled:
-        if len(config.initramfs.command) == 0:
+        if len(config.initramfs.command.value) == 0:
             log.die("config: initramfs is enabled, but initramfs.command has not been defined!")
-        if not config.initramfs.command_output and not any(['{INITRAMFS_OUTPUT}' in a for a in config.initramfs.command]):
+        if not config.initramfs.command_output and not any(['{INITRAMFS_OUTPUT}' in a for a in config.initramfs.command.value]):
             log.die("config: initramfs is enabled, and neither {INITRAMFS_OUTPUT} was used in the command, nor initramfs.command_output has been defined!")
 
     if config.install.target_dir.value[0] != '/':

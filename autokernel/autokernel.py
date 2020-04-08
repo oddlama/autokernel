@@ -197,6 +197,16 @@ def apply_autokernel_config(kernel_dir, kconfig, config):
 
     return kernel_cmdline
 
+def execute_hook(name, hook, _replace_vars):
+    if len(hook.value) > 0:
+        log.info("Executing {}: [{}]".format(name, ' '.join(["'{}'".format(i) for i in hook.value])))
+        try:
+            # Replace variables in command and run it
+            command = [_replace_vars(p) for p in hook.value]
+            subprocess.run(command, check=True)
+        except subprocess.CalledProcessError as e:
+            log.die("{} failed with code {}. Aborting.".format(name, e.returncode))
+
 def main_check_config(args):
     """
     Main function for the 'check' command.
@@ -344,7 +354,7 @@ def build_initramfs(args, config, modules_prefix, initramfs_output):
 
     try:
         # Replace variables in command and run it
-        command = [_replace_vars(p) for p in config.initramfs.command]
+        command = [_replace_vars(p) for p in config.initramfs.command.value]
         subprocess.run(command, check=True)
     except subprocess.CalledProcessError as e:
         log.die("{} failed in {} with code {}".format(command[0], args.kernel_dir, e.returncode))
@@ -376,6 +386,17 @@ def main_build(args, config=None):
     if not config:
         # Load configuration file
         config = autokernel.config.load_config(args.autokernel_config)
+
+    kernel_version = autokernel.kconfig.get_kernel_version(args.kernel_dir)
+    def _replace_vars(p):
+        p = str(p)
+        p = p.replace('{KERNEL_VERSION}', kernel_version)
+        p = p.replace('{UNAME_ARCH}', autokernel.kconfig.get_uname_arch())
+        p = p.replace('{ARCH}', autokernel.kconfig.get_arch())
+        return p
+
+    # Execute pre hook
+    execute_hook('build.hooks.pre', config.build.hooks.pre, _replace_vars)
 
     # Set umask for build
     saved_umask = os.umask(config.build.umask.value)
@@ -484,6 +505,9 @@ def main_build(args, config=None):
 
     os.umask(saved_umask)
 
+    # Execute post hook
+    execute_hook('build.hooks.post', config.build.hooks.post, _replace_vars)
+
 def main_install(args, config=None):
     """
     Main function for the 'install' command.
@@ -491,6 +515,17 @@ def main_install(args, config=None):
     if not config:
         # Load configuration file
         config = autokernel.config.load_config(args.autokernel_config)
+
+    kernel_version = autokernel.kconfig.get_kernel_version(args.kernel_dir)
+    def _replace_vars(p):
+        p = str(p)
+        p = p.replace('{KERNEL_VERSION}', kernel_version)
+        p = p.replace('{UNAME_ARCH}', autokernel.kconfig.get_uname_arch())
+        p = p.replace('{ARCH}', autokernel.kconfig.get_arch())
+        return p
+
+    # Execute pre hook
+    execute_hook('install.hooks.pre', config.install.hooks.pre, _replace_vars)
 
     # Use correct umask when installing
     saved_umask = os.umask(config.install.umask.value)
@@ -516,14 +551,6 @@ def main_install(args, config=None):
 
         if not os.path.ismount(i):
             log.die("'{}' is not mounted. Aborting.".format(i))
-
-    kernel_version = autokernel.kconfig.get_kernel_version(args.kernel_dir)
-    def _replace_vars(p):
-        p = str(p)
-        p = p.replace('{KERNEL_VERSION}', kernel_version)
-        p = p.replace('{UNAME_ARCH}', autokernel.kconfig.get_uname_arch())
-        p = p.replace('{ARCH}', autokernel.kconfig.get_arch())
-        return p
 
     target_dir = _replace_vars(config.install.target_dir)
     # Config output is "{KERNEL_DIR}/.config"
@@ -642,6 +669,9 @@ def main_install(args, config=None):
 
     # Restore old umask
     os.umask(saved_umask)
+
+    # Execute post hook
+    execute_hook('install.hooks.post', config.install.hooks.post, _replace_vars)
 
 def main_build_all(args):
     """

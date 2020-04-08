@@ -78,16 +78,24 @@ ctxt_kernel: ( tok_ignore
 
 blck_initramfs: "initramfs" "{" ctxt_initramfs "}"
 ctxt_initramfs: ( tok_ignore
-                | stmt_initramfs_add_cmdline
                 | stmt_initramfs_enabled
                 | stmt_initramfs_builtin
                 | stmt_initramfs_command
                 | stmt_initramfs_command_output )*
-stmt_initramfs_add_cmdline:    "add_cmdline"    ( WS quoted_param )+ ";"
 stmt_initramfs_enabled:        "enabled"        WS param ";"
 stmt_initramfs_builtin:        "builtin"        WS param ";"
 stmt_initramfs_command:        "command"        ( WS quoted_param )+ ";"
 stmt_initramfs_command_output: "command_output" WS path  ";"
+
+// hooks
+// ================
+
+blck_hooks: "hooks" "{" ctxt_hooks "}"
+ctxt_hooks: ( tok_ignore
+            | stmt_hooks_pre
+            | stmt_hooks_post )*
+stmt_hooks_pre:  "pre"  ( WS quoted_param )+ ";"
+stmt_hooks_post: "post" ( WS quoted_param )+ ";"
 
 // efi
 // ================
@@ -101,6 +109,7 @@ ctxt_efi: ( tok_ignore )*
 blck_install: "install" "{" ctxt_install "}"
 ctxt_install: ( tok_ignore
               | blck_efi
+              | blck_hooks
               | stmt_install_umask
               | stmt_install_target_dir
               | stmt_install_target_kernel
@@ -125,6 +134,7 @@ stmt_install_keep_old:         "keep_old"         WS param ";"
 
 blck_build: "build" "{" ctxt_build "}"
 ctxt_build: ( tok_ignore
+            | blck_hooks
             | stmt_build_umask )*
 stmt_build_umask: "umask" WS param ";"
 
