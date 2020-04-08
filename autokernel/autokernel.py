@@ -614,9 +614,14 @@ def main_install(args, config=None):
         _move_to_old(os.path.realpath(target_dir))
 
     # Install modules
-    log.info("Installing modules:    /lib/modules")
-    #TODO install_modules(args)
-    _purge_old("/lib/modules/{KERNEL_VERSION}/")
+    modules_prefix = str(config.install.modules_prefix)
+    modules_prefix_with_lib = os.path.join(modules_prefix, "lib/modules")
+    modules_dir = os.path.join(modules_prefix_with_lib, kernel_version)
+    if os.path.exists(modules_dir):
+        _move_to_old(os.path.realpath(modules_dir))
+    log.info("Installing modules:    {}".format(modules_prefix_with_lib))
+    install_modules(args, prefix=modules_prefix)
+    _purge_old(modules_prefix_with_lib + "/{KERNEL_VERSION}/")
 
     # Install targets
     _install('bzimage', bzimage_output, config.install.target_kernel)

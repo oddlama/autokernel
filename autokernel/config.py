@@ -851,6 +851,7 @@ class ConfigInstall(BlockNode):
         self.target_kernel    = UniqueProperty('target_kernel',    default="bzImage-{KERNEL_VERSION}")
         self.target_config    = UniqueProperty('target_config',    default="config-{KERNEL_VERSION}")
         self.target_initramfs = UniqueProperty('target_initramfs', default="initramfs-{KERNEL_VERSION}.cpio")
+        self.modules_prefix   = UniqueProperty('modules_prefix',   default='/')
         self.mount = []
         self.assert_mounted = []
         self.keep_old  = UniqueProperty('keep_old', default=(-1))
@@ -877,6 +878,8 @@ class ConfigInstall(BlockNode):
             _parse_target(tree, self.target_config)
         def stmt_install_target_initramfs(tree):
             _parse_target(tree, self.target_initramfs)
+        def stmt_install_modules_prefix(tree):
+            self.modules_prefix.parse(tree, named_token='path')
         def stmt_install_mount(tree):
             self.mount.append(find_named_token(tree, 'path'))
         def stmt_install_assert_mounted(tree):
@@ -892,6 +895,7 @@ class ConfigInstall(BlockNode):
                 stmt_install_target_kernel,
                 stmt_install_target_config,
                 stmt_install_target_initramfs,
+                stmt_install_modules_prefix,
                 stmt_install_mount,
                 stmt_install_assert_mounted,
                 stmt_install_keep_old,
@@ -1035,5 +1039,7 @@ def load_config(config_file):
 
     if config.install.target_dir.value[0] != '/':
         log.die("config: install.target_dir must be an absolute path!")
+    if config.install.modules_prefix.value[0] != '/':
+        log.die("config: install.modules_prefix must be an absolute path!")
 
     return config
