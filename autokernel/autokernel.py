@@ -14,6 +14,7 @@ import kconfiglib
 import math
 import os
 import pwd
+import re
 import shutil
 import stat
 import subprocess
@@ -550,16 +551,16 @@ def main_install(args, config=None):
             log.warn("Cannot purge path with more than one {{KERNEL_VERSION}} token: '{}'".format(path))
             return
 
+        re_old_suffix = re.compile(r'^.*\.old(\.\d+)?\/*$')
+        re_semver = re.compile(r'^[\d\.]+\d')
         def _version_sorter(i):
             suffix = i[len(tokens[0]):]
-            has_old = '.old' in suffix
-            if has_old:
-                suffix_split = suffix.split('.old')
-                suffix, suffix_old = suffix_split[0], suffix_split[1]
-                old_num = int(suffix_old[1:] or '0')
-            else:
-                old_num = math.inf
-            semver = suffix[:-len(tokens[1])] if len(tokens[1]) > 0 else suffix
+            basename = suffix.split('/')[0]
+
+            m = re_old_suffix.match(suffix)
+            old_num = int((m.group(1) or '.0')[1:]) if m else math.inf
+
+            semver = re_semver.match(basename).group()
             val = autokernel.config.semver_to_int(semver)
             return val, old_num
 
@@ -610,7 +611,7 @@ def main_install(args, config=None):
 
     # Move target_dir, if it is dynamic
     if '{KERNEL_VERSION}' in str(config.install.target_dir) and os.path.exists(target_dir):
-        _move_to_old(target_dir)
+        _move_to_old(os.path.realpath(target_dir))
 
     # Install modules
     log.info("Installing modules:    /lib/modules")
