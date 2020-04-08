@@ -22,7 +22,7 @@ def get_lark_parser():
     """
     global _lark # pylint: disable=global-statement
     if _lark is None:
-        with open(os.path.join(os.path.dirname(__file__), '../config.lark'), 'r') as f:
+        with open(os.path.join(os.path.dirname(__file__), 'config.lark'), 'r') as f:
             _lark = lark.Lark(f.read(), propagate_positions=True, start='blck_root')
 
     return _lark
