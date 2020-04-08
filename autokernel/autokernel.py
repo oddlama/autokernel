@@ -154,9 +154,15 @@ def apply_autokernel_config(kernel_dir, kconfig, config):
             visit(stmt.module)
 
         def stmt_merge(stmt):
-            filename = stmt.filename.replace('$KERNEL_DIR', kernel_dir)
+            filename = stmt.filename.replace('{KERNEL_DIR}', kernel_dir)
             log.verbose("Merging external kconf '{}'".format(filename))
             kconfig.load_config(os.path.realpath(filename), replace=False)
+
+            # Assert that there are no conflicts
+            for sym in autokernel.symbol_tracking.symbol_changes:
+                sc = autokernel.symbol_tracking.symbol_changes[sym]
+                if sym.str_value != sc.value:
+                    autokernel.symbol_tracking.die_print_conflict(stmt.at, 'merge', sym, sym.str_value, sc)
 
         def stmt_assert(stmt):
             assert_symbol(stmt)

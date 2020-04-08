@@ -1,9 +1,10 @@
-import os
-import sys
-import re
+import codecs
+import kconfiglib
 import lark
 import lark.exceptions
-import kconfiglib
+import os
+import re
+import sys
 
 import autokernel.kconfig
 import autokernel.symbol_tracking
@@ -27,11 +28,26 @@ def get_lark_parser():
 
     return _lark
 
+ESCAPE_SEQUENCE_RE = re.compile(r'''
+    ( \\U........   # 8-digit hex escapes
+    | \\u....       # 4-digit hex escapes
+    | \\x..         # 2-digit hex escapes
+    | \\[0-7]{1,3}  # Octal escapes
+    | \\N\{[^}]+\}  # Unicode characters by name
+    | \\[\\'"nrv]   # Single-character escapes
+    )''', re.UNICODE | re.VERBOSE)
+
+def decode_escapes(s):
+    def decode_match(match):
+        return codecs.decode(match.group(0), 'unicode-escape')
+
+    return ESCAPE_SEQUENCE_RE.sub(decode_match, s)
+
 def remove_quotes(s):
     """
     Strips leading and trailing quotes from the string, if any.
     """
-    return s[1:-1] if s[0] == s[-1] and s[0] in ['"', "'"] else s
+    return decode_escape(s[1:-1]) if s[0] == s[-1] and s[0] in ['"', "'"] else s
 
 def parse_bool(tree, s):
     if s in ['true', '1', 'yes', 'y', 'on']:
@@ -311,8 +327,8 @@ special_var_cmp_mode = {
     '$kernel_version': 'semver',
     '$uname_arch': 'string',
     '$arch':  'string',
-    '$false': 'string',
-    '$true':  'string',
+    '$false': 'tristate',
+    '$true':  'tristate',
 }
 
 def get_special_var_cmp_mode(hint_at, var):
@@ -623,10 +639,10 @@ def parse_expr_condition(tree):
 
         expr_id = find_first_child(tree, 'expr_id')
         if expr_id:
-            # Implicit truth value is the same as writing 'SYM == "y"'
+            # Implicit truth value is the same as writing 'SYM != "n"'
             lhs = TokenRawInfo(expr_id, str(expr_id.children[0]), is_quoted=False)
-            rhs = TokenRawInfo(expr_id, '"y"', is_quoted=True)
-            return ConditionVarComparison(expr_id, 'EXPR_CMP_EQ', [lhs, rhs]).negate(negated)
+            rhs = TokenRawInfo(expr_id, '"n"', is_quoted=True)
+            return ConditionVarComparison(expr_id, 'EXPR_CMP_NEQ', [lhs, rhs]).negate(negated)
 
         expr = find_first_child(tree, 'expr')
         if expr:
