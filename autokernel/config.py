@@ -1022,11 +1022,14 @@ class Config(BlockNode):
             include_dir = os.path.join(os.path.dirname(currently_parsed_filenames[-1]), find_named_token(tree, 'path'))
             if os.path.isdir(include_dir):
                 for filename in os.listdir(include_dir):
-                    _include_module_file(tree, os.path.join(include_dir, filename))
+                    if filename.endswith('.conf'):
+                        _include_module_file(tree, os.path.join(include_dir, filename))
             else:
                 die_print_error_at(def_at(tree), "'{}' is not a directory".format(include_dir))
         def stmt_root_include_module(tree):
             filename = os.path.join(os.path.dirname(currently_parsed_filenames[-1]), find_named_token(tree, 'path'))
+            if not filename.endswith('.conf'):
+                print_warn_at(def_at(tree), "module files should always end in .conf".format(include_dir))
             _include_module_file(tree, filename)
 
         if restrict_to_modules:
