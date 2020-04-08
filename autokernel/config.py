@@ -1029,8 +1029,11 @@ def load_config(config_file):
     # Assert that command and command_output are set if initramfs is enabled.
     if config.initramfs.enabled:
         if len(config.initramfs.command) == 0:
-            log.die("Initramfs is enabled, but initramfs.command has not been defined!")
+            log.die("config: initramfs is enabled, but initramfs.command has not been defined!")
         if not config.initramfs.command_output and not any(['{INITRAMFS_OUTPUT}' in a for a in config.initramfs.command]):
-            log.die("Initramfs is enabled, and neither {INITRAMFS_OUTPUT} was used in the command, nor initramfs.command_output has been defined!")
+            log.die("config: initramfs is enabled, and neither {INITRAMFS_OUTPUT} was used in the command, nor initramfs.command_output has been defined!")
+
+    if config.install.target_dir.value[0] != '/':
+        log.die("config: install.target_dir must be an absolute path!")
 
     return config
