@@ -1,6 +1,13 @@
-![](./docs/autokernel_banner.svg)
+<br/><br/>
+[![autokernel](./docs/autokernel_banner.svg)](https://github.com/oddlama/autokernel)
 
-# autokernel
+[Quick start guide](https://github.com/oddlama/autokernel) \|
+[Documentation](https://github.com/oddlama/autokernel) \|
+[Gitter Chat](https://gitter.im/oddlama-autokernel/community)
+
+[![Gitter](https://badges.gitter.im/oddlama-autokernel/community.svg)](https://gitter.im/oddlama-autokernel/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+
+## About autokernel
 
 **TL;DR:**
 
