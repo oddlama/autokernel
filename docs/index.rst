@@ -16,6 +16,7 @@ Table of Contents
 .. toctree::
     :maxdepth: 2
     :caption: Getting started
+    :name: sec-getting-started
 
     introduction
     quick-start-guide
@@ -23,13 +24,15 @@ Table of Contents
 .. toctree::
     :maxdepth: 2
     :caption: Contents
+    :name: sec-contents
 
     commands
     configuration
 
 .. toctree::
     :maxdepth: 2
-    :caption: General
+    :caption: Info
+    :name: sec-info
 
     license
     acknowledgements

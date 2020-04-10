@@ -1,9 +1,9 @@
 <br/><br/>
-[![autokernel](./docs/autokernel_banner.svg)](https://github.com/oddlama/autokernel)
+[![autokernel](./docs/autokernel_banner.svg)](https://autokernel.oddlama.org)
 <br/><br/>
 
-[Quick start guide](https://github.com/oddlama/autokernel) \|
-[Documentation](https://github.com/oddlama/autokernel) \|
+[Quick start guide](https://autokernel.oddlama.org) \|
+[Documentation](https://autokernel.oddlama.org) \|
 [Gitter Chat](https://gitter.im/oddlama-autokernel/community)
 
 [![Gitter](https://badges.gitter.im/oddlama-autokernel/community.svg)](https://gitter.im/oddlama-autokernel/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
@@ -13,13 +13,13 @@
 Autokernel is a kernel configuration management tool. It can:
 
 * detect kernel options for your system
-* be used as a kernel configuration manager (it provides a proper way to represent a kernel configurations, guarantees reproducible results and has support for conditionals)
+* be used as a kernel configuration manager (it provides a proper way to represent kernel configurations, guarantees reproducible results and has support for conditionals)
 * can be used as a kernel build system
 
 You may use it for any combination of the above, as there is no need to
 use it as a build system if you only want to detect options for your device.
 
-If you want to try autokernel for yourself, please check out the [Quick start guide](https://github.com/oddlama/autokernel)
+If you want to try autokernel for yourself, please check out the [Quick start guide](https://autokernel.oddlama.org)
 
 <!--SCREENCASTS HERE TODO-->
 
