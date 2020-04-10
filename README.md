@@ -6,6 +6,7 @@
 [Documentation](https://autokernel.oddlama.org) \|
 [Gitter Chat](https://gitter.im/oddlama-autokernel/community)
 
+[![Docs](https://readthedocs.org/projects/autokernel/badge/?version=latest)](https://autokernel.oddlama.org/en/latest/?badge=latest)
 [![Gitter](https://badges.gitter.im/oddlama-autokernel/community.svg)](https://gitter.im/oddlama-autokernel/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
 ## About autokernel
