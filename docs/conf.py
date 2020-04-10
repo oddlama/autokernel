@@ -30,6 +30,9 @@ extensions = [
     'sphinx.ext.autodoc',
 ]
 
+# Use index.rst as master document.
+master_doc = 'index'
+
 autodoc_member_order = 'bysource'
 autodoc_default_flags = ['show-inheritance']
 
