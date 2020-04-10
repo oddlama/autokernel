@@ -1029,7 +1029,7 @@ class Config(BlockNode):
         def stmt_root_include_module(tree):
             filename = os.path.join(os.path.dirname(currently_parsed_filenames[-1]), find_named_token(tree, 'path'))
             if not filename.endswith('.conf'):
-                print_warn_at(def_at(tree), "module files should always end in .conf".format(include_dir))
+                print_warn_at(def_at(tree), "module files should always end in .conf")
             _include_module_file(tree, filename)
 
         if restrict_to_modules:
