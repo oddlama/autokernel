@@ -1147,8 +1147,7 @@ def main():
     """
     Parses options and dispatches control to the correct subcommand function
     """
-    # TODO descr
-    parser = ThrowingArgumentParser(description="TODO. If no mode is given, 'autokernel all' will be executed.")
+    parser = ThrowingArgumentParser(description="Autokernel is a kernel configuration management tool. Firstly, it can be used to detect kernel options for your system. Secondly, it can act as a kernel configuration manager, by providing a proper way to represent kernel configurations. The generated configurations are guaranteed to be reproducible. Additionally it has support for basic conditionals, which can be used to build a dynamic configuration for multiple systems. Lastly, it can also be used as a kernel build system. Please specify a mode of operation. If no mode is given, 'autokernel all' will be executed.")
     subparsers = parser.add_subparsers(title="commands",
             description="Use 'autokernel command --help' to view the help for any command.",
             metavar='command')
