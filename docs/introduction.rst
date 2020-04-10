@@ -2,7 +2,7 @@ Introduction
 ============
 
 Autokernel is primarily a kernel configuration management tool. This means
-its main purpose is to be used as a tool to generate a `.config` file from
+its main purpose is to be used as a tool to generate a ``.config`` file from
 your particular set of kernel options. To help you accomplish this, it
 comes with a set of helpful features, which are outlined below.
 
@@ -26,7 +26,7 @@ any significant benefit from this tool, but you are welcome to try it out anyway
 Some users might already be familiar with a similar workflow, in which
 you collect your changes to the default kernel configuration in one or
 more kconf files, which are then applied to a fresh kernel configuration
-with `./scripts/kconfig/merge_config.sh` from the kernel tree to create the
+with ``./scripts/kconfig/merge_config.sh`` from the kernel tree to create the
 final configuration.
 
 While this method does work, it has some major downsides - like the total lack
@@ -46,22 +46,23 @@ Option detection
 ^^^^^^^^^^^^^^^^
 
 Autokernel can automatically detect kernel configuration options for your system.
-It does this mainly by collecting bus and device information from the `/sys/bus` tree,
+It does this mainly by collecting bus and device information from the ``/sys/bus`` tree,
 which is exposed by the currently running kernel. It then relates this information to
 a configuration option database (LKDDb_), and also selects required dependencies by
 automatically finding a solution to the dependency tree for each option.
 
-Be aware that this detection mechanism is far from perfect, which means you
-should work through the detected options and decide if you really want to
-enable them.
+.. warning::
+
+    Be aware that this detection mechanism is far from perfect, which means you
+    should work through the detected options and decide if you really want to
+    enable them.
 
 It might also be beneficial to run detection while using a very generic and
 modular kernel, such as the default kernel on Arch Linux. This increases the
 likelihood of having all necessary buses and features enabled to actually detect
 connected devices. We can't detect USB devices, if the current kernel does not
 support that bus in the first place. If you want this, but also don't want to
-waste any time, you can definitely run autokernel while booted from an Arch Linux
-live USB.
+waste any time, consider running autokernel directly off an Arch Linux live system.
 
 Config Management
 ^^^^^^^^^^^^^^^^^

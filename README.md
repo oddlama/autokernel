@@ -23,10 +23,8 @@ comes with a set of helpful features:
 You may use it for any combination of the above, There is no need to
 use it as a build system if you only want to detect options for your device.
 
-To get started right away, please check out the [Quick start guide](https://autokernel.oddlama.org/en/latest/quick-start-guide.html).
-
-Otherwise, have a look at the [Introduction](https://autokernel.oddlama.org/en/latest/introduction.html)
-section in the documentation, which explains more about what
+Please have a look at the [Introduction](https://autokernel.oddlama.org/en/latest/introduction.html)
+section from the documentation, which explains more about what
 this tool is designed for, and how it works.
 
 <!--SCREENCASTS HERE TODO -->
@@ -39,7 +37,9 @@ You can simply install the package with pip.
 pip install autokernel
 ```
 
-#### Kernel hardening
+To get started right away, please check out the [Quick start guide](https://autokernel.oddlama.org/en/latest/quick-start-guide.html).
+
+## Kernel hardening
 
 A special note if you are interested in hardening your kernel:
 Be aware that autokernel provides a preconfigured module for kernel
