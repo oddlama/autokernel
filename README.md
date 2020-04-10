@@ -1,5 +1,6 @@
 <br/><br/>
 [![autokernel](./docs/autokernel_banner.svg)](https://github.com/oddlama/autokernel)
+<br/><br/>
 
 [Quick start guide](https://github.com/oddlama/autokernel) \|
 [Documentation](https://github.com/oddlama/autokernel) \|
@@ -9,22 +10,33 @@
 
 ## About autokernel
 
-**TL;DR:**
-
-autokernel is a pure python tool for kernel configuration management that can:
+Autokernel is a kernel configuration management tool. It can:
 
 * detect kernel options for your system
-* be used as a kernel configuration generator with a proper way
-  to store changes, allows for basic logic and reproducible results
+* be used as a kernel configuration manager (it provides a proper way to represent a kernel configurations, guarantees reproducible results and has support for conditionals)
 * can be used as a kernel build system
 
-You can use it for any combination of the above, there is no need to
+You may use it for any combination of the above, as there is no need to
 use it as a build system if you only want to detect options for your device.
-It also provides an autokernel module to harden any kernel with version >= 4.0.0.
 
-SCREENCASTS HERE TODO
+If you want to try autokernel for yourself, please check out the [Quick start guide](https://github.com/oddlama/autokernel)
 
-## Why should I care?
+<!--SCREENCASTS HERE TODO-->
+
+## Features
+
+* Can detect kernel options for your system using 
+* Manage config
+* Compare against current kernel or other config
+* Build kernel, initramfs, as seperate files or even atomatically integrated into the kernel
+* Sane way to write your config
+
+If you want want to **harden your kernel**, be aware that autokernel provides a
+preconfigured module for kernel hardening, which is compatible with any kernel version >= 4.0,
+and is derived from the following has explanations for every option.
+and 
+
+## Why should I care? What problem does it solve?
 
 > *Which kernel options do I need to enable to use this USB device?*
 
@@ -34,8 +46,8 @@ SCREENCASTS HERE TODO
 
 Does any of these question sound familiar? Then this tool might solve a problem for you.
 
-autokernel can both detect configuration options for the current system, and also
-provides a way to properly manage your kernel configuration. It can additionally be used
+Autokernel can both detect configuration options for the current system, and also
+be used to manage your kernel configuration. It can additionally be used
 to automate the build process, but this is entirely optional.
 
 ## Installation
@@ -46,40 +58,29 @@ You can simply install the package with pip.
 pip install autokernel
 ```
 
-## Feature overview
+#### Quick start guide
 
-#### Detecting configuration options
+Be sure autokernel is installed.
 
-This tool can automatically detect kernel configuration options for your system.
-It does this by collecting bus and device information from the `/sys/bus` tree exposed
-by the currently running kernel. It then relates this information to a configuration option database (lkddb),
-and also selects required dependencies by finding a solution to the dependency graph for each option.
+> Quickly check which options are detected and what the current values are for the running kernel
+./autokernel.py detect -c
 
-It might be beneficial to run detection while using a very generic and modular kernel,
-such as the default kernel on Arch Linux. This increases the likelihood of having all necessary buses and features
-enabled to actually detect connected devices. Basically we cannot detect usb devices, if the current kernel does
-not support the bus in the first place.
+Use ... to detect options for your system and compare them against your current kernel (requries /proc/config.gz) this can be abbreviated to ... if you have the sources
+for your current kernel in /usr/src/linux
 
-#### Managing the kernel config
+> Write only the suggested configuration changes to stdout in kconf format, so that you could
+> theoretically merge them into a kernel .config file
+./autokernel.py -q detect -t kconf
 
-Have you ever wondered something like: *Why have I enabled this kernel option?*,
-or have you ever wondered what kernel options you have changed from the default options?
-While you can try to use scripts like `diffconfig`, these will output overwhelming amounts of information.
-You will not only see the options you have changed, but also all of the dependencies they carried with them.
+Copy .. to etc and edit it to suit your needs. Be sure to have a look at the config documentation
 
-How can you avoid this mess? Instead of managing `.config` directly, you should manage the differences to a well
-known set of default options. I recommend using `make defconfig` or even better `make allnoconfig`.
-This way you can document all of your choices and will be able to understand why you have enabled a particular option
-in the future (the same goes for disabling options).
+Use ... to compare the generated config against the running one.
 
-This tool allows you to store all your configuration options in any folder (by default `/etc/autokernel.d/`) and
-when you update your kernel, you can generate a new `.config` from the known default with your changes applied.
+Use ... to generate a .config file.
 
-#### Building the kernel
+Use .. to make a full kernel build.
 
-Lastly, this tool can be used to build the kernel.
-
-
+Be sure to check out --help and the documentation to fully understand what can be done.
 
 
 
@@ -104,3 +105,12 @@ COMMANDS TO EXPLAIN:
 TODO say that you should remove modules that conflict with e.g. security, and also in general look tthrough the detected modules and remove
 ones that you dont recognize or think might be wrong or undesirable. Its not generate and forget, but more a collection of what could
 be interesting to yoz,
+
+## Acknowledgements
+
+I would like to especially thank the following projects and people:
+
+- [LKDDb](https://cateee.net/lkddb/) for providing the awesome Linux Kernel Driver Database (which is used for option detection)
+- [KSSP](https://kernsec.org/wiki/index.php/Kernel_Self_Protection_Project/Recommended_Settings) for the great list of kernel hardening options
+- [CLIP OS](https://docs.clip-os.org/clipos/kernel.html#configuration) for their well documented and well chosen kernel options
+- [kconfig-hardened-check](https://github.com/a13xp0p0v/kconfig-hardened-check) for the collection of options from several kernel hardening resources
