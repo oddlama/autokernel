@@ -8,9 +8,10 @@ Installation
 
 Use pip to install autokernel:
 
-.. code-block::
+.. code-block:: console
 
     pip install autokernel
+
 
 .. topic:: Setting up the basic configuration
 
@@ -18,7 +19,7 @@ Use pip to install autokernel:
     allow autokernel to setup a basic configuration in ``/etc/autokernel``, which can
     then be edited. This command will never override any existing configuration.
 
-    .. code-block::
+    .. code-block:: console
 
         # Populates /etc/autokernel with the default configuration, if no configuration exists.
         sudo autokernel setup

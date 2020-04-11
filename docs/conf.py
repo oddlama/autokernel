@@ -28,6 +28,7 @@ author = 'oddlama'
 # ones.
 extensions = [
     'sphinx.ext.autodoc',
+    'sphinx.ext.mathjax',
 ]
 
 # Use index.rst as master document.

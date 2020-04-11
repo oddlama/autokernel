@@ -108,7 +108,7 @@ with ``./scripts/kconfig/merge_config.sh`` from the kernel tree to create the
 final configuration.
 
 While this method does work, it has some major downsides - like the total lack
-of errors. If you mistype a config's name, nobody will tell you. You will notice
+of error messages. If you mistype a config's name, nobody will tell you. You will notice
 it eventually, when you have started the new kernel and wonder why something is
 still not working. Other than that you might notice that even though you've typed
 everything correctly, an option might still be unchanged because it had missing

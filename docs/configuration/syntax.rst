@@ -47,7 +47,7 @@ kernel version is greater than 5.6:
 
 .. topic:: Strings
 
-    You can quote strings with double or single quotes. There is no difference
+    You can quote strings with ``"double"`` or ``'single'`` or single quotes. There is no difference
     between the two. In quoted strings, you can use the following escape sequences:
 
         +--------------------+-----------------------------+
@@ -83,7 +83,7 @@ kernel version is greater than 5.6:
 
 .. topic:: Statements
 
-    Statements are terminated with a semicolon.
+    Statements are terminated with a semicolon ``;``.
     Different blocks allow different statements.
 
 .. topic:: Formal specification (EBNF)
