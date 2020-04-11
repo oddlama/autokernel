@@ -33,12 +33,17 @@ or an assignment is caused implicitly.
             # Sets and pins NET to [y] (cause: explicit assignment)
             set NET y;
 
-            # Pins NET to its current value (cause: evaluation in condition)
-            set EXAMPLE if NET;
+            # Pins USB to its current value (cause: evaluation in condition)
+            if USB {
+                set EXAMPLE y;
+            }
 
-            # Does nothing if NET is already pinned, and assigns without pinning otherwise.
+            # Does not pin BT, because no statement depends on the condition
+            if BT { }
+
+            # Does nothing if WIFI is already pinned. Otherwise assigns *without* pinning.
             # Useful to impose new defaults for values but still allowing explicit changes.
-            try set NET y;
+            try set WIFI y;
         }
 
 .. topic:: Conflict Example
