@@ -3,13 +3,40 @@
 Quick start guide
 =================
 
-blah for blah
-
 Installation
 ------------
 
-Some commands
+Use pip to install autokernel:
+
+.. code-block::
+
+    pip install autokernel
+
+.. topic:: Setting up the basic configuration
+
+    If you intend to use autokernel for more than testing purposes, you should
+    allow autokernel to setup a basic configuration in ``/etc/autokernel``, which can
+    then be edited. This command will never override any existing configuration.
+
+    .. code-block::
+
+        # Populates /etc/autokernel with the default configuration, if no configuration exists.
+        sudo autokernel setup
+
+.. note::
+
+    If you don't setup the configuration directory, autokernel will fallback to
+    a minimal internal configuration to allow for testing.
+
+Basic options
 -------------
+
+-q mute all logging output
+-C <config>
+-K <kernel_dir>
+
+Detecting kernel options
+------------------------
 
 > Quickly check which options are detected and what the current values are for the running kernel
 ./autokernel.py detect -c

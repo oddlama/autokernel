@@ -1,8 +1,6 @@
 Usage examples
 ==============
 
-todo rename file.
-
 .. _usage-detecting-options:
 
 Detecting options
