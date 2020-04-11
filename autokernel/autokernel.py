@@ -130,7 +130,7 @@ def apply_autokernel_config(args, kconfig, config):
         sym = get_sym(stmt)
 
         if not autokernel.kconfig.symbol_can_be_user_assigned(sym):
-            autokernel.config.print_warn_at(stmt.at, "symbol {} can't be user-assigned".format(sym.name))
+            autokernel.config.die_print_error_at(stmt.at, "symbol {} can't be user-assigned".format(sym.name))
 
         # Skip assignment if value is already pinned and the statement is in try mode.
         if stmt.has_try and sym in autokernel.symbol_tracking.symbol_changes:
@@ -142,8 +142,8 @@ def apply_autokernel_config(args, kconfig, config):
 
         if sym.str_value != stmt.value:
             if not stmt.has_try:
-                # Only warn if it wasn't a try
-                autokernel.config.print_warn_at(stmt.at, "symbol assignment failed: {} from {} → {}".format(
+                # Only throw an error if it wasn't a try
+                autokernel.config.die_print_error_at(stmt.at, "symbol assignment failed: {} from {} → {}".format(
                     sym.name,
                     autokernel.kconfig.value_to_str(sym.str_value),
                     autokernel.kconfig.value_to_str(stmt.value)))
