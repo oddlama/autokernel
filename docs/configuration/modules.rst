@@ -41,8 +41,9 @@ or an assignment is caused implicitly.
             # Does not pin BT, because no statement depends on the condition
             if BT { }
 
-            # Does nothing if WIFI is already pinned. Otherwise assigns *without* pinning.
-            # Useful to impose new defaults for values but still allowing explicit changes.
+            # Does nothing if WIFI is already pinned. Otherwise assigns
+            # *without* pinning. Useful to impose new defaults for values
+            # but still allowing explicit changes.
             try set WIFI y;
         }
 
@@ -63,12 +64,14 @@ or an assignment is caused implicitly.
         }
 
         module second {
-            # As NET was pinned to [y] in line 7, this would breaks the assumption in first.
-            # This means a reevaluation of first after this line would have a different result,
+            # As NET was pinned to [y] in line 7, this would breaks
+            # the assumption in first. This means a reevaluation of
+            # first after this line would have a different result,
             # and this is an error.
             set NET n;
 
-            # Reassigning the same value does not break previous assumptions and is therefore not an error.
+            # Reassigning the same value does not break previous
+            # assumptions and is therefore not an error.
             set NET n;
         }
 
@@ -94,6 +97,8 @@ value is already pinned and would be changed.
         module example {
             # Implicitly sets NET to n
             try set NET n;
-            # Implicitly assigns a lot of other options (all that indirectly depend on MODULES)
+
+            # Implicitly assigns a lot of other options
+            # (all that indirectly depend on MODULES)
             set MODULES n;
         }
