@@ -26,7 +26,7 @@ Table of Contents
     :caption: Contents
     :name: sec-contents
 
-    commands
+    usage
     configuration
 
 .. toctree::
