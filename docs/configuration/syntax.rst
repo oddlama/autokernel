@@ -153,7 +153,9 @@ styles can be mixed freely.
         set A y if <expression>;
 
         # is the same as
-        if <expression> { set A y; }
+        if <expression> {
+            set A y;
+        }
 
     .. note::
 
@@ -272,11 +274,11 @@ Type         Description
     ================================ =======================================
     Comparison expression            Type and reason for invalidity
     ================================ =======================================
-    ``SOME_STRING     <= "abc"``     string, invalid operator for string
-    ``SOME_STRING     <   1``        string, invalid operator for string
-    ``SOME_HEX        >   1``        hex, invalid prefix
-    ``SOME_INT        ==  SOME_HEX`` cannot mix types
-    ``$kernel_version >=  SOME_INT`` cannot mix types
+    ``SOME_STRING <= "abc"``         string, invalid operator for string
+    ``SOME_STRING < 1``              string, invalid operator for string
+    ``SOME_HEX > 1``                 hex, invalid prefix
+    ``SOME_INT == SOME_HEX``         cannot mix types
+    ``$kernel_version >= SOME_INT``  cannot mix types
     ================================ =======================================
 
 Special variables

@@ -37,7 +37,7 @@ They are intended to provide a level of encapsulation for groups of symbols.
         }
 
         module some_dependency {
-            // ...
+            # ...
         }
 
 .. _concepts-pinning:
