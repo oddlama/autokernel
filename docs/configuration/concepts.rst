@@ -11,9 +11,9 @@ Modules
 Modules are blocks in the autokernel configuration which are used to write
 the actual kernel configuration. A module can :ref:`set<directive-module-set>`
 symbol values, :ref:`merge<directive-module-merge>` external kconf files,
-:ref:`assert<directive-module-assert>` expressions and :ref:`use<directive-module-use>`
-(include) other modules. They are intended to provide a level of encapsulation for
-groups of symbols.
+:ref:`assert<directive-module-assert>` expressions, :ref:`use<directive-module-use>`
+(include) other modules and :ref:`add commandline<directive-module-add-cmdline>` strings.
+They are intended to provide a level of encapsulation for groups of symbols.
 
 .. topic:: Example module
 
@@ -99,15 +99,16 @@ Wrong ordering will lead to errors instead of silently breaking previous assumpt
 Implicit vs. explicit changes
 -----------------------------
 
-There are explicit and implict assignment of symbol values. All direct assignments
-are explicit. Implicit assignment occurr, when an explicit assignment triggers a
-change in symbols which depend on it.
+There are explicit and implict assignments of symbol values. All direct assignments
+via ``set`` are explicit. An implicit assignment occurrs, when an explicit assignment
+triggers a change in a symbols that depends on the assigned symbol.
 
 .. note::
 
     Explicit changes will pin the value of a symbols, while implicit changes do not.
 
-Implicit changes can also be forced by using :ref:`try set<directive-module-set>`
+Implicit assignments also occurr when using the :ref:`directive-module-merge` statement.
+They can also be forced by using :ref:`try set<directive-module-set>`
 instead of just ``set``. This should only be used in special occasions, like when
 you want to set a new default value for a symbol while still allowing the user to override it.
 

@@ -83,6 +83,4 @@ def setup(app):
     app.add_object_type(
         'confval',
         'confval',
-        objname='configuration value',
-        indextemplate='pair: %s; configuration value',
     )

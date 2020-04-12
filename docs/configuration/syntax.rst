@@ -49,8 +49,10 @@ General Syntax
 
 .. topic:: Strings
 
-    You can quote strings with ``"double"`` or ``'single'`` quotes. There is no difference
-    between the two. In quoted strings, you can use the following escape sequences:
+    You can optionally quote strings with ``"double"`` or ``'single'`` quotes.
+    There is no semantic difference between the two quoting styles. Quoting ist
+    mostly optional, but some option parameters require quoting (will be specified).
+    In quoted strings, you can use the following escape sequences:
 
         ================== ===========================
         Escape sequence    Meaning
@@ -89,6 +91,8 @@ General Syntax
     You can use ruby syntax highlighting, which gives quite good results (at least in vim).
 
 
+.. _common-variables:
+
 Common variables
 ----------------
 
@@ -106,6 +110,8 @@ Name                 Description
 ``{ARCH}``           The host architecture as the kernel sees it
 ``{UNAME_ARCH}``     The host architecture as ``uname -m`` reports it
 ==================== ================================================
+
+.. _conditions:
 
 Conditional Expressions
 -----------------------
