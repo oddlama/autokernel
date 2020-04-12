@@ -29,7 +29,7 @@ Table of Contents
 
     usage
     configuration/syntax
-    configuration/modules
+    configuration/concepts
 
 .. toctree::
     :maxdepth: 2
