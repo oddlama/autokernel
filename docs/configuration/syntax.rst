@@ -113,6 +113,11 @@ Name                 Description
 ``{UNAME_ARCH}``     The host architecture as ``uname -m`` reports it
 ==================== ================================================
 
+.. note::
+
+    The internal kernel architecture differs from ``uname -m``. For example
+    it will be ``x86`` for both ``x86`` and ``x86_64`` systems.
+
 .. _conditions:
 
 Conditional Expressions
@@ -296,11 +301,6 @@ Variable            Type     Description
 ``$false``          tristate Always ``'n'``
 ``$true``           tristate Always ``'y'``
 =================== ======== =================================================
-
-.. note::
-
-    The internal kernel architecture differs from ``uname -m``. For example
-    it will be ``x86`` for both ``x86`` and ``x86_64`` systems.
 
 Short-circuiting (early-out)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
