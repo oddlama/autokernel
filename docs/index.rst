@@ -30,8 +30,6 @@ Table of Contents
     usage
     configuration/syntax
     configuration/modules
-    configuration/conditions
-    configuration/directives
 
 .. toctree::
     :maxdepth: 2

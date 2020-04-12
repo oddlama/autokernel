@@ -1,5 +1,10 @@
+Concepts
+========
+
+This page is going to elaborate on some important concepts in autokernel.
+
 Modules
-=======
+-------
 
 Modules are blocks in the autokernel configuration which are used to write
 the actual kernel configuration. A module can :ref:`set<directive-module-set>`
@@ -7,6 +12,32 @@ symbol values, :ref:`merge<directive-module-merge>` external kconf files,
 :ref:`assert<directive-module-assert>` expressions and :ref:`use<directive-module-use>`
 (include) other modules. They are intended to provide a level of encapsulation for
 groups of symbols.
+
+.. topic:: Example module
+
+    .. code-block:: ruby
+        :linenos:
+
+        module example {
+            # Asserts that the configured kernel is at least on version 4.0
+            assert $kernel_version >= 4.0 "this kernel is too old!";
+
+            # Merge in the x86_64 defconfig
+            merge "{KERNEL_DIR}/arch/x86/configs/x86_64_defconfig";
+
+            # Sets DEFAULT_MMAP_MIN_ADDR if X86 is set
+            if X86 {
+                set DEFAULT_MMAP_MIN_ADDR 65536;
+            }
+
+            # Include another module
+            use some_dependency;
+        }
+
+        module some_dependency {
+            // ...
+        }
+
 
 Pinning symbol values
 ---------------------
@@ -21,84 +52,104 @@ the pinned value. This allows modules to use logic based on symbol values,
 without imposing implicit ordering constraints, or surprise pitfalls down the road.
 Wrong ordering will lead to errors instead of silently breaking previous assumptions.
 
-All directives will pin values of evaluated / assigned symbols, except if :ref:`try set<directive-module-set-try>` is used
-or an assignment is caused implicitly.
+.. note::
 
-.. topic:: Pinning Example
+    Conflicts are always errors. This ensures that the same conditions always
+    has the same outcome, no matter where it stands in the configuration.
+
+.. topic:: Pinning Examples
 
     .. code-block:: ruby
         :linenos:
 
-        module example {
-            # Sets and pins NET to [y] (cause: explicit assignment)
-            set NET y;
+        # Sets and pins NET to [y] (cause: explicit assignment)
+        set NET y;
 
-            # Pins USB to its current value (cause: evaluation in condition)
-            if USB {
-                set EXAMPLE y;
-            }
-
-            # Does not pin BT, because no statement depends on the condition
-            if BT { }
-
-            # Does nothing if WIFI is already pinned. Otherwise assigns
-            # *without* pinning. Useful to impose new defaults for values
-            # but still allowing explicit changes.
-            try set WIFI y;
+        # Pins USB to its current value (cause: evaluation in condition)
+        if USB {
+            set EXAMPLE y;
         }
+
+        # Does not pin BT, because no statement depends on the condition
+        if BT { }
+
+        # Does nothing if IWLWIFI is already pinned. Otherwise assigns
+        # *without* pinning. Useful to set new defaults for values
+        # but still allowing explicit changes.
+        try set IWLWIFI y;
 
 .. topic:: Conflict Example
 
     .. code-block:: ruby
         :linenos:
 
-        module first {
-            # Implicitly default to y, if the symbol was not assigned yet.
-            # This does not pin the value.
-            try set NET y;
-
-            # If NET is actually enabled, also enable TUN
-            if NET {
-                set TUN y;
-            }
+        # If NET is enabled, also enable TUN. This pins NET.
+        if NET {
+            set TUN y;
         }
 
-        module second {
-            # As NET was pinned to [y] in line 7, this would breaks
-            # the assumption in first. This means a reevaluation of
-            # first after this line would have a different result,
-            # and this is an error.
-            set NET n;
-
-            # Reassigning the same value does not break previous
-            # assumptions and is therefore not an error.
-            set NET n;
-        }
-
-        module example {
-            use first;
-            use second;
-        }
+        # Assume NET was [y]. In that case NET is pinned to [y] in line 3.
+        # This would break the assumption in line 3, as a re-evaluation of
+        # the condition would have a different result.
+        set NET n; # error: confilict
 
 Implicit vs. explicit changes
 -----------------------------
 
-Some symbols have dependencies, which will be invalidated when the symbol is
-assigned. One example is MODULES. When you set MODULES to n, it will cause a lot of
-implicit changes in all symbols which are configured as m to either n or y. These
-changes will not pin their symbol's value, but they will conflict if the
-value is already pinned and would be changed.
+There are explicit and implict assignment of symbol values. All direct assignments
+are explicit. Implicit assignment occurr, when an explicit assignment triggers a
+change in symbols which depend on it.
 
-.. topic:: Implicit assignment
+.. note::
+
+    Explicit changes will pin the value of a symbols, while implicit changes do not.
+
+Implicit changes can also be forced by using :ref:`try set<directive-module-set-try>`
+instead of just ``set``. This should only be used in special occasions, like when
+you want to set a new default value for a symbol while still allowing the user to override it.
+
+.. topic:: Correct usage of ``try set``
+
+    It's a common pattern to use ``try set`` directly followed by a conditional on the same
+    symbol. This way you can ensure a module works with either setting, but add a default
+    in case the user didn't care:
 
     .. code-block:: ruby
         :linenos:
 
-        module example {
-            # Implicitly sets NET to n
-            try set NET n;
+        # By default disable DEVMEM
+        try set DEVMEM n;
 
-            # Implicitly assigns a lot of other options
-            # (all that indirectly depend on MODULES)
-            set MODULES n;
+        # If the user has still enabled it, at least enable STRICT mode
+        if DEVMEM {
+            set STRICT_DEVMEM y;
         }
+
+.. warning::
+
+    Do not use ``try set`` to resolve conflicts! A conflict always means that there is
+    something wrong with your configuration or ordering. Only use ``try set`` to
+    set new defaults.
+
+.. topic:: Explicit assignments
+
+    .. code-block:: ruby
+        :linenos:
+
+        # Explicitly sets NET to n
+        set NET n;
+
+        # Explicitly sets symbols mentioned in the given kconf file
+        merge "{KERNEL_DIR}/arch/x86/configs/x86_64_defconfig";
+
+.. topic:: Implicit assignments
+
+    .. code-block:: ruby
+        :linenos:
+
+        # Implicitly sets NET to n
+        try set NET n;
+
+        # Implicitly assigns a lot of other options
+        # (all that indirectly depend on MODULES)
+        set MODULES n;
