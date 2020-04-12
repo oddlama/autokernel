@@ -1,6 +1,9 @@
 Usage examples
 ==============
 
+careful with file modes, autokernel will do sanity checking and abort when it detects
+someone can inject commands.
+
 .. _usage-detecting-options:
 
 Detecting options

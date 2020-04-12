@@ -6,7 +6,34 @@ This is a collection of all configuration directives.
 global
 ------
 
-These statements can be used in the global scope outside of any block.
+The following block directives may appear in the global scope:
+
+.. confval:: module <name> { ... }
+
+    See :ref:`directive-module`.
+
+.. confval:: kernel { ... }
+
+    See :ref:`directive-kernel`.
+
+.. confval:: initramfs { ... }
+
+    See :ref:`directive-initramfs`.
+
+.. confval:: build { ... }
+
+    See :ref:`directive-build`.
+
+.. confval:: install { ... }
+
+    See :ref:`directive-install`.
+
+Additionally the following statements may be used:
+
+.. _directive-global-include-module:
+
+include_module
+^^^^^^^^^^^^^^
 
 .. confval:: include_module <path>
 
@@ -24,6 +51,11 @@ These statements can be used in the global scope outside of any block.
         .. code-block:: ruby
 
             include_module "/usr/share/autokernel/modules.d/security.conf";
+
+.. _directive-global-include-module-dir:
+
+include_module_dir
+^^^^^^^^^^^^^^^^^^
 
 .. confval:: include_module_dir <path>
 
@@ -210,14 +242,14 @@ assert
 add_cmdline
 ^^^^^^^^^^^
 
-.. confval:: add_cmdline <quoted_params>... [if <cexpr>]
+.. confval:: add_cmdline <quoted_args>... [if <cexpr>]
 
     **Arguments:**
 
-        ================= =============
-        ``quoted_params`` A list of strings to append to ``CMDLINE``
-        ``cexpr``         Attached :ref:`condition <conditions>`
-        ================= =============
+        =============== =============
+        ``quoted_args`` A list of strings to append to ``CMDLINE``
+        ``cexpr``       Attached :ref:`condition <conditions>`
+        =============== =============
 
     Adds the given parameters to the kernel commandline. Quotation is
     required. This will automatically set the ``CMDLINE`` symbol to the resulting
@@ -327,20 +359,20 @@ builtin
 command
 ^^^^^^^
 
-.. confval:: command <exe> [<params>...]
+.. confval:: command <exe> [<args>...]
 
     **Arguments:**
 
-        ========== =============
-        ``exe``    The command to execute
-        ``params`` parameters to the command
-        ========== =============
+        ======== =============
+        ``exe``  The command to execute
+        ``args`` parameters to the command
+        ======== =============
 
     **Default:** ``None``
 
     **Variables:**
 
-        Allowed in ``exe`` and ``params``.
+        Allowed in ``exe`` and ``args``.
 
         - Any of the :ref:`common-variables`
 
@@ -364,7 +396,7 @@ command
 
     .. note::
 
-        Each string in ``<params>`` is a separate argument to the command, and arguments
+        Each string in ``<args>`` is a separate argument to the command, and arguments
         will never be interpreted or split on spaces. If you need more logic here,
         please execute a wrapper script to do so.
 
@@ -482,6 +514,8 @@ umask
                 umask 0027;
             }
 
+.. _directive-build-hooks:
+
 hooks
 ^^^^^
 
@@ -498,7 +532,7 @@ hooks
 
             build {
                 hooks {
-                    pre "echo" "pre-build-reached";
+                    pre "echo" "pre-build";
                 }
             }
 
@@ -507,7 +541,383 @@ hooks
 install
 -------
 
+.. _directive-install-umask:
+
+umask
+^^^^^
+
+.. confval:: umask <value>
+
+    **Arguments:**
+
+        ========== =============
+        ``value``  Octal umask value to use
+        ========== =============
+
+    **Default:** ``0077``
+
+    Specifies the umask used while installing files.
+
+    **Example:**
+
+        .. code-block:: ruby
+
+            install {
+                # Set umask to 0027.
+                umask 0027;
+            }
+
+.. _directive-install-assert-mounted:
+
+assert_mounted
+^^^^^^^^^^^^^^
+
+.. confval:: assert_mounted <path>
+
+    **Arguments:**
+
+        ========== =============
+        ``path``   The directory to assert is mounted
+        ========== =============
+
+    Asserts that the given directory is a mountpoint.
+    Otherwise, autokernel will abort installation.
+
+    **Example:**
+
+        .. code-block:: ruby
+
+            install {
+                # Abort installation if /boot is not mounted
+                assert_mounted "/boot";
+            }
+
+.. _directive-install-mount:
+
+mount
+^^^^^
+
+.. confval:: mount <path>
+
+    **Arguments:**
+
+        ========== =============
+        ``path``   The directory to mount
+        ========== =============
+
+    Temporarily mounts the given directory. Will be unmounted after installation, in
+    case it had to be mounted. Requires an fstab entry for the directory.
+    Autokernel will abort if the directory could not be mounted.
+    If you use this, an additional :ref:`directive-install-assert-mounted` entry is unnecessary.
+
+    **Example:**
+
+        .. code-block:: ruby
+
+            install {
+                # Mount /boot before installation
+                mount "/boot";
+            }
+
+.. _directive-install-modules-prefix:
+
+modules_prefix
+^^^^^^^^^^^^^^
+
+.. confval:: modules_prefix <path>
+
+    **Arguments:**
+
+        ========== =============
+        ``path``   The prefix path for ``make modules_install``
+        ========== =============
+
+    **Default:** ``/``
+
+    **Variables:**
+
+        Allowed in ``path``.
+        See :ref:`common-variables`.
+
+    The prefix path for ``make modules_install``. This must an absolute path.
+
+    **Example:**
+
+        .. code-block:: ruby
+
+            install {
+                modules_prefix "/";
+            }
+
+.. _directive-install-target-dir:
+
+target_dir
+^^^^^^^^^^
+
+.. confval:: target_dir <path>
+
+    **Arguments:**
+
+        ========== =============
+        ``path``   The target directory when installing files
+        ========== =============
+
+    **Default:** ``/boot``
+
+    **Variables:**
+
+        Allowed in ``path``.
+        See :ref:`common-variables`.
+
+    The target installation directory. All other ``target_*`` statements will be relative
+    to this directory. Must be an absolute path.
+
+    **Example:**
+
+        .. code-block:: ruby
+
+            install {
+                # Proper target directory for an efi partition mounted in /boot/efi
+                target_dir "/boot/efi/EFI";
+            }
+
+.. _directive-install-target-kernel:
+
+target_kernel
+^^^^^^^^^^^^^
+
+.. confval:: target_kernel <path>
+
+    **Arguments:**
+
+        ========== =============
+        ``path``   The kernel target path
+        ========== =============
+
+    **Default:** ``bzImage-{KERNEL_VERSION}``
+
+    **Variables:**
+
+        Allowed in ``path``.
+        See :ref:`common-variables`.
+
+    The target path for the kernel image. This is relative to :ref:`directive-install-target-dir`,
+    but may also be an absolute path if desired. Installation can be disabled by
+    setting this to a false :ref:`boolean value <syntax-bool>`.
+
+    **Example:**
+
+        .. code-block:: ruby
+
+            install {
+                # Don't include version number and use .efi suffix
+                target_kernel "bzImage.efi";
+                # Disable installing the kernel image
+                target_kernel false;
+            }
+
+.. _directive-install-target-config:
+
+target_config
+^^^^^^^^^^^^^
+
+.. confval:: target_config <path>
+
+    **Arguments:**
+
+        ========== =============
+        ``path``   The config target path
+        ========== =============
+
+    **Default:** ``config-{KERNEL_VERSION}``
+
+    **Variables:**
+
+        Allowed in ``path``.
+        See :ref:`common-variables`.
+
+    The target path for a backup of the generated config. This is relative to
+    :ref:`directive-install-target-dir`, but may also be an absolute path if desired.
+    Installation can be disabled by setting this to a false :ref:`boolean value <syntax-bool>`.
+
+    **Example:**
+
+        .. code-block:: ruby
+
+            install {
+                # Disable installing the config
+                target_config false;
+            }
+
+.. _directive-install-target-initramfs:
+
+target_initramfs
+^^^^^^^^^^^^^^^^
+
+.. confval:: target_initramfs <path>
+
+    **Arguments:**
+
+        ========== =============
+        ``path``   The initramfs target path
+        ========== =============
+
+    **Default:** ``initramfs-{KERNEL_VERSION}.cpio``
+
+    **Variables:**
+
+        Allowed in ``path``.
+        See :ref:`common-variables`.
+
+    The target path for the initramfs image. This is relative to :ref:`directive-install-target-dir`,
+    but may also be an absolute path if desired. Installation can be disabled by
+    setting this to a false :ref:`boolean value <syntax-bool>`.
+    This option only has an effect if the initramfs is enabled.
+
+    **Example:**
+
+        .. code-block:: ruby
+
+            install {
+                # Disable installing the initramfs image
+                target_initramfs false;
+            }
+
+.. _directive-install-keep-old:
+
+keep_old
+^^^^^^^^
+
+.. confval:: keep_old <number>
+
+    **Arguments:**
+
+        ========== =============
+        ``number`` Number of old builds to keep
+        ========== =============
+
+    **Default:** ``-1`` (disable purging)
+
+    Automatic purging of old files. Determines the amount of old installed files to keep.
+    Only has an effect on ``target_dir`` and ``targets_*`` if ``{KERNEL_VERSION}`` is used
+    in the path. A negative value like ``-1`` disables purging completely, which is the default.
+
+    .. warning::
+
+        Purging is done immediately after installing a file. The ``{KERNEL_VERSION}`` token
+        will be replaced in all paths with a semver wildcard. All matching paths older than
+        the given amount of builds will be removed.
+
+    **Example:**
+
+        .. code-block:: ruby
+
+            install {
+                # Keep previous two builds, purge the rest
+                keep_old 2;
+            }
+
+.. _directive-install-hooks:
+
+hooks
+^^^^^
+
+.. confval:: hooks { ... }
+
+    **Default:** ``None``
+
+    See :ref:`directive-hooks` for more information.
+    Specifies hooks for the install phase.
+
+    **Example:**
+
+        .. code-block:: ruby
+
+            install {
+                hooks {
+                    pre "echo" "pre-install";
+                }
+            }
+
 .. _directive-hooks:
 
 hooks
 -----
+
+.. confval:: hooks { ... }
+
+    A block for hooks. Multiple appearances of this block will be merged.
+    Specifies pre and post hooks for the phase in which the block is included.
+
+    **Example:**
+
+        .. code-block:: ruby
+
+            hooks {
+                pre  "echo" "pre-hook";
+                post "echo" "post-hook";
+            }
+
+.. _directive-hooks-pre:
+
+pre
+^^^
+
+.. confval:: pre <exe> [<args>...]
+
+    **Arguments:**
+
+        ======== =============
+        ``exe``  The command to execute
+        ``args`` parameters to the command
+        ======== =============
+
+    **Default:** ``None``
+
+    **Variables:**
+
+        Allowed in ``exe`` and ``args``.
+        See :ref:`common-variables`.
+
+    Optional. Defines a pre hook. If the hook returns an
+    unsuccessful exit code, autokernel will abort.
+
+    **Example:**
+
+        .. code-block:: ruby
+
+            hooks {
+                pre "echo" "pre-hook";
+            }
+
+.. _directive-hooks-post:
+
+post
+^^^^
+
+.. confval:: post <exe> [<args>...]
+
+    **Arguments:**
+
+        ======== =============
+        ``exe``  The command to execute
+        ``args`` parameters to the command
+        ======== =============
+
+    **Default:** ``None``
+
+    **Variables:**
+
+        Allowed in ``exe`` and ``args``.
+        See :ref:`common-variables`.
+
+    Optional. Defines a post hook. If the hook returns an
+    unsuccessful exit code, autokernel will abort.
+
+    **Example:**
+
+        .. code-block:: ruby
+
+            hooks {
+                post "echo" "post-hook";
+            }
