@@ -40,44 +40,33 @@ General Syntax
 
     Boolean options recognize the following arguments:
 
-        +---------------+------------------------+
-        | Boolean value | Recognized aliases     |
-        +===============+========================+
-        | ``false``     | false, 0, no,  n, off  |
-        +---------------+------------------------+
-        | ``true``      | true,  1, yes, y, on   |
-        +---------------+------------------------+
+        ============= =========================================
+        Boolean value Recognized aliases
+        ============= =========================================
+        ``false``     ``false``, ``0``, ``no``,  ``n``, ``off``
+        ``true``      ``true``,  ``1``, ``yes``, ``y``, ``on``
+        ============= =========================================
 
 .. topic:: Strings
 
     You can quote strings with ``"double"`` or ``'single'`` quotes. There is no difference
     between the two. In quoted strings, you can use the following escape sequences:
 
-        +--------------------+-----------------------------+
-        | Escape sequence    | Meaning                     |
-        +====================+=============================+
-        | ``\\``             | Single backslash ``\``      |
-        +--------------------+-----------------------------+
-        | ``\"``             | ``"``                       |
-        +--------------------+-----------------------------+
-        | ``\'``             | ``'``                       |
-        +--------------------+-----------------------------+
-        | ``\n``             | Newline                     |
-        +--------------------+-----------------------------+
-        | ``\r``             | Carriage Return             |
-        +--------------------+-----------------------------+
-        | ``\t``             | Tab                         |
-        +--------------------+-----------------------------+
-        | ``\x1b``           | 2-digit hex escapes         |
-        +--------------------+-----------------------------+
-        | ``\033``           | Octal escapes               |
-        +--------------------+-----------------------------+
-        | ``\u2665``         | 4-digit unicode hex escapes |
-        +--------------------+-----------------------------+
-        | ``\U0001f608``     | 8-digit unicode hex escapes |
-        +--------------------+-----------------------------+
-        | ``\N{Dark Shade}`` | Unicode characters by name  |
-        +--------------------+-----------------------------+
+        ================== ===========================
+        Escape sequence    Meaning
+        ================== ===========================
+        ``\\``             Single backslash ``\``
+        ``\"``             ``"``
+        ``\'``             ``'``
+        ``\n``             Newline
+        ``\r``             Carriage Return
+        ``\t``             Tab
+        ``\x1b``           2-digit hex escapes
+        ``\033``           Octal escapes
+        ``\u2665``         4-digit unicode hex escapes
+        ``\U0001f608``     8-digit unicode hex escapes
+        ``\N{Dark Shade}`` Unicode characters by name
+        ================== ===========================
 
 .. topic:: Blocks
 
@@ -107,63 +96,108 @@ In several places you will be able to refer to variables.
 Those cases will be explicitly stated in the description of the directive.
 The common variables are:
 
-+----------------------+--------------------------------------------------+
-| Name                 | Description                                      |
-+======================+==================================================+
-| ``{KERNEL_DIR}``     | The current kernel directory path.               |
-+----------------------+--------------------------------------------------+
-| ``{KERNEL_VERSION}`` | The current kernel version.                      |
-+----------------------+--------------------------------------------------+
-| ``{ARCH}``           | The host architecture as the kernel sees it      |
-+----------------------+--------------------------------------------------+
-| ``{UNAME_ARCH}``     | The host architecture as ``uname -m`` reports it |
-+----------------------+--------------------------------------------------+
+==================== ================================================
+Name                 Description
+==================== ================================================
+``{KERNEL_DIR}``     The current kernel directory path
+``{KERNEL_VERSION}`` The current kernel version
+``{ARCH}``           The host architecture as the kernel sees it
+``{UNAME_ARCH}``     The host architecture as ``uname -m`` reports it
+==================== ================================================
 
 Conditions
 ----------
 
-Statements in module blocks may have conditions attached to them. They will
-only be executed if all conditions are met.
+Autokernel supports conditions for all statements in :ref:`directive-module` blocks.
+They will only be executed if all attached conditions are met.
 
-Conditions are expressions in traditional form, operator precedence is
+Expression Syntax
+^^^^^^^^^^^^^^^^^
+
+Conditions are expressions with traditional form, operator precedence is
 not, and, or. The following expressions are allowed:
 
-- A or  B, A || B    # (A ∨ B)
-- A and B, A && B    # (A ∧ B)
-- A or B and C       # (A ∨ (B ∧ C))
-- not A, !A          # ¬A
-- A                  # Shorthand for A != 'n'
-- A == B, A is B     # A is     equal to B
-- A != B  A is not B # A is not equal to B
-- A <= B             # A is less    than or equal to B
-- A <  B             # A is less    than             B
-- A >= B             # A is greater than or equal to B
-- A >  B             # A is greater than             B
+.. topic:: Operator precedence
 
-All comparison operators can be chained: A <= B <= C, or even A != B != C, and are
-always exactly the same as writing them in expanded form like A <= B and B <= C,
-or A != B and B != C. Autokernel will fold these expressions and compare results of
-intermediate truth values.
+    #. ``()``: expression grouping
+    #. ``A <cmp> B``: any explicit comparison
+    #. ``not``: inversion operator
+    #. ``and``: and clauses
+    #. ``or``: or clauses
 
-Comparisons and variable types
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.. topic:: Expression syntax
 
-All expressions boil down to comparisons, and how variables are compared depends
-on their type:
+    ========================== ============================================
+    Expression                 Meaning
+    ========================== ============================================
+    ``A or  B``, ``A || B``    (A ∨ B)
+    ``A and B``, ``A && B``    (A ∧ B)
+    ``A or B and C``           (A ∨ (B ∧ C))
+    ``not A``, ``!A``          ¬A
+    ``A``                      Shorthand for ``A != 'n'``
+    ``A <cmp> B``              Comparison. See :ref:`conditions-comparison`
+    ========================== ============================================
 
-- Literals have no type and will inherit the type from the rest of the expression.
-- Kernel options and special variables have fixed types.
-- Comparing two literals will always fall back to string comparison.
+.. _conditions-comparison:
 
-Comparison types
-^^^^^^^^^^^^^^^^
+Comparisons
+^^^^^^^^^^^
 
-- string   → does lexicographical comparison
-- int      → integer comparison, base 10
-- hex      → integer comparison, base 16, and requires 0x prefix.
-- tristate → same as string, but restricts arguments to n, m, y
-- semver   → semantic versioning comparison, format is major[.minor[.patch[-ignored]]],
-             4 is the same as 4.0.0
+All expressions boil down to comparisons.
+
+.. topic:: Comparison syntax
+
+    ========================== ===============================
+    Expression                 Meaning
+    ========================== ===============================
+    ``A == B``, ``A is B``     A is     equal to B
+    ``A != B``, ``A is not B`` A is not equal to B
+    ``A <= B``                 A is less    than or equal to B
+    ``A < B``                  A is less    than             B
+    ``A >= B``                 A is greater than or equal to B
+    ``A > B``                  A is greater than             B
+    ========================== ===============================
+
+.. topic:: Chaining
+
+    All comparison operators can be chained. This means you can write
+    ``4.0 <= $kernel_version < 5.0``, or even ``A != B != C != D``.
+    There is no difference between chaining and writing the expanded form.
+
+    .. note::
+
+        Comparisons in chained form will always compare actual values and *never*
+        intermediate truth values.
+        ``A != B != C`` is guaranteed to be the same as ``A != B and B != C``.
+
+.. topic:: Type inference
+
+    The result of a comparison depends on the inferred type, as for example strings
+    comparisons are different to integer comparisons. The rules are simple:
+
+    #. Literals have no type and will inherit the type from the rest of the expression.
+    #. Kernel symbols and special variables have fixed types.
+    #. If no type can be inferred, string comparison will be used (e.g. when comparing two literals).
+    #. Variables of different types cannot be mixed.
+
+.. topic:: Comparison types
+
+    These are the existing comparison types:
+
+    ============ =========================================================================
+    Type         Description
+    ============ =========================================================================
+    ``string``   Lexicographical comparison
+    ``int``      Integer comparison, base 10
+    ``hex``      Integer comparison, base 16, requires ``0x`` prefix
+    ``tristate`` Same as for string, but arguments are restricted to ``n``, ``m`` or ``y``
+    ``semver``   Semantic versioning comparison
+    ============ =========================================================================
+
+    .. note::
+
+        The format for semver versions is ``major[.minor[.patch[-ignored]]]``.
+        Missing parts are treated as ``0``, which makes ``4`` equal to ``4.0.0``.
 
 Have a look at the following comparisons, their comparison type and their validity:
 - SOME_STRING     == abc   (string, valid)
@@ -187,20 +221,20 @@ Special comparison variables
 There are several special variables which must be used in unquoted form
 and will allow you to depend on runtime information.
 
-+---------------------+----------+--------------------------------------------------------------------------------------+
-| Variable            | Type     | Description                                                                          |
-+=====================+==========+======================================================================================+
-| ``$kernel_version`` | semver   | Expands to the semver of the specified kernel                                        |
-+---------------------+----------+--------------------------------------------------------------------------------------+
-| ``$uname_arch``     | string   | The uname as reported by uname -m                                                    |
-+---------------------+----------+--------------------------------------------------------------------------------------+
-| ``$arch``           | string   | The architecture as seen by the kernel internally (e.g. x86 for both x86 and x86_64) |
-+---------------------+----------+--------------------------------------------------------------------------------------+
-| ``$false``          | tristate | Always 'n'                                                                           |
-+---------------------+----------+--------------------------------------------------------------------------------------+
-| ``$true``           | tristate | Always 'y'                                                                           |
-+---------------------+----------+--------------------------------------------------------------------------------------+
+=================== ======== =================================================
+Variable            Type     Description
+=================== ======== =================================================
+``$kernel_version`` semver   Expands to the semver of the specified kernel
+``$uname_arch``     string   The uname as reported by ``uname -m``
+``$arch``           string   The architecture as seen by the kernel internally
+``$false``          tristate Always ``'n'``
+``$true``           tristate Always ``'y'``
+=================== ======== =================================================
 
+.. note::
+
+    The internal kernel architecture differs from ``uname -m``. For example
+    it will be ``x86`` for both ``x86`` and ``x86_64`` systems.
 
 Short-circuiting (early-out)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -262,6 +296,8 @@ This site documents autokernel's configuration file format, and shows some examp
 
 Directives
 ----------
+
+.. _directive-module:
 
 .. _directive-module-set:
 .. _directive-module-set-try:
