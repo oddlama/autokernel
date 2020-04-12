@@ -11,7 +11,6 @@ import glob
 import grp
 import gzip
 import kconfiglib
-import math
 import os
 import pwd
 import re
@@ -568,22 +567,35 @@ def main_install(args, config=None):
             log.warn("Cannot purge path with more than one {{KERNEL_VERSION}} token: '{}'".format(path))
             return
 
-        re_old_suffix = re.compile(r'^.*\.old(\.\d+)?\/*$')
         re_semver = re.compile(r'^[\d\.]+\d')
         def _version_sorter(i):
             suffix = i[len(tokens[0]):]
             basename = suffix.split('/')[0]
 
-            m = re_old_suffix.match(suffix)
-            old_num = int((m.group(1) or '.0')[1:]) if m else math.inf
+            st = os.stat(i)
+            try:
+                time_create = st.st_birthtime
+            except AttributeError:
+                time_create = st.st_mtime
 
             semver = re_semver.match(basename).group()
             val = autokernel.config.semver_to_int(semver)
-            return val, old_num
+            return val, time_create
 
-        has_slash_in_suffix = '/' in tokens[1]
-        wildcard_path = tokens[0] + '*' + (tokens[1].replace('/', '*/', 1) if has_slash_in_suffix else tokens[1] + '*')
-        for i in sorted(glob.glob(wildcard_path), key=_version_sorter)[:-(keep_old + 1)]:
+        escaped_kv = re.escape('{KERNEL_VERSION}')
+        # matches from {KERNEL_VERSION} until first / exclusive in an regex escaped path
+        match_basename = re.compile(re.escape(escaped_kv) + r"(.+?(?=\\\/|$)).*$")
+        # derive regex to check if a valid semver is contained and prefix and suffix are given
+        re_match_valid_paths = re.compile('^' + match_basename.sub(lambda m: r'[0-9]+(\.[0-9]+(\.[0-9]+)?)?(-[^\/]*)?' + m.group(1) + r'.*$', re.escape(path)))
+
+        # matches from {KERNEL_VERSION} until first / exclusive in a normal path
+        re_replace_wildcard = re.compile(escaped_kv + r"[^\/]*")
+        # replace {KERNEL_VERSION}-* component with *
+        wildcard_path = re_replace_wildcard.sub('*', glob.escape(path))
+
+        # sort out paths that don't contain valid semvers
+        valid_globbed = [i for i in glob.glob(wildcard_path) if re_match_valid_paths.match(i)]
+        for i in sorted(valid_globbed, key=_version_sorter)[:-(keep_old + 1)]:
             # For security, we will not call rmtree on a path that doesn't end with a slash,
             # or if the realpath has less then two slash characters in it.
             # Otherwise we only call unlink
@@ -599,12 +611,18 @@ def main_install(args, config=None):
                     log.warn("Could not remove {}: {}".format(i, str(e)))
 
     def _move_to_old(path):
+        re_old_suffix = re.compile(r'^.*\.old(\.\d+)?\/*$')
         dst = path + '.old'
-        if os.path.exists(dst):
-            num = 1
-            while os.path.exists(dst):
-                dst = "{}.old.{:d}".format(path, num)
-                num += 1
+        highest_num = -1
+        for i in glob.glob(glob.escape(dst) + '*'):
+            m = re_old_suffix.match(i)
+            old_num = int((m.group(1) or '.0')[1:]) if m else 0
+            if highest_num < old_num:
+                highest_num = old_num
+
+        if highest_num >= 0:
+            dst += ".{:d}".format(highest_num + 1)
+
         shutil.move(path, dst)
 
     def _install(name, src, target_var):
