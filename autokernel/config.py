@@ -958,7 +958,7 @@ class ConfigBuild(BlockNode):
 
     def __init__(self):
         self.hooks = ConfigHooks()
-        self.umask = UniqueProperty('umask', default='0022')
+        self.umask = UniqueProperty('umask', default='0077')
 
     def parse_context(self, ctxt):
         def blck_hooks(tree):

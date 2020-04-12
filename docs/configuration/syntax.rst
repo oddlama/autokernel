@@ -36,6 +36,8 @@ General Syntax
     The comment character is '#'. It can be appended to any line and will
     comment everything until the end of that line.
 
+.. _syntax-bool:
+
 .. topic:: Booleans
 
     Boolean options recognize the following arguments:

@@ -63,7 +63,9 @@ module
         .. code-block:: ruby
 
             module example {
-                # ...
+                use example_dep;
+
+                set EXAMPLE y;
             }
 
 .. _directive-module-use:
@@ -94,7 +96,6 @@ use
 
             use foo;
             use example module_three;
-
 
 .. _directive-module-set:
 
@@ -178,7 +179,6 @@ merge
             # Merge the x86_64 defconfig file
             merge "{KERNEL_DIR}/arch/x86/configs/x86_64_defconfig";
 
-
 .. _directive-module-assert:
 
 assert
@@ -230,15 +230,284 @@ add_cmdline
             # Adds the two strings to the builtin command line.
             add_cmdline "page_alloc.shuffle=1" "second_param";
 
+.. _directive-kernel:
 
 kernel
 ------
 
+.. confval:: kernel { ... }
+
+    A block for kernel related options. Multiple appearances of this block will be merged.
+    The kernel block is also a :ref:`directive-module` block. It represents
+    the main module which is included by autokernel.
+
+    **Example:**
+
+        .. code-block:: ruby
+
+            kernel {
+                use hardening;
+                use my_module;
+            }
+
+.. _directive-initramfs:
+
 initramfs
 ---------
+
+.. confval:: initramfs { ... }
+
+    A block for initramfs related options.
+    Multiple appearances of this block will be merged.
+
+    **Example:**
+
+        .. code-block:: ruby
+
+            initramfs {
+                enabled true;
+                builtin true;
+            }
+
+.. _directive-initramfs-enabled:
+
+enabled
+^^^^^^^
+
+.. confval:: enabled <bool>
+
+    **Arguments:**
+
+        ======== =============
+        ``bool`` A :ref:`boolean value <syntax-bool>`
+        ======== =============
+
+    **Default:** ``false``
+
+    Enables or disables building an initramfs. When using autokernel
+    to build the kernel.
+
+    **Example:**
+
+        .. code-block:: ruby
+
+            # Enable the initramfs
+            enabled true;
+
+.. _directive-initramfs-builtin:
+
+builtin
+^^^^^^^
+
+.. confval:: builtin <bool>
+
+    **Arguments:**
+
+        ======== =============
+        ``bool`` A :ref:`boolean value <syntax-bool>`
+        ======== =============
+
+    **Default:** ``false``
+
+    This will determine if the initramfs will be integrated into the kernel. It will
+    cause an automatic second kernel build pass, to first allow the initramfs
+    to include any modules for the newly built kernel, and secondly to pack the initramfs
+    into the kernel. The second build will not require any rebuilds of previously
+    compiled components, and should thus be quick.
+
+    **Example:**
+
+        .. code-block:: ruby
+
+            # Use a builtin initramfs
+            builtin true;
+
+.. _directive-initramfs-command:
+
+command
+^^^^^^^
+
+.. confval:: command <exe> [<params>...]
+
+    **Arguments:**
+
+        ========== =============
+        ``exe``    The command to execute
+        ``params`` parameters to the command
+        ========== =============
+
+    **Default:** ``None``
+
+    **Variables:**
+
+        Allowed in ``exe`` and ``params``.
+
+        - Any of the :ref:`common-variables`
+
+        - ``{MODULES_PREFIX}``
+
+            A directory which contains all installed modules.
+            This means the subdirectory ``{MODULES_PREFIX}/lib/modules``
+            exists and can be used by the initramfs generator
+            to include compiled modules for the new kernel.
+
+        - ``{INITRAMFS_OUTPUT}``
+
+            The desired output file for the initramfs.
+            If your generator doesn't support this, you can
+            specify an alternate location with command_output.
+
+    Specifies the command used to build the initramfs. The resulting initramfs
+    should directly be placed at ``{INITRAMFS_OUTPUT}``. If your generator
+    does not support this, you can fallback to the :ref:`directive-initramfs-command-output` statement
+    to specify where the finished initramfs will be.
+
+    .. note::
+
+        Each string in ``<params>`` is a separate argument to the command, and arguments
+        will never be interpreted or split on spaces. If you need more logic here,
+        please execute a wrapper script to do so.
+
+    This statement is required, if the initramfs is enabled.
+
+    **Example:**
+
+        .. code-block:: ruby
+            :caption: Building an initramfs with dracut
+
+            # You can use a command like this to build an initramfs with dracut
+            command "dracut"
+                "--conf"          "/dev/null" # Disables external configuration
+                "--confdir"       "/dev/null" # Disables external configuration
+                "--kmoddir"       "{MODULES_PREFIX}/lib/modules/{KERNEL_VERSION}"
+                "--kver"          "{KERNEL_VERSION}"
+                "--no-compress"   # Only if the initramfs is to be integrated into the kernel
+                "--hostonly"
+                "--hostonly-mode" "strict"
+                "--no-hostonly-cmdline"
+                "--ro-mnt"
+                "--modules"       "bash crypt crypt-gpg"
+                "--force"         # Overwrite existing files
+                "{INITRAMFS_OUTPUT}";
+
+        .. code-block:: ruby
+            :caption: Building an initramfs with genkernel
+
+            # You can use a command like this to build an initramfs with genkernel
+            command "genkernel"
+                "--module-prefix=${MODULES_PREFIX}"
+                "--cachedir=/tmp/genkernel/cache"
+                "--tmpdir=/tmp/genkernel"
+                "--logfile=/tmp/genkernel/genkernel.log"
+                "--kerneldir={KERNEL_DIR}"
+                "--no-install"
+                "--no-mountboot"
+                "--no-compress-initramfs"
+                "--no-ramdisk-modules"
+                "--luks"
+                "--gpg"
+                "initramfs";
+            command_output "/tmp/genkernel/initramfs-{UNAME_ARCH}-{KERNEL_VERSION}";
+
+.. _directive-initramfs-command-output:
+
+command_output
+^^^^^^^^^^^^^^
+
+.. confval:: command_output <path>
+
+    **Arguments:**
+
+        ========== =============
+        ``path``   The path where the finished initramfs will be
+        ========== =============
+
+    **Default:** ``None``
+
+    **Variables:**
+
+        Same as for :ref:`directive-initramfs-command`.
+
+    Optional. Specifies where the output from the initramfs
+    command will be. You do not need to specify this, if your generator placed
+    the initramfs at location given via ``{INITRAMFS_OUTPUT}``.
+
+.. _directive-build:
 
 build
 -----
 
+.. confval:: build { ... }
+
+    A block for build related options.
+    Multiple appearances of this block will be merged.
+
+    **Example:**
+
+        .. code-block:: ruby
+
+            build {
+                umask 0077;
+            }
+
+.. _directive-build-umask:
+
+umask
+^^^^^
+
+.. confval:: umask <value>
+
+    **Arguments:**
+
+        ========== =============
+        ``value``  Octal umask value to use
+        ========== =============
+
+    **Default:** ``0077``
+
+    Specifies the umask used while building the kernel and the initramfs.
+
+    .. note::
+
+        If you are tempted to set this to 022 (allow read for others), you should probably
+        rethink your build process. This can expose valuable information about your kernel
+        to other users and renders some hardening methods useless.
+
+    **Example:**
+
+        .. code-block:: ruby
+
+            build {
+                # Set umask to 0027.
+                umask 0027;
+            }
+
+hooks
+^^^^^
+
+.. confval:: hooks { ... }
+
+    **Default:** ``None``
+
+    See :ref:`directive-hooks` for more information.
+    Specifies hooks for the build phase.
+
+    **Example:**
+
+        .. code-block:: ruby
+
+            build {
+                hooks {
+                    pre "echo" "pre-build-reached";
+                }
+            }
+
+.. _directive-install:
+
 install
 -------
+
+.. _directive-hooks:
+
+hooks
+-----
