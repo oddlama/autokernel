@@ -73,3 +73,16 @@ html_theme_options = {
 }
 
 #html_logo = "autokernel_banner_social_rounded.svg"
+
+# Extensions to theme docs
+def setup(app):
+    from sphinx.domains.python import PyField
+    from sphinx.util.docfields import Field
+    from sphinx.locale import _
+
+    app.add_object_type(
+        'confval',
+        'confval',
+        objname='configuration value',
+        indextemplate='pair: %s; configuration value',
+    )

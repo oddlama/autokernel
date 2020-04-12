@@ -28,8 +28,9 @@ Table of Contents
     :name: sec-contents
 
     usage
-    configuration/syntax
     configuration/concepts
+    configuration/syntax
+    configuration/directives
 
 .. toctree::
     :maxdepth: 2

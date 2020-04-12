@@ -3,6 +3,8 @@ Concepts
 
 This page is going to elaborate on some important concepts in autokernel.
 
+.. _concepts-modules:
+
 Modules
 -------
 
@@ -38,6 +40,7 @@ groups of symbols.
             // ...
         }
 
+.. _concepts-pinning:
 
 Pinning symbol values
 ---------------------
@@ -104,7 +107,7 @@ change in symbols which depend on it.
 
     Explicit changes will pin the value of a symbols, while implicit changes do not.
 
-Implicit changes can also be forced by using :ref:`try set<directive-module-set-try>`
+Implicit changes can also be forced by using :ref:`try set<directive-module-set>`
 instead of just ``set``. This should only be used in special occasions, like when
 you want to set a new default value for a symbol while still allowing the user to override it.
 
