@@ -37,7 +37,7 @@ def check_execution_environment(args):
     check_program_exists('make')
 
     cur_uid = os.geteuid()
-    config_file = autokernel.config.get_config_file(args.autokernel_config)
+    config_file = autokernel.config.get_config_file(args.autokernel_config, warn=True)
 
     def _die_writable_config_by(component, name):
         log.die("Refusing to run, because the path '{0}' is writable by {1}. This allows {1} to replace the configuration '{2}' and thus inject commands.".format(component, name, config_file))
@@ -1068,6 +1068,16 @@ def main_detect(args):
         # Write all modules in the given format to the given output file / stdout
         module_creator.write_detected_modules(args)
 
+def get_sym_by_name(kconfig, sym_name):
+    if sym_name.startswith('CONFIG_'):
+        sym_name = sym_name[len('CONFIG_'):]
+
+    # Get symbol
+    try:
+        return kconfig.syms[sym_name]
+    except KeyError:
+        log.die("Symbol '{}' does not exist".format(sym_name))
+
 def main_info(args):
     """
     Main function for the 'info' command.
@@ -1076,24 +1086,26 @@ def main_info(args):
     kconfig = autokernel.kconfig.load_kconfig(args.kernel_dir)
 
     for config_symbol in args.config_symbols:
-        # Get symbol
-        if config_symbol.startswith('CONFIG_'):
-            sym_name = config_symbol[len('CONFIG_'):]
-        else:
-            sym_name = config_symbol
-
-        # Print symbol
-        try:
-            sym = kconfig.syms[sym_name]
-        except KeyError:
-            log.die("Symbol '{}' does not exist".format(sym_name))
-
+        sym = get_sym_by_name(kconfig, config_symbol)
+        log.info("Information for {}:".format(sym.name))
         print(sym)
-        print(sym.env_var)
 
-def main_deps(args):
+def main_revdeps(args):
     """
-    Main function for the 'deps' command.
+    Main function for the 'revdeps' command.
+    """
+    # Load symbols from Kconfig
+    kconfig = autokernel.kconfig.load_kconfig(args.kernel_dir)
+
+    for config_symbol in args.config_symbols:
+        sym = get_sym_by_name(kconfig, config_symbol)
+        log.info("Dependents for {}:".format(sym.name))
+        for d in sym._dependents: # pylint: disable=protected-access
+            print(d)
+
+def main_satisfy(args):
+    """
+    Main function for the 'satisfy' command.
     """
     # Load symbols from Kconfig
     kconfig = autokernel.kconfig.load_kconfig(args.kernel_dir)
@@ -1109,17 +1121,7 @@ def main_deps(args):
     module_creator = ModuleCreator()
 
     for config_symbol in args.config_symbols:
-        # Get symbol
-        if config_symbol.startswith('CONFIG_'):
-            sym_name = config_symbol[len('CONFIG_'):]
-        else:
-            sym_name = config_symbol
-
-        try:
-            sym = kconfig.syms[sym_name]
-        except KeyError:
-            log.die("Symbol '{}' does not exist".format(sym_name))
-
+        sym = get_sym_by_name(kconfig, config_symbol)
         mod = module_creator.add_module_for_sym(sym)
         if mod is False:
             log.warn("Skipping {} (unsatisfiable dependencies)".format(sym.name))
@@ -1254,19 +1256,25 @@ def main():
             help="A list of configuration symbols to show infos for")
     parser_info.set_defaults(func=main_info)
 
+    # Show symbol reverse dependencies
+    parser_revdeps = subparsers.add_parser('revdeps', help='Displays all symbols that somehow depend on the given symbol')
+    parser_revdeps.add_argument('config_symbols', nargs='+',
+            help="A list of configuration symbols to show revdeps for")
+    parser_revdeps.set_defaults(func=main_revdeps)
+
     # Single config module generation options
-    parser_deps = subparsers.add_parser('deps', help='Generates required modules to enable the given symbol')
-    parser_deps.add_argument('-g', '--global', action='store_true', dest='dep_global',
-            help="Report changes based on an allnoconfig instead of basing the output on changes from the current autokernel configuration")
-    parser_deps.add_argument('-t', '--type', choices=['module', 'kconf'], dest='output_type',
+    parser_satisfy = subparsers.add_parser('satisfy', help='Generates required modules to enable the given symbol')
+    parser_satisfy.add_argument('-g', '--global', action='store_true', dest='dep_global',
+            help="Report changes solely based on kernel default instead of basing the on the current autokernel configuration")
+    parser_satisfy.add_argument('-t', '--type', choices=['module', 'kconf'], dest='output_type',
             help="Selects the output type. 'kconf' will output options in the kernel configuration format. 'module' will output a list of autokernel modules to reflect the necessary configuration.")
-    parser_deps.add_argument('-m', '--module-name', dest='output_module_name', default='rename_me',
+    parser_satisfy.add_argument('-m', '--module-name', dest='output_module_name', default='rename_me',
             help="The name of the generated module, which will enable all given options (default: 'rename_me').")
-    parser_deps.add_argument('-o', '--output', dest='output',
+    parser_satisfy.add_argument('-o', '--output', dest='output',
             help="Writes the output to the given file. Use - for stdout (default).")
-    parser_deps.add_argument('config_symbols', nargs='+',
+    parser_satisfy.add_argument('config_symbols', nargs='+',
             help="The configuration symbols to generate modules for (including dependencies)")
-    parser_deps.set_defaults(func=main_deps)
+    parser_satisfy.set_defaults(func=main_satisfy)
 
     # Config detection options
     parser_detect = subparsers.add_parser('detect', help='Detects configuration options based on information gathered from the running system')

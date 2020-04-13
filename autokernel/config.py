@@ -931,7 +931,7 @@ class ConfigInstall(BlockNode):
         def stmt_install_target_initramfs(tree):
             _parse_target(tree, self.target_initramfs)
         def stmt_install_modules_prefix(tree):
-            self.modules_prefix.parse(tree, named_token='path')
+            _parse_target(tree, self.modules_prefix)
         def stmt_install_mount(tree):
             self.mount.append(find_named_token(tree, 'path'))
         def stmt_install_assert_mounted(tree):
@@ -1062,14 +1062,15 @@ def load_config_tree(config_file):
             print_message_with_file_location(config_file, msg_error(str(e).splitlines()[0]), e.line, (e.column, e.column))
             sys.exit(1)
 
-def get_config_file(config_file):
+def get_config_file(config_file, warn=False):
     if config_file:
         return config_file
 
     config_file = '/etc/autokernel/autokernel.conf'
     if not os.path.exists(config_file):
-        log.warn("Configuration file '/etc/autokernel/autokernel.conf' not found")
-        log.warn("Falling back to a minimal internal configuration!")
+        if warn:
+            log.warn("Configuration file '/etc/autokernel/autokernel.conf' not found")
+            log.warn("Falling back to a minimal internal configuration!")
         config_file = os.path.join(os.path.dirname(__file__), 'data/internal.conf')
 
     return config_file
@@ -1111,7 +1112,7 @@ def load_config(config_file):
 
     if config.install.target_dir.value[0] != '/':
         log.die("config: install.target_dir must be an absolute path!")
-    if config.install.modules_prefix.value[0] != '/':
+    if config.install.modules_prefix.value and config.install.modules_prefix.value[0] != '/':
         log.die("config: install.modules_prefix must be an absolute path!")
 
     return config
