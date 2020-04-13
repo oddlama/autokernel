@@ -1,3 +1,6 @@
 kconfiglib
-sympy
 lark-parser
+pbr
+setuptools
+python-dateutil
+sympy
