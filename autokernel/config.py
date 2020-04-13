@@ -347,6 +347,8 @@ def resolve_special_variable(hint_at, kconfig, var):
         return 'y'
     elif var == '$false':
         return 'n'
+    elif var.startswith('$env[') and var.endswith(']'):
+        return 'n'
     else:
         die_print_error_at(hint_at, "unknown special variable '{}'".format(var))
 

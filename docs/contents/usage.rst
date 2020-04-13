@@ -425,7 +425,11 @@ If the file is included, you can enable it like this:
 .. code-block:: ruby
 
     kernel {
+        # Use hardening early in your config. Errors will then be caused by
+        # the offending assignment instead of the assignments in the hardening
+        # module, which makes error messages easier to read.
         use hardening;
+
         # ...
     }
 
