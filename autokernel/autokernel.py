@@ -241,7 +241,7 @@ def main_setup(args): # pylint: disable=unused-argument
     modules_d = etc_autokernel / 'modules.d'
     modules_d.mkdir(mode=0o700)
 
-    # TODO
+    # TODO add hardening.conf, ...
 
     log.info("A default configuration has been provided in '/etc/autokernel/autokernel.conf'")
     log.info("You might want to edit it now.")

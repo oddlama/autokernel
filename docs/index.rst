@@ -7,15 +7,15 @@
 autokernel
 ==========
 
-Hi there
-TODO
+Welcome to the official documentation of autokernel!
+If you are visiting for the fist time, we recommend that you read the :ref:`introduction` page
+to get an overview of what autokernel has to offer.
 
-
-Table of Contents
-=================
+Otherwise, the sidebar and the table of contents below should let you easily access
+your topic of interest. You can also use the search function in the top left corner.
 
 .. toctree::
-    :maxdepth: 2
+    :maxdepth: 1
     :caption: Getting started
     :name: sec-getting-started
 
@@ -23,7 +23,7 @@ Table of Contents
     quick-start-guide
 
 .. toctree::
-    :maxdepth: 2
+    :maxdepth: 1
     :caption: Contents
     :name: sec-contents
 
@@ -33,17 +33,9 @@ Table of Contents
     configuration/directives
 
 .. toctree::
-    :maxdepth: 2
+    :maxdepth: 1
     :caption: Info
     :name: sec-info
 
     license
     acknowledgements
-
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`

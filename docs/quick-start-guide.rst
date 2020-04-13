@@ -12,7 +12,6 @@ Use pip to install autokernel:
 
     pip install autokernel
 
-
 .. topic:: Setting up the basic configuration
 
     If you intend to use autokernel for more than testing purposes, you should

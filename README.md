@@ -29,15 +29,32 @@ this tool is designed for, and how it works.
 
 <!--SCREENCASTS HERE TODO -->
 
+## Quick start
+
+To get started right away, please check out the [Quick start guide](https://autokernel.oddlama.org/en/latest/quick-start-guide.html).
+
 ## Installation
 
 You can simply install the package with pip.
 
 ```
 pip install autokernel
+# Run setup to create a default configuration
+autokernel setup
 ```
 
-To get started right away, please check out the [Quick start guide](https://autokernel.oddlama.org/en/latest/quick-start-guide.html).
+Otherwise, you can also clone this repository, and run
+autokernel locally.
+
+```
+# Clone the repo
+git clone "https://github.com/oddlama/autokernel.git"
+cd autokernel
+# Install requirements
+pip install --user -r requirements.txt
+# Execute autokernel with the wrapper in bin/
+./bin/autokernel.py --help
+```
 
 ## Kernel hardening
 
