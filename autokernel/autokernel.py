@@ -1194,7 +1194,7 @@ def main():
     """
     Parses options and dispatches control to the correct subcommand function
     """
-    parser = ThrowingArgumentParser(description="Autokernel is a kernel configuration management tool. For more information please refer to the documentation (https://autokernel.oddlama.org). If no mode is given, 'autokernel all' will be executed.")
+    parser = ThrowingArgumentParser(description="Autokernel is a kernel configuration management tool. For more information please refer to the documentation (https://autokernel.oddlama.org). If no mode is given, 'autokernel --help' will be executed.")
     subparsers = parser.add_subparsers(title="commands",
             description="Use 'autokernel command --help' to view the help for any command.",
             metavar='command')
@@ -1298,24 +1298,21 @@ def main():
     log.set_quiet(args.quiet)
     log.set_use_color(args.use_color)
 
-    # Check if we have chosen 'setup', which is special
-    # as it has no previous requirements and will not
-    # open any configuration files.
-    if 'func' in args and args.func is main_setup:
+    if 'func' not in args:
+        # Fallback to --help.
+        parser.print_help()
+    elif args.func is main_setup:
+        # Check if we have chosen 'setup', which is special
+        # as it has no previous requirements and will not
+        # open any configuration files.
         main_setup(args)
     else:
         # Initialize important environment variables
         autokernel.kconfig.initialize_environment()
         # Assert that some required programs exist
         check_execution_environment(args)
-
-        # Fallback to main_build_all() if no mode is given.
-        if 'func' not in args:
-            args.clean = False
-            main_build_all(args)
-        else:
-            # Execute the mode's function
-            args.func(args)
+        # Execute the mode's function
+        args.func(args)
 
 def main_checked():
     try:

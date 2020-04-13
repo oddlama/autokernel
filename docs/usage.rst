@@ -149,13 +149,33 @@ if you want to use other tools:
 Generating the kernel configuration
 -----------------------------------
 
-.. topic:: Generating a .config file
+Generating a .config file
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
-    .
+To generate a ``.config`` file, all you need to do is execute the following command:
 
-.. topic:: Comparing another config to the generated one
+.. code-block:: bash
 
-    .
+    # Generates .config directly in the given kernel directory
+    autokernel generate-config
+    # Generates a config file at the given location
+    autokernel generate-config -o test.config
+
+Comparing to another config
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+If you instead want to see differences to another kconf file (.config), you can
+use the ``check`` command. This is especially useful to see what has changed
+between kernel versions.
+
+.. code-block:: bash
+
+    # Checks against the current kernel (/proc/config.gz)
+    autokernel check
+    # Check against explicit file
+    autokernel check -c some/.config
+    # Check against the .config file of another kernel version
+    autokernel check -c -k some/kernel/dir some/kernel/dir/.config
 
 Writing configuration
 ---------------------
@@ -176,107 +196,127 @@ For a more in-depth explanation of autokernel's configuration, see the sections 
 
 The most important directives are outlined in the following and by this example:
 
-.. topic:: Configuration excerpt
+Configuration excerpt
+~~~~~~~~~~~~~~~~~~~~~
 
-    .. code-block:: ruby
+.. code-block:: ruby
 
-        module base {
-            # Begin with the kernel defconfig
-            merge "{KERNEL_DIR}/arch/{ARCH}/configs/{UNAME_ARCH}_defconfig";
+    module base {
+        # Begin with the kernel defconfig
+        merge "{KERNEL_DIR}/arch/{ARCH}/configs/{UNAME_ARCH}_defconfig";
 
-            # Enable expert options
-            set EXPERT y;
-            # Enable the use of modules
-            set MODULES y;
+        # Enable expert options
+        set EXPERT y;
+        # Enable the use of modules
+        set MODULES y;
+    }
+
+    module net {
+        # Enable basic networking support.
+        set NET y;
+        # Enable IP support.
+        set INET y;
+        # Enable ipv6
+        set IPV6 y;
+        # IPv6 through IPv4 tunnel
+        set IPV6_SIT y;
+
+        # Enable wireguard tunnel
+        if $kernel_version >= 5.6 {
+            set WIREGUARD y;
         }
+    }
 
-        module net {
-            # Enable basic networking support.
-            set NET y;
-            # Enable IP support.
-            set INET y;
-            # Enable ipv6
-            set IPV6 y;
-            # IPv6 through IPv4 tunnel
-            set IPV6_SIT y;
+    # The main module
+    kernel {
+        # Begin with a proper base config
+        use base;
 
-            # Enable wireguard tunnel
-            if $kernel_version >= 5.6 {
-                set WIREGUARD y;
-            }
+        # The hardening module is provided in /etc/autokernel/modules.d,
+        # if you have used `autokernel setup`.
+        use hardening;
+        # You can detect configuration options for your local system
+        # by using `autokernel detect` and store them in /etc/autokernel/modules.d/local.conf
+        use local;
+
+        # Proceed to make your changes.
+        use net;
+    }
+
+Modules
+~~~~~~~
+
+Kernel configuration is done in module blocks. Modules provide encapsulation for options
+that belong together and help to keep the config organized. The main module is the
+``kernel { ... }`` block. You need to ``use`` (include) modules in this block to include them
+in your config. Module can also include other modules, cyclic or recursive includes are impossible
+by design.
+
+Assigning symbols
+~~~~~~~~~~~~~~~~~
+
+To write your configuration, you need to assign values to kernel symbols. This must
+be done inside a module. Here is an example which shows the most common usage patterns.
+
+.. code-block:: ruby
+
+    module test {
+        set USB y;    # Enable usb support
+        set USB;      # Shorthand syntax for y
+        set USB "y";  # All parameters may be quoted
+
+        set KVM m;    # Build KVM as module
+        # Example of setting a non-tristate option.
+        set DEFAULT_MMAP_MIN_ADDR 65536;
+        set DEFAULT_MMAP_MIN_ADDR "65536";
+
+        # Set a string symbol
+        set DEFAULT_HOSTNAME refrigerator;   # OK
+        set DEFAULT_HOSTNAME "refrigerator"; # Also OK
+
+        # Inline condition example
+        set WIREGUARD if $kernel_version >= 5.6;
+
+        # Conditions work with usual expression syntax
+        # and you can examine symbols
+        if X86 and not X86_64 {
+            set DEFAULT_HOSTNAME "linux_x86";
+        else if (X86_64) {
+            set DEFAULT_HOSTNAME "linux_x86_64";
+        } else if $arch == "mips" {
+            set DEFAULT_HOSTNAME "linux_mips";
+        } else {
+            set DEFAULT_HOSTNAME "linux_other";
         }
+    }
 
-        # The main module
-        kernel {
-            # Begin with a proper base config
-            use base;
+Adding to the kernel command line
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-            # The hardening module is provided in /etc/autokernel/modules.d,
-            # if you have used `autokernel setup`.
-            use hardening;
-            # You can detect configuration options for your local system
-            # by using `autokernel detect` and store them in /etc/autokernel/modules.d/local.conf
-            use local;
+By using a statement like
 
-            # Proceed to make your changes.
-            use net;
-        }
+.. code-block:: ruby
 
-.. topic:: Modules
+    add_cmdline "rng_core.default_quality=512";
 
-    Kernel configuration is done in module blocks. Modules provide encapsulation for options
-    that belong together and help to keep the config organized. The main module is the
-    ``kernel { ... }`` block. You need to ``use`` (include) modules in this block to include them
-    in your config. Module can also include other modules, cyclic or recursive includes are impossible
-    by design.
+you can directly append options to the builtin commandline.
 
-.. topic:: Assigning symbols
+.. note::
 
-    To write your configuration, you need to assign values to kernel symbols. This must
-    be done inside a module. Here is an example which shows the most common usage patterns.
+    This will cause ``CMDLINE_BOOL`` to be enabled and ``CMDLINE`` to
+    be set to the resulting string.
 
-    .. code-block:: ruby
+Best practices
+~~~~~~~~~~~~~~
 
-        module test {
-            set USB y;    # Enable usb support
-            set USB;      # Shorthand syntax for y
-            set USB "y";  # All parameters may be quoted
+Here are some general best practices for writing autokernel configurations:
 
-            set KVM m;    # Build KVM as module
-            # Example of setting a non-tristate option.
-            set DEFAULT_MMAP_MIN_ADDR 65536;
-            set DEFAULT_MMAP_MIN_ADDR "65536";
-
-            # Set a string symbol
-            set DEFAULT_HOSTNAME refrigerator;   # OK
-            set DEFAULT_HOSTNAME "refrigerator"; # Also OK
-
-            # Inline condition example
-            set WIREGUARD if $kernel_version >= 5.6;
-
-            # Conditions work with usual expression syntax
-            # and you can examine symbols
-            if X86 and not X86_64 {
-                set DEFAULT_HOSTNAME "linux_x86";
-            else if (X86_64) {
-                set DEFAULT_HOSTNAME "linux_x86_64";
-            } else if $arch == "mips" {
-                set DEFAULT_HOSTNAME "linux_mips";
-            } else {
-                set DEFAULT_HOSTNAME "linux_other";
-            }
-        }
-
-.. topic:: Best practices
-
-    Here are some general best practices for writing autokernel configurations:
-
-    - Always start by merging a ``defconfig`` file, to use the equivalent of
-      ``make defconfig`` as the base.
-    - Use modules to organize your configuration.
-    - Document your choices with comments.
-    - Use conditionals to write generic modules so they can be used for multiple
-      kernel versions and maybe even across machines.
+- Always start by merging a ``defconfig`` file, to use the equivalent of
+  ``make defconfig`` as the base.
+- Use modules to organize your configuration.
+- Document your choices with comments.
+- Use conditionals to write generic modules so they can be used for multiple
+  kernel versions and maybe even across machines.
 
 .. _usage-command-satisfy:
 
@@ -306,7 +346,7 @@ generated config. If you want to use a clean default config, use ``satisfy -g``.
 
 Will output the following on kernel version 5.6.1:
 
-.. code-block:: bash
+.. code-block:: ruby
 
     # Generated by autokernel on 2020-04-13 13:58:31 UTC
     # vim: set ft=ruby ts=4 sw=4 sts=-1 noet:
@@ -389,43 +429,106 @@ If the file is included, you can enable it like this:
 Building and installing the kernel
 ----------------------------------
 
-Building and installation can be executed separately by using...
+Autokernel can be used to build the kernel and to install the resulting files.
+The respective commands are ``build`` and ``install``, but they can be combined by using the ``all`` command.
 
-.. warning::
+.. code-block:: bash
 
-    Be careful with file and directory permissions, autokernel will do sanity checks
-    and abort when it detects that another user can inject commands.
-
-.. topic:: Just the kernel
-
-    .
-
-.. topic:: With initramfs
-
-    To use builtin do.
+    autokernel all # Build the kernel and install it
 
 .. hint::
 
-    CMDLINE is always included when used.
+    You can use :ref:`build hooks<directive-build-hooks>` and :ref:`install hooks<directive-install-hooks>`
+    to add additional functionality before and after execution of the respective phase.
 
-> Quickly check which options are detected and what the current values are for the running kernel
-./autokernel.py detect -c
+.. warning::
 
-Use ... to detect options for your system and compare them against your current kernel (requries /proc/config.gz) this can be abbreviated to ... if you have the sources
-for your current kernel in /usr/src/linux
+    Be especially careful with file and directory permissions for hook scripts!
+    Autokernel will do a sanity check to ensure that no other user can inject commands
+    by editing the autokernel configuration, but in the end it is your responsibility.
 
-> Write only the suggested configuration changes to stdout in kconf format, so that you could
-> theoretically merge them into a kernel .config file
-./autokernel.py -q detect -t kconf
+Just the kernel
+^^^^^^^^^^^^^^^
 
-Copy .. to etc and edit it to suit your needs. Be sure to have a look at the config documentation
+This is an example that shows how the configuration can be used to:
 
-Use ... to compare the generated config against the running one.
+- disable initramfs generation
+- install the kernel to ``/boot``
+- install modules to the default location
 
-Use ... to generate a .config file.
+.. code-block:: ruby
 
-Use .. to make a full kernel build.
+    initramfs {
+        enable false;
+    }
 
-Be sure to check out --help and the documentation to fully understand what can be done.
+    install {
+        target_dir "/boot";
+        target_initramfs false;
+        target_config false;
+        # ...
+    }
+
+Using dracut to build an initramfs
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Here is an example which builds an initramfs with dracut
+and integrates the result back into the kernel.
+This means you still only need to install the kernel.
+
+.. hint::
+
+    When using builtin initramfs, setting any of the ``INITRAMFS_COMPRESSION_*`` options will
+    still compress it on intregration.
+
+.. code-block:: ruby
+
+    kernel {
+        # Optional: Use LZ4 as compression algorithm for built-in initramfs
+        set INITRAMFS_COMPRESSION_LZ4 y;
+    }
+
+    initramfs {
+        enable true;
+        builtin true;
+
+        # Adjust this to your needs
+        build_command "dracut"
+            "--conf"          "/dev/null" # Disables external configuration
+            "--confdir"       "/dev/null" # Disables external configuration
+            "--kmoddir"       "{MODULES_PREFIX}/lib/modules/{KERNEL_VERSION}"
+            "--kver"          "{KERNEL_VERSION}"
+            "--no-compress"   # Only if the initramfs is to be integrated into the kernel
+            "--hostonly"
+            "--hostonly-mode" "strict"
+            "--no-hostonly-cmdline"
+            "--ro-mnt"
+            "--modules"       "bash crypt crypt-gpg"
+            "--force"         # Overwrite existing files
+            "{INITRAMFS_OUTPUT}";
+    }
+
+Mounting directories and purging files
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+If you have an fstab entry for a directory used in the target directory,
+you can have autokernel mount the directory on install. See :ref:`directive-install-mount`
+for more information.
+
+If you want to purge old builds from the target directory, you can
+use the :ref:`directive-install-keep-old` directive.
+
+.. code-block:: ruby
+
+    install {
+        # ...
+
+        # Mount /boot when installing and unmount afterwards
+        mount "/boot";
+
+        # Keeps the last two builds and removes the rest from the
+        # target directory
+        keep_old 2;
+    }
 
 .. _LKDDb: https://cateee.net/lkddb/
