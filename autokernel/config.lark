@@ -80,12 +80,12 @@ blck_initramfs: "initramfs" "{" ctxt_initramfs "}"
 ctxt_initramfs: ( tok_ignore
                 | stmt_initramfs_enabled
                 | stmt_initramfs_builtin
-                | stmt_initramfs_command
-                | stmt_initramfs_command_output )*
-stmt_initramfs_enabled:        "enabled"        WS param ";"
-stmt_initramfs_builtin:        "builtin"        WS param ";"
-stmt_initramfs_command:        "command"        ( WS quoted_param )+ ";"
-stmt_initramfs_command_output: "command_output" WS path  ";"
+                | stmt_initramfs_build_command
+                | stmt_initramfs_build_output )*
+stmt_initramfs_enabled:        "enabled"       WS param ";"
+stmt_initramfs_builtin:        "builtin"       WS param ";"
+stmt_initramfs_build_command:  "build_command" ( WS quoted_param )+ ";"
+stmt_initramfs_build_output:   "build_output"  WS path  ";"
 
 // hooks
 // ================

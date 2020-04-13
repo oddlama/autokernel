@@ -1,7 +1,7 @@
 Configuration Directives
 ========================
 
-This is a collection of all configuration directives.
+This is a documentation of all configuration directives.
 
 global
 ------
@@ -354,12 +354,12 @@ builtin
             # Use a builtin initramfs
             builtin true;
 
-.. _directive-initramfs-command:
+.. _directive-initramfs-build-command:
 
-command
-^^^^^^^
+build_command
+^^^^^^^^^^^^^
 
-.. confval:: command <exe> [<args>...]
+.. confval:: build_command <exe> [<args>...]
 
     **Arguments:**
 
@@ -387,11 +387,11 @@ command
 
             The desired output file for the initramfs.
             If your generator doesn't support this, you can
-            specify an alternate location with command_output.
+            specify an alternate location with :ref:`directive-initramfs-build-output`.
 
     Specifies the command used to build the initramfs. The resulting initramfs
     should directly be placed at ``{INITRAMFS_OUTPUT}``. If your generator
-    does not support this, you can fallback to the :ref:`directive-initramfs-command-output` statement
+    does not support this, you can fallback to the :ref:`directive-initramfs-build-output` statement
     to specify where the finished initramfs will be.
 
     .. note::
@@ -408,7 +408,7 @@ command
             :caption: Building an initramfs with dracut
 
             # You can use a command like this to build an initramfs with dracut
-            command "dracut"
+            build_command "dracut"
                 "--conf"          "/dev/null" # Disables external configuration
                 "--confdir"       "/dev/null" # Disables external configuration
                 "--kmoddir"       "{MODULES_PREFIX}/lib/modules/{KERNEL_VERSION}"
@@ -426,7 +426,7 @@ command
             :caption: Building an initramfs with genkernel
 
             # You can use a command like this to build an initramfs with genkernel
-            command "genkernel"
+            build_command "genkernel"
                 "--module-prefix=${MODULES_PREFIX}"
                 "--cachedir=/tmp/genkernel/cache"
                 "--tmpdir=/tmp/genkernel"
@@ -439,14 +439,14 @@ command
                 "--luks"
                 "--gpg"
                 "initramfs";
-            command_output "/tmp/genkernel/initramfs-{UNAME_ARCH}-{KERNEL_VERSION}";
+            build_output "/tmp/genkernel/initramfs-{UNAME_ARCH}-{KERNEL_VERSION}";
 
-.. _directive-initramfs-command-output:
+.. _directive-initramfs-build-output:
 
-command_output
-^^^^^^^^^^^^^^
+build_output
+^^^^^^^^^^^^
 
-.. confval:: command_output <path>
+.. confval:: build_output <path>
 
     **Arguments:**
 
@@ -458,9 +458,9 @@ command_output
 
     **Variables:**
 
-        Same as for :ref:`directive-initramfs-command`.
+        Same as for :ref:`directive-initramfs-build-command`.
 
-    Optional. Specifies where the output from the initramfs
+    Optional. Specifies where the output from the initramfs build
     command will be. You do not need to specify this, if your generator placed
     the initramfs at location given via ``{INITRAMFS_OUTPUT}``.
 
@@ -882,6 +882,12 @@ pre
     Optional. Defines a pre hook. If the hook returns an
     unsuccessful exit code, autokernel will abort.
 
+    .. note::
+
+        Each string in ``<args>`` is a separate argument to the command, and arguments
+        will never be interpreted or split on spaces. If you need more logic here,
+        please execute a wrapper script to do so.
+
     **Example:**
 
         .. code-block:: ruby
@@ -913,6 +919,12 @@ post
 
     Optional. Defines a post hook. If the hook returns an
     unsuccessful exit code, autokernel will abort.
+
+    .. note::
+
+        Each string in ``<args>`` is a separate argument to the command, and arguments
+        will never be interpreted or split on spaces. If you need more logic here,
+        please execute a wrapper script to do so.
 
     **Example:**
 

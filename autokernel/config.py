@@ -853,8 +853,8 @@ class ConfigInitramfs(BlockNode):
     node_name = 'initramfs'
 
     def __init__(self):
-        self.command = UniqueListProperty('command', default=[])
-        self.command_output = UniqueProperty('command_output', default=None)
+        self.build_command = UniqueListProperty('build_command', default=[])
+        self.build_output = UniqueProperty('build_output', default=None)
         self.enabled = UniqueProperty('enabled', default=False, convert_bool=True)
         self.builtin = UniqueProperty('builtin', default=False, convert_bool=True)
 
@@ -863,16 +863,16 @@ class ConfigInitramfs(BlockNode):
             self.enabled.parse(tree, named_token='param')
         def stmt_initramfs_builtin(tree):
             self.builtin.parse(tree, named_token='param')
-        def stmt_initramfs_command(tree):
-            self.command.parse(tree, 'quoted_param')
-        def stmt_initramfs_command_output(tree):
-            self.command_output.parse(tree, named_token='path')
+        def stmt_initramfs_build_command(tree):
+            self.build_command.parse(tree, 'quoted_param')
+        def stmt_initramfs_build_output(tree):
+            self.build_output.parse(tree, named_token='path')
 
         apply_tree_nodes(ctxt.children, [
                 stmt_initramfs_enabled,
                 stmt_initramfs_builtin,
-                stmt_initramfs_command,
-                stmt_initramfs_command_output,
+                stmt_initramfs_build_command,
+                stmt_initramfs_build_output,
             ])
 
 class ConfigHooks(BlockNode):
@@ -1089,12 +1089,12 @@ def load_config(config_file):
     for u in kmod.uses:
         u.module = get_module(u)
 
-    # Assert that command and command_output are set if initramfs is enabled.
+    # Assert that build_command and build_output are set if initramfs is enabled.
     if config.initramfs.enabled:
-        if len(config.initramfs.command.value) == 0:
-            log.die("config: initramfs is enabled, but initramfs.command has not been defined!")
-        if not config.initramfs.command_output and not any(['{INITRAMFS_OUTPUT}' in a for a in config.initramfs.command.value]):
-            log.die("config: initramfs is enabled, and neither {INITRAMFS_OUTPUT} was used in the command, nor initramfs.command_output has been defined!")
+        if len(config.initramfs.build_command.value) == 0:
+            log.die("config: initramfs is enabled, but initramfs.build_command has not been defined!")
+        if not config.initramfs.build_output and not any(['{INITRAMFS_OUTPUT}' in a for a in config.initramfs.build_command.value]):
+            log.die("config: initramfs is enabled, and neither {INITRAMFS_OUTPUT} was used in the build_command, nor initramfs.build_output has been defined!")
 
     if config.install.target_dir.value[0] != '/':
         log.die("config: install.target_dir must be an absolute path!")

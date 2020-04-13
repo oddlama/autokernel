@@ -210,12 +210,12 @@ def apply_autokernel_config(args, kconfig, config):
 
     return kernel_cmdline
 
-def execute_hook(args, name, hook, _replace_vars):
-    if len(hook.value) > 0:
-        log.info("Executing {}: [{}]".format(name, ' '.join(["'{}'".format(i) for i in hook.value])))
+def execute_command(args, name, cmd, _replace_vars):
+    if len(cmd.value) > 0:
+        log.info("Executing {}: [{}]".format(name, ' '.join(["'{}'".format(i) for i in cmd.value])))
         try:
             # Replace variables in command and run it
-            command = [_replace_vars(args, p) for p in hook.value]
+            command = [_replace_vars(args, p) for p in cmd.value]
             subprocess.run(command, check=True)
         except subprocess.CalledProcessError as e:
             log.die("{} failed with code {}. Aborting.".format(name, e.returncode))
@@ -361,10 +361,10 @@ def build_initramfs(args, config, modules_prefix, initramfs_output):
         p = p.replace('{INITRAMFS_OUTPUT}', initramfs_output)
         return p
 
-    # Execute initramfs command
-    execute_hook(args, 'initramfs.command', config.initramfs.command, _replace_vars)
-    if config.initramfs.command_output:
-        cmd_output_file = _replace_vars(args, config.initramfs.command_output.value)
+    # Execute initramfs build_command
+    execute_command(args, 'initramfs.build_command', config.initramfs.build_command, _replace_vars)
+    if config.initramfs.build_output:
+        cmd_output_file = _replace_vars(args, config.initramfs.build_output.value)
         try:
             # Move the output file as stated in the configuration to the kernel tree
             shutil.move(cmd_output_file, initramfs_output)
@@ -392,7 +392,7 @@ def main_build(args, config=None):
         config = autokernel.config.load_config(args.autokernel_config)
 
     # Execute pre hook
-    execute_hook(args, 'build.hooks.pre', config.build.hooks.pre, replace_common_vars)
+    execute_command(args, 'build.hooks.pre', config.build.hooks.pre, replace_common_vars)
 
     # Set umask for build
     saved_umask = os.umask(config.build.umask.value)
@@ -502,7 +502,7 @@ def main_build(args, config=None):
     os.umask(saved_umask)
 
     # Execute post hook
-    execute_hook(args, 'build.hooks.post', config.build.hooks.post, replace_common_vars)
+    execute_command(args, 'build.hooks.post', config.build.hooks.post, replace_common_vars)
 
 def main_install(args, config=None):
     """
@@ -513,7 +513,7 @@ def main_install(args, config=None):
         config = autokernel.config.load_config(args.autokernel_config)
 
     # Execute pre hook
-    execute_hook(args, 'install.hooks.pre', config.install.hooks.pre, replace_common_vars)
+    execute_command(args, 'install.hooks.pre', config.install.hooks.pre, replace_common_vars)
 
     # Use correct umask when installing
     saved_umask = os.umask(config.install.umask.value)
@@ -679,7 +679,7 @@ def main_install(args, config=None):
     os.umask(saved_umask)
 
     # Execute post hook
-    execute_hook(args, 'install.hooks.post', config.install.hooks.post, replace_common_vars)
+    execute_command(args, 'install.hooks.post', config.install.hooks.post, replace_common_vars)
 
 def main_build_all(args):
     """
