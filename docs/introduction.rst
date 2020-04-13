@@ -97,7 +97,15 @@ Build system
     to build your initramfs (optional) for you. Eventually, a second build pass
     is needed to integrate the initramfs into the kernel. Other than that,
     it supports mounting target directories, and keeping your installation directory
-    clean by only keeping the last :math:`N` builds. See :ref:`usage-building-installing` for more information.
+    clean by only keeping the last :math:`N` builds.
+    See :ref:`usage-building-installing` for more information.
+
+Kernel hardening
+^^^^^^^^^^^^^^^^
+
+    Autokernel provides a preconfigured module for kernel hardening.
+    Every choice is fully documented and explanined.
+    See :ref:`usage-hardening` for more information.
 
 But advantages never come without disadvantages. The obvious ones here are the additional
 effort of writing a proper configuration instead of simply using menuconfig, and also

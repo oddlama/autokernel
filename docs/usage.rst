@@ -54,9 +54,14 @@ All invocations of autokernel follow this scheme:
 
 .. code-block:: bash
 
-    Usage: autokernel [opts...] command [command_opts...]
+    Usage: autokernel [opts...] <command> [command_opts...]
 
-For additional information, see ``autokernel --help``.
+For additional information, refer to the help texts:
+
+.. code-block:: bash
+
+    autokernel --help            # General help
+    autokernel <command> --help  # Command specific help
 
 .. topic:: Configuration
 
@@ -69,6 +74,12 @@ For additional information, see ``autokernel --help``.
     By default, autokernel expects the kernel to reside in ``/usr/src/linux``.
     If you want to specify another location, use the option ``-K path/to/kernel``
 
+.. hint::
+
+    If you are **not** using gentoo or another source distribution,
+    use ``-K kernel_dir`` to specify the kernel directory. Autokernel will
+    not work otherwise.
+
 .. _usage-detecting-options:
 
 Detecting kernel options
@@ -80,34 +91,60 @@ which is exposed by the currently running kernel. It then relates this informati
 a configuration option database (LKDDb_), selects the corresponding symbols and
 the necessary dependencies.
 
+It might be beneficial to run detection while using a very generic and
+modular kernel, such as the `kernel from Arch Linux <https://www.archlinux.org/packages/core/x86_64/linux/>`_.
+This increases the likelihood of having all necessary buses and features enabled
+detect most connected devices.
+
+The problem is that we cannot detect USB devices, if the current kernel does not
+support that bus in the first place.
+
+.. hint::
+
+    You can run autokernel directly on an Arch Linux live system.
+
+Comparing to the current kernel
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: bash
+
+    autokernel detect -c
+
+This command detects option values and outputs a summary in which you
+can easily see the current value of the symbol and the suggested one.
+This gives a good overview over what would be changed.
+
+.. note::
+
+    Be aware that autokernel never suggests to build modules, so you might
+    see several ``[m] → [y]`` changes. You should build commonly used features
+    into the kernel to cut down on load times and attack surface (if you manage to disable ``MODULES``).
+
+Generating an autokernel module
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+You can generate a module from the detected options, which can then
+be put into ``/etc/autokernel/modules.d`` and included in your configuration.
+
+.. code-block:: bash
+
+    # Generates a module named 'local'
+    autokernel detect -o "/etc/autokernel/modules.d/local.conf"
+
+Alternatively, autokernel can output kconf files (like ``.config``)
+if you want to use other tools:
+
+.. code-block:: bash
+
+    # Generates a kconf file for usage with other tools
+    autokernel detect -t kconf -o ".config.local"
+
 .. warning::
 
     Be aware that even though this detection mechanism is nice to have, it is also far from perfect.
     The option database is automatically generated from kernel sources, and so you will have
     false positives and false negatives. You should work through the list of detected options
     and decide if you really want to enable them.
-
-.. note::
-
-    It might be beneficial to run detection while using a very generic and
-    modular kernel, such as the `kernel from Arch Linux <https://www.archlinux.org/packages/core/x86_64/linux/>`_.
-    This increases the likelihood of having all necessary buses and features enabled
-    detect most connected devices.
-
-    The problem is that we cannot detect USB devices, if the current kernel does not
-    support that bus in the first place.
-
-.. hint::
-
-    You can run autokernel directly on an Arch Linux live system.
-
-.. topic:: Comparing to the current kernel
-
-    .
-
-.. topic:: Generating a module
-
-    .
 
 Generating the kernel configuration
 -----------------------------------
@@ -325,6 +362,27 @@ depend on the given symbol.
 .. code-block:: bash
 
     autokernel revdeps EXPERT
+
+.. _usage-hardening:
+
+Hardening the kernel
+--------------------
+
+Autokernel provides a preconfigured module for kernel hardening,
+which is installed to ``/etc/autokernel/modules.d/hardening.conf`` if
+you used ``autokernel setup``. Otherwise you will find it here TODO (git / usr share?).
+
+The hardening module is compatible with any kernel version >= 4.0.
+Every choice is also fully documented and explanined. Feel free to adjust it to your needs.
+
+If the file is included, you can enable it like this:
+
+.. code-block:: ruby
+
+    kernel {
+        use hardening;
+        # ...
+    }
 
 .. _usage-building-installing:
 
