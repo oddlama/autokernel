@@ -640,13 +640,18 @@ modules_prefix
         See :ref:`common-variables`.
 
     The prefix path for ``make modules_install``. This must an absolute path.
+    Installation can be disabled by setting this to a false :ref:`boolean value <syntax-bool>`.
 
     **Example:**
 
         .. code-block:: ruby
 
             install {
+                # Install into '/' (default)
                 modules_prefix "/";
+
+                # Disable installing modules
+                modules_prefix false;
             }
 
 .. _directive-install-target-dir:
