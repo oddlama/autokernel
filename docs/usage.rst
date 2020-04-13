@@ -1,9 +1,9 @@
-.. _quick-start-guide:
+.. _usage:
 
-Quick start guide
-=================
+Usage
+=====
 
-Welcome to the quick start guide! Below is a table of contents for this
+Welcome to the usage section! Below is a table of contents for this
 guide. Feel free to directly jump to the topic of your interest.
 
 .. contents::
