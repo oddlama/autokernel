@@ -1,4 +1,4 @@
-.. image:: autokernel_banner.svg
+.. image:: imgs/autokernel_banner.svg
     :alt: Autokernel banner
     :align: center
 

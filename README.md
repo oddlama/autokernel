@@ -1,5 +1,5 @@
 <br/><br/>
-[![autokernel](./docs/autokernel_banner.svg)](https://autokernel.oddlama.org)
+[![autokernel](./docs/imgs/autokernel_banner.svg)](https://autokernel.oddlama.org)
 <br/><br/>
 
 [Quick start guide](https://autokernel.oddlama.org/en/latest/quick-start-guide.html) \|

@@ -72,6 +72,33 @@ For additional information, see ``autokernel --help``.
 Detecting kernel options
 ------------------------
 
+Autokernel can automatically detect kernel configuration options for your system.
+This is done mainly by collecting bus and device information from the ``/sys/bus`` tree,
+which is exposed by the currently running kernel. It then relates this information to
+a configuration option database (LKDDb_), selects the corresponding symbols and
+the necessary dependencies.
+
+.. warning::
+
+    Be aware that even though this detection mechanism is nice to have, it is also far from perfect.
+    The option database is automatically generated from kernel sources, and so you will have
+    false positives and false negatives. You should work through the list of detected options
+    and decide if you really want to enable them.
+
+.. note::
+
+    It might be beneficial to run detection while using a very generic and
+    modular kernel, such as the `kernel from Arch Linux <https://www.archlinux.org/packages/core/x86_64/linux/>`_.
+    This increases the likelihood of having all necessary buses and features enabled
+    detect most connected devices.
+
+    The problem is that we cannot detect USB devices, if the current kernel does not
+    support that bus in the first place.
+
+.. hint::
+
+    You can run autokernel directly on an Arch Linux live system.
+
 .. topic:: Comparing to the current kernel
 
     .
@@ -80,8 +107,8 @@ Detecting kernel options
 
     .
 
-Generating a kernel configuration
----------------------------------
+Generating the kernel configuration
+-----------------------------------
 
 .. topic:: Generating a .config file
 
@@ -100,7 +127,7 @@ Configuration primer
 You will most likely only need a few directives to write your kernel config.
 Apart from configuring kernel options, autokernel's configuration allows you to specify
 some settings for building the initramfs, and the general build and installation process.
-For a more in-depth explanation of autokernel configuration, see the sections about :ref:`usage` and :ref:`syntax`.
+For a more in-depth explanation of autokernel's configuration, see the sections about :ref:`syntax` and :ref:`directives`.
 
 .. hint::
 
@@ -300,6 +327,11 @@ Building and installing the kernel
 
 Building and installation can be executed separately by using...
 
+.. warning::
+
+    Be careful with file and directory permissions, autokernel will do sanity checks
+    and abort when it detects that another user can inject commands.
+
 .. topic:: Just the kernel
 
     .
@@ -331,3 +363,5 @@ Use ... to generate a .config file.
 Use .. to make a full kernel build.
 
 Be sure to check out --help and the documentation to fully understand what can be done.
+
+.. _LKDDb: https://cateee.net/lkddb/
