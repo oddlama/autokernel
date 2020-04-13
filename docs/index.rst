@@ -21,23 +21,23 @@ your topic of interest. You can also use the search function in the top left cor
     :caption: Getting started
     :name: sec-getting-started
 
-    introduction
-    quick-start-guide
+    intro/introduction
+    intro/quick-start-guide
 
 .. toctree::
     :maxdepth: 1
     :caption: Contents
     :name: sec-contents
 
-    usage
-    configuration/concepts
-    configuration/syntax
-    configuration/directives
+    contents/usage
+    contents/concepts
+    contents/syntax
+    contents/directives
 
 .. toctree::
     :maxdepth: 1
     :caption: Info
     :name: sec-info
 
-    license
-    acknowledgements
+    info/license
+    info/acknowledgements
