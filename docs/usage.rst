@@ -1,5 +1,10 @@
+.. _usage:
+
 Usage
 =====
+
+Welcome to the usage section. Here you will find several examples of how to use
+autokernel for different tasks.
 
 .. warning::
 
