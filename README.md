@@ -37,7 +37,7 @@ To get started right away, please check out the [Quick start guide](https://auto
 
 You can simply install the package with pip.
 
-```
+```bash
 pip install autokernel
 # Run setup to create a default configuration
 autokernel setup
@@ -46,7 +46,7 @@ autokernel setup
 Otherwise, you can also clone this repository, and run
 autokernel locally.
 
-```
+```bash
 # Clone the repo
 git clone "https://github.com/oddlama/autokernel.git"
 cd autokernel

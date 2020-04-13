@@ -14,9 +14,9 @@ Basic invokation
 
 .. hint::
 
-    If you are **not** using gentoo or another source distribution,
-    use ``-K kernel_dir`` to specify the kernel directory. Autokernel will
-    not work otherwise.
+    If you are **not** using gentoo or another source distribution, which
+    has kernel sources available under ``/usr/src/linux``, use ``-K kernel_dir``
+    to specify the kernel directory. Autokernel will not work otherwise.
 
 Detecting kernel options
 ------------------------
@@ -53,14 +53,14 @@ You can also generate an autokernel module from the result:
 Generating the kernel configuration
 -----------------------------------
 
-Generate a ``.config`` file from your autokernel configuration:
+Generate a ``.config`` file from your autokernel configuration with ``generate-config``:
 
 .. code-block:: bash
 
     # Generates a config file at the given location
-    autokernel generate-config -o test.config
+    autokernel generate-config -o .config
 
-Alternatively, you can compare the result to another config:
+Alternatively, you can compare the theoretically generated config to another config by using ``check``:
 
 .. code-block:: bash
 
@@ -82,7 +82,7 @@ are missing to enable an option:
 Querying symbol information
 ---------------------------
 
-Query symbol information (menuconfig help text) with:
+Query symbol information (menuconfig help text) with ``info``:
 
 .. code-block:: bash
 
