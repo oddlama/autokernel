@@ -69,6 +69,8 @@ For additional information, see ``autokernel --help``.
     By default, autokernel expects the kernel to reside in ``/usr/src/linux``.
     If you want to specify another location, use the option ``-K path/to/kernel``
 
+.. _usage-detecting-options:
+
 Detecting kernel options
 ------------------------
 
@@ -239,6 +241,8 @@ The most important directives are outlined in the following and by this example:
     - Use conditionals to write generic modules so they can be used for multiple
       kernel versions and maybe even across machines.
 
+.. _usage-command-satisfy:
+
 Enabling arbitrary symbols
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -321,6 +325,8 @@ depend on the given symbol.
 .. code-block:: bash
 
     autokernel revdeps EXPERT
+
+.. _usage-building-installing:
 
 Building and installing the kernel
 ----------------------------------

@@ -10,7 +10,8 @@ your configuration, and it will ensure that the configuration has no conflicts.
 To help you to write a good config, it comes with a set of helpful features
 which are outlined below.
 
-To skip all of the chatter, head over to the :ref:`quick-start-guide`.
+To skip all of the chatter, head over to :ref:`usage` to begin using autokernel
+or :ref:`concepts` to learn about some important concepts in autokernel.
 
 What problem does it solve?
 ---------------------------
@@ -41,15 +42,16 @@ Conflict detection
     Autokernel will exit with a conflict error in this case and present the offending
     lines in the configuration. Once set, a symbol's value will be internally pinned
     and any assignments that would change it present an error.
+    See :ref:`concepts-pinning` for more info.
 
-Dependency validation
-^^^^^^^^^^^^^^^^^^^^^
+Satisfying dependencies
+^^^^^^^^^^^^^^^^^^^^^^^
 
     If you enable a symbol (for example ``DVB_USB_RTL28XXU``), but forget some of
     its dependencies (like ``MEDIA_SUPPORT``), autokernel will throw an error.
-    It can also help you to resolve these dependencies and
+    But it can also help you to resolve these dependencies and
     present you with a list of options that need to be enabled to allow the assignment.
-    See  :ref:`the deps command<usage-command-deps>` for more info.
+    See :ref:`usage-command-satisfy` for more info.
 
 Symbol validation
 ^^^^^^^^^^^^^^^^^
@@ -67,6 +69,7 @@ Conditionals
     By allowing simple conditional expressions in the configuration, you
     can easily evolve your config while staying backwards compatible to
     previous versions, and have one configuration for multiple machines.
+    See :ref:`conditions` for more info.
 
 Structure and Documentation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -94,7 +97,7 @@ Build system
     to build your initramfs (optional) for you. Eventually, a second build pass
     is needed to integrate the initramfs into the kernel. Other than that,
     it supports mounting target directories, and keeping your installation directory
-    clean by only keeping the last :math:`N` builds. See :ref:`usage-build-system` for more information.
+    clean by only keeping the last :math:`N` builds. See :ref:`usage-building-installing` for more information.
 
 But advantages never come without disadvantages. The obvious ones here are the additional
 effort of writing a proper configuration instead of simply using menuconfig, and also

@@ -4,9 +4,6 @@
 
 |
 
-autokernel
-==========
-
 Welcome to the official documentation of autokernel!
 If you are visiting for the fist time, we recommend that you read the :ref:`introduction` page
 to get an overview of what autokernel has to offer.
