@@ -23,7 +23,7 @@ def get_lark_parser():
     """
     global _lark # pylint: disable=global-statement
     if _lark is None:
-        with open(os.path.join(os.path.dirname(__file__), 'config.lark'), 'r') as f:
+        with open(os.path.join(os.path.dirname(__file__), 'data/config.lark'), 'r') as f:
             _lark = lark.Lark(f.read(), propagate_positions=True, start='blck_root')
 
     return _lark
@@ -1062,10 +1062,23 @@ def load_config_tree(config_file):
             print_message_with_file_location(config_file, msg_error(str(e).splitlines()[0]), e.line, (e.column, e.column))
             sys.exit(1)
 
+def get_config_file(config_file):
+    if config_file:
+        return config_file
+
+    config_file = '/etc/autokernel/autokernel.conf'
+    if not os.path.exists(config_file):
+        log.warn("Configuration file '/etc/autokernel/autokernel.conf' not found")
+        log.warn("Falling back to a minimal internal configuration!")
+        config_file = os.path.join(os.path.dirname(__file__), 'data/internal.conf')
+
+    return config_file
+
 def load_config(config_file):
     """
     Loads the autokernel configuration file.
     """
+    config_file = get_config_file(config_file)
     tree = load_config_tree(config_file)
     config = Config()
 

@@ -1,8 +1,10 @@
-Usage examples
-==============
+Usage
+=====
 
-careful with file modes, autokernel will do sanity checking and abort when it detects
-someone can inject commands.
+.. warning::
+
+    Be careful with file and directory permissions, autokernel will do sanity checks
+    and abort when it detects that another user can inject commands.
 
 .. _usage-detecting-options:
 
@@ -28,13 +30,19 @@ connected devices. We can't detect USB devices, if the current kernel does not
 support that bus in the first place. If you want this, but also don't want to
 waste any time, consider running autokernel directly off an Arch Linux live system.
 
+Comparing against the current configuration
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Generating a module
+^^^^^^^^^^^^^^^^^^^
+
 Configuration examples
 ----------------------
 
 .. _usage-build-system:
 
-Build system
-^^^^^^^^^^^^
+Building the kernel
+-------------------
 
 buildsystem
 
