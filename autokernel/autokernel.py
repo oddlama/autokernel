@@ -224,24 +224,21 @@ def execute_command(args, name, cmd, _replace_vars):
         except subprocess.CalledProcessError as e:
             log.die("{} failed with code {}. Aborting.".format(name, e.returncode))
 
-def main_setup(args): # pylint: disable=unused-argument
+def main_setup(args):
     """
     Main function for the 'setup' command.
     """
-    log.info("Setting up '/etc/autokernel'")
+    log.info("Setting up autokernel configuration at '{}'".format(args.setup_dir))
 
-    if os.geteuid() != 0:
-        log.die("You need root privileges to setup '/etc/autokernel'")
-
-    etc_autokernel = Path('/etc/autokernel')
-    if etc_autokernel.exists():
-        log.die("Refusing to setup: '/etc/autokernel' exists")
+    dirpath = Path(args.setup_dir)
+    if dirpath.exists():
+        log.die("Refusing to setup: directory '{}' exists".format(args.setup_dir))
 
     saved_umask = os.umask(0o077)
-    shutil.copytree(os.path.join(os.path.dirname(__file__), 'contrib/etc'), '/etc/autokernel')
+    shutil.copytree(os.path.join(os.path.dirname(__file__), 'contrib/etc'), dirpath)
     os.umask(saved_umask)
 
-    log.info("A default configuration has been provided in '/etc/autokernel/autokernel.conf'")
+    log.info("A default configuration has been installed")
     log.info("You might want to edit it now.")
 
 def main_check_config(args):
@@ -1214,6 +1211,8 @@ def main():
 
     # Setup
     parser_setup = subparsers.add_parser('setup', help='Setup a default configuration in /etc/autokernel if the directory does not exist yet.')
+    parser_setup.add_argument('-d', '--dir', dest='setup_dir', default='/etc/autokernel',
+            help="The directory to copy the default configuration to. The default is /etc/autokernel.")
     parser_setup.set_defaults(func=main_setup)
 
     # Check

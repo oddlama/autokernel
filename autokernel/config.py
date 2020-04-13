@@ -1070,6 +1070,7 @@ def get_config_file(config_file, warn=False):
     if not os.path.exists(config_file):
         if warn:
             log.warn("Configuration file '/etc/autokernel/autokernel.conf' not found")
+            log.warn("You may want to run `autokernel setup` to install a default config.")
             log.warn("Falling back to a minimal internal configuration!")
         config_file = os.path.join(os.path.dirname(__file__), 'contrib/internal.conf')
 
