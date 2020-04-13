@@ -237,11 +237,9 @@ def main_setup(args): # pylint: disable=unused-argument
     if etc_autokernel.exists():
         log.die("Refusing to setup: '/etc/autokernel' exists")
 
-    etc_autokernel.mkdir(mode=0o700)
-    modules_d = etc_autokernel / 'modules.d'
-    modules_d.mkdir(mode=0o700)
-
-    # TODO add hardening.conf, ...
+    saved_umask = os.umask(0o077)
+    shutil.copytree(os.path.join(os.path.dirname(__file__), 'contrib/etc'), '/etc/autokernel')
+    os.umask(saved_umask)
 
     log.info("A default configuration has been provided in '/etc/autokernel/autokernel.conf'")
     log.info("You might want to edit it now.")
