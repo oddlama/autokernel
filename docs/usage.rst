@@ -65,9 +65,11 @@ For additional information, refer to the help texts:
 
 .. topic:: Configuration
 
-    Autokernel expects the configuration to be in ``/etc/autokernel/autokernel.conf``.
-    If it doesn't exist, autokernel will use an internal fallback configuration.
-    To explicitly specify a configuration file, use the option ``-C path/to/autokernel.conf``
+    Before proceeding, you might want to have a look at the
+    default configuration in ``/etc/autokernel`` to familiarize yourself
+    with the general format.
+
+    To explicitly specify a configuration, use the option ``-C path/to/autokernel.conf``
 
 .. topic:: Kernel location
 
@@ -92,7 +94,7 @@ a configuration option database (LKDDb_), selects the corresponding symbols and
 the necessary dependencies.
 
 It might be beneficial to run detection while using a very generic and
-modular kernel, such as the `kernel from Arch Linux <https://www.archlinux.org/packages/core/x86_64/linux/>`_.
+modular kernel, such as the `kernel from Arch Linux <https://www.archlinux.org/packages/core/x86_64/linux/>`__.
 This increases the likelihood of having all necessary buses and features enabled
 detect most connected devices.
 
@@ -156,7 +158,7 @@ To generate a ``.config`` file, all you need to do is execute the following comm
 
 .. code-block:: bash
 
-    # Generates .config directly in the given kernel directory
+    # Generates .config directly in the kernel directory (see -K)
     autokernel generate-config
     # Generates a config file at the given location
     autokernel generate-config -o test.config
@@ -192,7 +194,8 @@ For a more in-depth explanation of autokernel's configuration, see the sections 
 
     The default configuration that is generated when using ``autokernel setup`` is
     a great starting point to write your own configuration. If you have already changed
-    it, you can view the original file in ``TODO``.
+    it, you can view the original files `on github <https://github.com/oddlama/autokernel/tree/master/contrib/etc>`__
+    or in the autokernel module directory under ``contrib/etc``.
 
 The most important directives are outlined in the following and by this example:
 
@@ -268,7 +271,7 @@ be done inside a module. Here is an example which shows the most common usage pa
         set KVM m;    # Build KVM as module
         # Example of setting a non-tristate option.
         set DEFAULT_MMAP_MIN_ADDR 65536;
-        set DEFAULT_MMAP_MIN_ADDR "65536";
+        set DEFAULT_MMAP_MIN_ADDR "65536"; # or with quotes
 
         # Set a string symbol
         set DEFAULT_HOSTNAME refrigerator;   # OK
@@ -410,7 +413,8 @@ Hardening the kernel
 
 Autokernel provides a preconfigured module for kernel hardening,
 which is installed to ``/etc/autokernel/modules.d/hardening.conf`` if
-you used ``autokernel setup``. Otherwise you will find it here TODO (git / usr share?).
+you used ``autokernel setup``. Otherwise you will find it `on github <https://github.com/oddlama/autokernel/tree/master/contrib/etc/modules.d/hardening.conf>`__ or
+in the autokernel module directory under ``contrib/etc/modules.d/hardening.conf``.
 
 The hardening module is compatible with any kernel version >= 4.0.
 Every choice is also fully documented and explanined. Feel free to adjust it to your needs.
