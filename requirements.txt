@@ -1,7 +1,5 @@
 kconfiglib
 lark-parser
-pbr
-setuptools
 python-dateutil
 requests
 sympy

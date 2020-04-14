@@ -1,3 +1,6 @@
+pbr
 pylint
+setuptools
 sphinx
 sphinx_rtd_theme
+wheel

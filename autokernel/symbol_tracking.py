@@ -31,11 +31,11 @@ def register_symbol_change(symbol, new_value, inducing_change, reason='explicitl
             symbol.name, inducing_change[0].name, inducing_change[1]))
 
 def die_print_conflict(change_at, change_name, symbol, new_value, sc):
-    autokernel.config.print_error_at(change_at, "conflicting {} {} {}".format(
+    log.print_error_at(change_at, "conflicting {} {} {}".format(
         change_name,
         autokernel.kconfig.value_to_str(new_value),
         symbol.name))
-    autokernel.config.print_hint_at(sc.at, "previously pinned to {} here (reason: {})".format(
+    log.print_hint_at(sc.at, "previously pinned to {} here (reason: {})".format(
         autokernel.kconfig.value_to_str(sc.value), sc.reason))
     sys.exit(1)
 

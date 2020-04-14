@@ -93,3 +93,49 @@ def _invalidate_format_strings():
     error = _print_error
 
 _invalidate_format_strings()
+
+
+def print_line_with_highlight(line, line_nr, highlight):
+    tabs_before = line[:highlight[0]-1].count('\t')
+    tabs_in_highlight = line[highlight[0]-1:highlight[1]-2].count('\t')
+    print("{:5d} | {}".format(line_nr, line[:-1].replace('\t', '    ')))
+    print("      | {}".format(" " * ((highlight[0] - 1) + tabs_before * 3) + color("[1;34m") + "^" + "~" * ((highlight[1] - highlight[0] - 1) + tabs_in_highlight * 3) + color_reset))
+
+def msg_hint(msg):
+    return color("[1;34m") + "hint:" + color_reset + " " + msg
+
+def msg_warn(msg):
+    return color("[1;33m") + "warning:" + color_reset + " " + msg
+
+def msg_error(msg):
+    return color("[1;31m") + "error:" + color_reset + " " + msg
+
+def print_message_with_file_location(file, message, line, column_range):
+    print((color("[1m") + "{}:{}:{}:" + color_reset + " {}").format(
+        file, line, column_range[0], message), file=sys.stderr)
+    with open(file, 'r') as f:
+        line_str = f.readlines()[line - 1]
+        print_line_with_highlight(line_str, line, highlight=column_range)
+
+def print_message_at(definition, msg):
+    if definition:
+        meta, file = definition
+        if meta.line == meta.end_line:
+            print_message_with_file_location(file, msg, meta.line, (meta.column, meta.end_column))
+        else:
+            print_message_with_file_location(file, msg, meta.line, (meta.column, meta.column + 1))
+    else:
+        print(msg + ' [location untracked]', file=sys.stderr)
+
+def print_hint_at(definition, msg):
+    print_message_at(definition, msg_hint(msg))
+
+def print_warn_at(definition, msg):
+    print_message_at(definition, msg_warn(msg))
+
+def print_error_at(definition, msg):
+    print_message_at(definition, msg_error(msg))
+
+def die_print_error_at(definition, msg):
+    print_error_at(definition, msg)
+    sys.exit(1)

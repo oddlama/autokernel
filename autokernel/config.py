@@ -1,16 +1,14 @@
-import codecs
 import kconfiglib
 import lark
 import lark.exceptions
 import os
-import re
 import sys
 
+import autokernel.util as util
 import autokernel.kconfig
 import autokernel.symbol_tracking
 from autokernel import log
 
-kernel_option_regex = re.compile('^[_A-Z0-9]*[_A-Z][_A-Z0-9]*$')
 currently_parsed_filenames = []
 
 def def_at(tree):
@@ -28,88 +26,10 @@ def get_lark_parser():
 
     return _lark
 
-ESCAPE_SEQUENCE_RE = re.compile(r'''
-    ( \\U........   # 8-digit hex escapes
-    | \\u....       # 4-digit hex escapes
-    | \\x..         # 2-digit hex escapes
-    | \\[0-7]{1,3}  # Octal escapes
-    | \\N\{[^}]+\}  # Unicode characters by name
-    | \\[\\'"nrv]   # Single-character escapes
-    )''', re.UNICODE | re.VERBOSE)
-
-def decode_escapes(s):
-    def decode_match(match):
-        return codecs.decode(match.group(0), 'unicode-escape')
-
-    return ESCAPE_SEQUENCE_RE.sub(decode_match, s)
-
-def decode_quotes(s):
-    """
-    Strips leading and trailing quotes from the string, if any.
-    Also decodes escapes inside the string.
-    """
-    return decode_escapes(s[1:-1]) if s[0] == s[-1] and s[0] in ['"', "'"] else s
-
-def parse_bool(tree, s):
-    if s in ['true', '1', 'yes', 'y', 'on']:
-        return True
-    elif s in ['false', '0', 'no', 'n', 'off']:
-        return False
-    else:
-        die_print_error_at(def_at(tree), "invalid value for boolean")
-
 def die_redefinition(new_at, previous_at, name):
-    autokernel.config.print_error_at(new_at, "redefinition of {}".format(name))
-    autokernel.config.print_hint_at(previous_at, "previously defined here")
+    log.print_error_at(new_at, "redefinition of {}".format(name))
+    log.print_hint_at(previous_at, "previously defined here")
     sys.exit(1)
-
-def print_line_with_highlight(line, line_nr, highlight):
-    tabs_before = line[:highlight[0]-1].count('\t')
-    tabs_in_highlight = line[highlight[0]-1:highlight[1]-2].count('\t')
-    print("{:5d} | {}".format(line_nr, line[:-1].replace('\t', '    ')))
-    print("      | {}".format(" " * ((highlight[0] - 1) + tabs_before * 3) + log.color("[1;34m") + "^" + "~" * ((highlight[1] - highlight[0] - 1) + tabs_in_highlight * 3) + log.color_reset))
-
-def msg_hint(msg):
-    return log.color("[1;34m") + "hint:" + log.color_reset + " " + msg
-
-def msg_warn(msg):
-    return log.color("[1;33m") + "warning:" + log.color_reset + " " + msg
-
-def msg_error(msg):
-    return log.color("[1;31m") + "error:" + log.color_reset + " " + msg
-
-def print_message_with_file_location(file, message, line, column_range):
-    print((log.color("[1m") + "{}:{}:{}:" + log.color_reset + " {}").format(
-        file, line, column_range[0], message), file=sys.stderr)
-    with open(file, 'r') as f:
-        line_str = f.readlines()[line - 1]
-        print_line_with_highlight(line_str, line, highlight=column_range)
-
-def print_message_at(definition, msg):
-    if definition:
-        meta, file = definition
-        if meta.line == meta.end_line:
-            print_message_with_file_location(file, msg, meta.line, (meta.column, meta.end_column))
-        else:
-            print_message_with_file_location(file, msg, meta.line, (meta.column, meta.column + 1))
-    else:
-        print(msg + ' [location untracked]', file=sys.stderr)
-
-def print_hint_at(definition, msg):
-    print_message_at(definition, msg_hint(msg))
-
-def print_warn_at(definition, msg):
-    print_message_at(definition, msg_warn(msg))
-
-def print_error_at(definition, msg):
-    print_message_at(definition, msg_error(msg))
-
-def die_print_error_at(definition, msg):
-    print_error_at(definition, msg)
-    sys.exit(1)
-
-def die_print_parsing_exception(file, e):
-    die_print_error_at((e.meta, file), str(e))
 
 def apply_tree_nodes(nodes, callbacks, on_additional=None, ignore_additional=False):
     """
@@ -131,7 +51,7 @@ def apply_tree_nodes(nodes, callbacks, on_additional=None, ignore_additional=Fal
             elif on_additional:
                 on_additional(n)
             elif not ignore_additional:
-                die_print_error_at(def_at(n), "unprocessed rule '{}'; this is a bug that should be reported.".format(n.data))
+                log.die_print_error_at(def_at(n), "unprocessed rule '{}'; this is a bug that should be reported.".format(n.data))
 
 def find_first_child(tree, name):
     for c in tree.children:
@@ -146,22 +66,22 @@ def find_token(tree, token_name, ignore_missing=False, strip_quotes=False):
     """
     for c in tree.children:
         if c.__class__ == lark.Token and c.type == token_name:
-            return decode_quotes(str(c)) if strip_quotes else str(c)
+            return util.decode_quotes(str(c)) if strip_quotes else str(c)
 
     if not ignore_missing:
-        die_print_error_at(def_at(tree), "missing token '{}'".format(token_name))
+        log.die_print_error_at(def_at(tree), "missing token '{}'".format(token_name))
     return None
 
 class TokenRawInfo:
     def __init__(self, tree, value, is_quoted):
         self.at = def_at(tree)
-        self.value = decode_quotes(value) if is_quoted else value
+        self.value = util.decode_quotes(value) if is_quoted else value
         self.was_quoted = is_quoted
 
 class TokenRawLiteral:
     def __init__(self, at, value, is_quoted):
         self.at = at
-        self.value = decode_quotes(value) if is_quoted else value
+        self.value = util.decode_quotes(value) if is_quoted else value
         self.was_quoted = is_quoted
 
 def find_named_token_raw(tree, token_name, ignore_missing=False):
@@ -172,24 +92,24 @@ def find_named_token_raw(tree, token_name, ignore_missing=False):
     for c in tree.children:
         if c.__class__ == lark.Tree and c.data == token_name:
             if len(c.children) != 1:
-                die_print_error_at(def_at(c), "subrule token '{}' has too many children".format(token_name))
+                log.die_print_error_at(def_at(c), "subrule token '{}' has too many children".format(token_name))
 
             if c.children[0].data not in ['string', 'string_quoted']:
-                die_print_error_at(def_at(c), "subrule token '{}.{}' has an invalid name (must be either 'string' or 'string_quoted')".format(token_name, c.children[0].data))
+                log.die_print_error_at(def_at(c), "subrule token '{}.{}' has an invalid name (must be either 'string' or 'string_quoted')".format(token_name, c.children[0].data))
 
             if c.children[0].__class__ != lark.Tree:
-                die_print_error_at(def_at(c), "subrule token '{}.{}' has no children tree".format(token_name, c.children[0].data))
+                log.die_print_error_at(def_at(c), "subrule token '{}.{}' has no children tree".format(token_name, c.children[0].data))
 
             if len(c.children[0].children) != 1:
-                die_print_error_at(def_at(c.children[0]), "subrule token '{}.{}' has too many children".format(token_name, c.children[0].data))
+                log.die_print_error_at(def_at(c.children[0]), "subrule token '{}.{}' has too many children".format(token_name, c.children[0].data))
 
             if c.children[0].children[0].__class__ != lark.Token:
-                die_print_error_at(def_at(c.children[0]), "subrule token '{}.{}' has no children literal".format(token_name, c.children[0].data))
+                log.die_print_error_at(def_at(c.children[0]), "subrule token '{}.{}' has no children literal".format(token_name, c.children[0].data))
 
             return TokenRawInfo(c.children[0], str(c.children[0].children[0]), is_quoted=(c.children[0].data == 'string_quoted'))
 
     if not ignore_missing:
-        die_print_error_at(def_at(tree), "missing token '{}'".format(token_name))
+        log.die_print_error_at(def_at(tree), "missing token '{}'".format(token_name))
     return TokenRawInfo(None, None, False)
 
 def find_named_token(tree, token_name, ignore_missing=False):
@@ -203,7 +123,7 @@ def find_all_tokens(tree, token_name, strip_quotes=False):
     """
     Finds all tokens by name in the children of the given tree.
     """
-    return [decode_quotes(str(c)) if strip_quotes else str(c) \
+    return [util.decode_quotes(str(c)) if strip_quotes else str(c) \
             for c in tree.children \
                 if c.__class__ == lark.Token and c.type == token_name]
 
@@ -268,7 +188,7 @@ class UniqueProperty:
             tok = tok or default_if_ignored
 
         if self.convert_bool:
-            self._value = parse_bool(tree, tok)
+            self._value = util.parse_bool(self.at, tok)
         else:
             self._value = tok
 
@@ -322,13 +242,13 @@ def _parse_umask_property(prop):
     try:
         prop.value = int(prop.value, 8)
     except ValueError as e:
-        die_print_error_at(prop.at, "Invalid value for umask: {}".format(str(e)))
+        log.die_print_error_at(prop.at, "Invalid value for umask: {}".format(str(e)))
 
 def _parse_int_property(prop):
     try:
         prop.value = int(prop.value)
     except ValueError as e:
-        die_print_error_at(prop.at, "Invalid value for integer: {}".format(str(e)))
+        log.die_print_error_at(prop.at, "Invalid value for integer: {}".format(str(e)))
 
 special_var_cmp_mode = {
     '$kernel_version': 'semver',
@@ -338,24 +258,12 @@ special_var_cmp_mode = {
     '$true':  'tristate',
 }
 
-def is_env_var(var):
-    return var.startswith('$env[') and var.endswith(']')
-
 def get_special_var_cmp_mode(hint_at, var):
-    if is_env_var(var):
+    if util.is_env_var(var):
         return 'string'
     if var in special_var_cmp_mode:
         return special_var_cmp_mode[var]
-    die_print_error_at(hint_at, "unknown special variable '{}'".format(var))
-
-def resolve_env_variable(hint_at, var):
-    tokens = var[len('$env['):-1].split(':', 1)
-    envvar = tokens[0]
-    default = None if len(tokens) == 1 else decode_quotes(tokens[1])
-    value = os.environ.get(envvar, default)
-    if value is None:
-        die_print_error_at(hint_at, "unknown environment variable '{}'.".format(envvar))
-    return value
+    log.die_print_error_at(hint_at, "unknown special variable '{}'".format(var))
 
 def resolve_special_variable(hint_at, kconfig, var):
     if var == '$kernel_version':
@@ -368,10 +276,10 @@ def resolve_special_variable(hint_at, kconfig, var):
         return 'y'
     elif var == '$false':
         return 'n'
-    elif is_env_var(var):
-        return resolve_env_variable(hint_at, var)
+    elif util.is_env_var(var):
+        return util.resolve_env_variable(hint_at, var)
     else:
-        die_print_error_at(hint_at, "unknown special variable '{}'".format(var))
+        log.die_print_error_at(hint_at, "unknown special variable '{}'".format(var))
 
 def check_str(v):
     return v.value
@@ -430,10 +338,10 @@ def compare_variables(resolved_vars, op, cmp_mode, hint_at):
     # Assert that the comparison mode is supported for the given type
     if cmp_mode == 'string':
         if op not in ['EXPR_CMP_NEQ', 'EXPR_CMP_EQ']:
-            die_print_error_at(hint_at, "invalid comparison '{}' for type string".format(_compare_op_to_str[op]))
+            log.die_print_error_at(hint_at, "invalid comparison '{}' for type string".format(_compare_op_to_str[op]))
     elif cmp_mode == 'tristate':
         if op not in ['EXPR_CMP_NEQ', 'EXPR_CMP_EQ']:
-            die_print_error_at(hint_at, "invalid comparison operator '{}' for type tristate".format(_compare_op_to_str[op]))
+            log.die_print_error_at(hint_at, "invalid comparison operator '{}' for type tristate".format(_compare_op_to_str[op]))
 
     # Parse variables to comparable types
     parse_functor = _variable_parse_functors[cmp_mode]
@@ -442,7 +350,7 @@ def compare_variables(resolved_vars, op, cmp_mode, hint_at):
         try:
             parsed_variables.append(parse_functor(var))
         except ValueError as e:
-            die_print_error_at(var.var.at, "could not convert operand #{} '{}' to {}: {}".format(i, var.var.value, cmp_mode, str(e)))
+            log.die_print_error_at(var.var.at, "could not convert operand #{} '{}' to {}: {}".format(i, var.var.value, cmp_mode, str(e)))
 
     # Compare all variables in order
     for i, rhs in enumerate(parsed_variables[1:], start=1):
@@ -487,7 +395,7 @@ class Condition:
         try:
             sym = kconfig.syms[sym_name]
         except KeyError:
-            die_print_error_at(self.at, "symbol {} does not exist".format(sym_name))
+            log.die_print_error_at(self.at, "symbol {} does not exist".format(sym_name))
 
         # If the symbol hadn't been encountered before, pin the current value
         if sym not in autokernel.symbol_tracking.symbol_changes:
@@ -509,7 +417,7 @@ class Condition:
         var_special = var.value.startswith('$')
 
         # Resolve symbols
-        var_is_sym = (not var.was_quoted) and (not var_special) and (kernel_option_regex.match(var.value) is not None)
+        var_is_sym = (not var.was_quoted) and (not var_special) and (util.kernel_option_regex.match(var.value) is not None)
         sym = None
         if var_is_sym:
             if var.value.startswith('CONFIG_'):
@@ -520,7 +428,7 @@ class Condition:
             value = sym.str_value
             var_cmp_mode = Condition._sym_cmp_type.get(sym.orig_type, 'unknown')
             if var_cmp_mode == 'unknown':
-                die_print_error_at(var.at, "cannot compare with symbol {} which is of unknown type".format(sym.name))
+                log.die_print_error_at(var.at, "cannot compare with symbol {} which is of unknown type".format(sym.name))
         elif var_special:
             value = resolve_special_variable(var.at, kconfig, var.value)
             var_cmp_mode = get_special_var_cmp_mode(var.at, var.value)
@@ -614,7 +522,7 @@ class ConditionVarComparison(CachedCondition):
         self.vars = operands
 
         if self.compare_op not in _compare_op_to_str:
-            die_print_error_at(self.at, "Invalid comparison op '{}'. This is a bug that should be reported.".format(_compare_op_to_str[self.compare_op]))
+            log.die_print_error_at(self.at, "Invalid comparison op '{}'. This is a bug that should be reported.".format(_compare_op_to_str[self.compare_op]))
 
     def _evaluate(self, kconfig):
         resolved_vars = [self.resolve_var(v, kconfig) for v in self.vars]
@@ -630,7 +538,7 @@ class ConditionVarComparison(CachedCondition):
         elif len(resolved_vars_with_type) == 1:
             cmp_mode = resolved_vars_with_type[0].cmp_mode
         else:
-            die_print_error_at(self.at, "cannot compare variables of different types: [{}]".format(', '.join(["{} ({})".format(v.var.value, v.cmp_mode) for v in resolved_vars_with_type])))
+            log.die_print_error_at(self.at, "cannot compare variables of different types: [{}]".format(', '.join(["{} ({})".format(v.var.value, v.cmp_mode) for v in resolved_vars_with_type])))
 
         return compare_variables(resolved_vars, self.compare_op, cmp_mode, self.at)
 
@@ -652,10 +560,10 @@ class ConditionVarTruth(CachedCondition):
 
         if cmp_mode is 'tristate':
             implicit_var = self.resolve_var(TokenRawLiteral(self.var.at, '"n"', is_quoted=True), kconfig)
-        elif cmp_mode is 'string' and (resolved_var.is_sym or (resolved_var.special and is_env_var(self.var.value))):
+        elif cmp_mode is 'string' and (resolved_var.is_sym or (resolved_var.special and util.is_env_var(self.var.value))):
             implicit_var = self.resolve_var(TokenRawLiteral(self.var.at, '""', is_quoted=True), kconfig)
         else:
-            die_print_error_at(self.at, "cannot implicitly convert '{}' to a truth value".format(self.var.value))
+            log.die_print_error_at(self.at, "cannot implicitly convert '{}' to a truth value".format(self.var.value))
 
         return compare_variables([resolved_var, implicit_var], 'EXPR_CMP_NEQ', cmp_mode, self.at)
 
@@ -683,7 +591,7 @@ def parse_expr_condition(tree):
                     if operation is None:
                         operation = op
                     elif operation != op:
-                        die_print_error_at(def_at(expr_cmp), "all expression operands must be the same for n-ary comparisons")
+                        log.die_print_error_at(def_at(expr_cmp), "all expression operands must be the same for n-ary comparisons")
             return ConditionVarComparison(expr_cmp, operation, operands).negate(negated)
 
         expr_id = find_named_token(tree, 'expr_id')
@@ -697,9 +605,9 @@ def parse_expr_condition(tree):
         if expr:
             return parse_expr_condition(expr).negate(negated)
 
-        die_print_error_at(def_at(tree), "invalid expression subtree '{}' in 'expr_factor'".format(tree.data))
+        log.die_print_error_at(def_at(tree), "invalid expression subtree '{}' in 'expr_factor'".format(tree.data))
     else:
-        die_print_error_at(def_at(tree), "invalid expression subtree '{}'".format(tree.data))
+        log.die_print_error_at(def_at(tree), "invalid expression subtree '{}'".format(tree.data))
 
 def find_subtrees(tree, name):
     """
@@ -720,12 +628,12 @@ def find_condition(tree, ignore_missing=True):
         if ignore_missing:
             return None
         else:
-            die_print_error_at(def_at(tree), "missing expression")
+            log.die_print_error_at(def_at(tree), "missing expression")
 
     if len(conditions) == 1:
         return conditions[0]
 
-    die_print_error_at(def_at(tree), "expected exactly one expression, but got {}".format(len(conditions)))
+    log.die_print_error_at(def_at(tree), "expected exactly one expression, but got {}".format(len(conditions)))
 
 class BlockNode:
     """
@@ -755,7 +663,7 @@ class BlockNode:
             self.first_definition = def_at(tree)
 
         if tree.data != ('blck_' + self.node_name):
-            die_print_error_at(def_at(tree), "{} cannot parse '{}'".format(self.__class__.__name__, tree.data))
+            log.die_print_error_at(def_at(tree), "{} cannot parse '{}'".format(self.__class__.__name__, tree.data))
 
         self.parse_block_params(tree, *args, **kwargs)
 
@@ -764,11 +672,11 @@ class BlockNode:
             if c.__class__ == lark.Tree:
                 if c.data == 'ctxt_' + self.node_name:
                     if ctxt:
-                        die_print_error_at(def_at(c), "'{}' must not have multiple children of type '{}'".format("blck_" + self.node_name, "ctxt_" + self.node_name))
+                        log.die_print_error_at(def_at(c), "'{}' must not have multiple children of type '{}'".format("blck_" + self.node_name, "ctxt_" + self.node_name))
                     ctxt = c
 
         if not ctxt:
-            die_print_error_at(def_at(tree), "'{}' must have exactly one child '{}'".format("blck_" + self.node_name, "ctxt_" + self.node_name))
+            log.die_print_error_at(def_at(tree), "'{}' must have exactly one child '{}'".format("blck_" + self.node_name, "ctxt_" + self.node_name))
 
         self.parse_context(ctxt, *args, **kwargs)
 
@@ -827,7 +735,7 @@ class ConfigModule(BlockNode):
             conditions = find_conditions(tree)
             subcontexts = find_subtrees(tree, 'ctxt_module')
             if len(subcontexts) - len(conditions) not in [0, 1]:
-                die_print_error_at(def_at(tree), "invalid amount of subcontexts(={}) and conditions(={}) for if block; this is a bug that should be reported.".format(len(subcontexts), len(conditions)))
+                log.die_print_error_at(def_at(tree), "invalid amount of subcontexts(={}) and conditions(={}) for if block; this is a bug that should be reported.".format(len(subcontexts), len(conditions)))
 
             not_previous_conditions = []
             for c, s in zip(conditions, subcontexts):
@@ -962,9 +870,9 @@ class ConfigInstall(BlockNode):
             target.parse(tree, named_token='path')
             # Parse disable
             if not target.was_quoted:
-                target.value = parse_bool(target.at, target.value)
+                target.value = util.parse_bool(target.at, target.value)
                 if target.value is not False:
-                    die_print_error_at(target.at, "You can only disable targets!")
+                    log.die_print_error_at(target.at, "You can only disable targets!")
 
         def blck_hooks(tree):
             self.hooks.parse_tree(tree)
@@ -1045,13 +953,13 @@ class Config(BlockNode):
                 try:
                     subtree = load_config_tree(filename)
                 except IOError as e:
-                    die_print_error_at(def_at(tree), str(e))
+                    log.die_print_error_at(def_at(tree), str(e))
 
                 currently_parsed_filenames.append(filename)
                 self.parse_tree(subtree, restrict_to_modules=True)
                 currently_parsed_filenames.pop()
             else:
-                die_print_error_at(def_at(tree), "'{}' does not exist or is not a file".format(filename))
+                log.die_print_error_at(def_at(tree), "'{}' does not exist or is not a file".format(filename))
 
         def blck_module(tree):
             module = ConfigModule()
@@ -1074,16 +982,16 @@ class Config(BlockNode):
                     if filename.endswith('.conf'):
                         _include_module_file(tree, os.path.join(include_dir, filename))
             else:
-                die_print_error_at(def_at(tree), "'{}' is not a directory".format(include_dir))
+                log.die_print_error_at(def_at(tree), "'{}' is not a directory".format(include_dir))
         def stmt_root_include_module(tree):
             filename = os.path.join(os.path.dirname(currently_parsed_filenames[-1]), find_named_token(tree, 'path'))
             if not filename.endswith('.conf'):
-                print_warn_at(def_at(tree), "module files should always end in .conf")
+                log.print_warn_at(def_at(tree), "module files should always end in .conf")
             _include_module_file(tree, filename)
 
         if restrict_to_modules:
             def other(tree):
-                die_print_error_at(def_at(tree), "'{}' must not be used in a module config".format(tree.data))
+                log.die_print_error_at(def_at(tree), "'{}' must not be used in a module config".format(tree.data))
 
             apply_tree_nodes(ctxt.children, [
                     blck_module,
@@ -1108,7 +1016,7 @@ def load_config_tree(config_file):
         try:
             return larkparser.parse(f.read())
         except (lark.exceptions.UnexpectedCharacters, lark.exceptions.UnexpectedToken) as e:
-            print_message_with_file_location(config_file, msg_error(str(e).splitlines()[0]), e.line, (e.column, e.column))
+            log.print_message_with_file_location(config_file, log.msg_error(str(e).splitlines()[0]), e.line, (e.column, e.column))
             sys.exit(1)
 
 def get_config_file(config_file, warn=False):
@@ -1139,7 +1047,7 @@ def load_config(config_file):
 
     def get_module(stmt):
         if stmt.module_name not in config.modules:
-            die_print_error_at(stmt.at, "module '{}' is never defined".format(stmt.module_name))
+            log.die_print_error_at(stmt.at, "module '{}' is never defined".format(stmt.module_name))
         return config.modules[stmt.module_name]
 
     # Resolve module dependencies

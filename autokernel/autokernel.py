@@ -4,6 +4,7 @@ import autokernel.lkddb
 import autokernel.node_detector
 import autokernel.symbol_tracking
 from autokernel import log
+from autokernel import util
 from autokernel.symbol_tracking import set_value_detect_conflicts
 
 import argparse
@@ -117,15 +118,15 @@ def apply_autokernel_config(args, kconfig, config):
         try:
             return kconfig.syms[stmt.sym_name]
         except KeyError:
-            autokernel.config.die_print_error_at(stmt.at, "symbol '{}' does not exist".format(stmt.sym_name))
+            log.die_print_error_at(stmt.at, "symbol '{}' does not exist".format(stmt.sym_name))
 
     # Asserts that the symbol has the given value
     def assert_symbol(stmt):
         if not stmt.assert_condition.evaluate(kconfig):
             if stmt.message:
-                autokernel.config.die_print_error_at(stmt.at, "assertion failed: {}".format(stmt.message))
+                log.die_print_error_at(stmt.at, "assertion failed: {}".format(stmt.message))
             else:
-                autokernel.config.die_print_error_at(stmt.at, "assertion failed")
+                log.die_print_error_at(stmt.at, "assertion failed")
 
     # Sets a symbols value if and asserts that there are no conflicting double assignments
     def set_symbol(stmt):
@@ -134,23 +135,23 @@ def apply_autokernel_config(args, kconfig, config):
         value = stmt.value
 
         if not autokernel.kconfig.symbol_can_be_user_assigned(sym):
-            autokernel.config.die_print_error_at(stmt.at, "symbol {} can't be user-assigned".format(sym.name))
+            log.die_print_error_at(stmt.at, "symbol {} can't be user-assigned".format(sym.name))
 
         # Skip assignment if value is already pinned and the statement is in try mode.
         if stmt.has_try and sym in autokernel.symbol_tracking.symbol_changes:
             log.verbose("skipping {} {}".format(autokernel.kconfig.value_to_str(value), sym.name))
             return
 
-        if autokernel.config.is_env_var(value):
-            value = autokernel.config.resolve_env_variable(stmt.at, value)
+        if util.is_env_var(value):
+            value = util.resolve_env_variable(stmt.at, value)
 
         if not set_value_detect_conflicts(sym, value, stmt.at):
-            autokernel.config.die_print_error_at(stmt.at, "invalid value {} for symbol {}".format(autokernel.kconfig.value_to_str(value), sym.name))
+            log.die_print_error_at(stmt.at, "invalid value {} for symbol {}".format(autokernel.kconfig.value_to_str(value), sym.name))
 
         if sym.str_value != value:
             if not stmt.has_try:
                 # Only throw an error if it wasn't a try
-                autokernel.config.die_print_error_at(stmt.at, "symbol assignment failed: {} from {} → {}".format(
+                log.die_print_error_at(stmt.at, "symbol assignment failed: {} from {} → {}".format(
                     sym.name,
                     autokernel.kconfig.value_to_str(sym.str_value),
                     autokernel.kconfig.value_to_str(value)))
@@ -1189,7 +1190,7 @@ class ThrowingArgumentParser(argparse.ArgumentParser):
     def error(self, message):
         raise ArgumentParserError(message)
 
-def main():
+def autokernel_main():
     """
     Parses options and dispatches control to the correct subcommand function
     """
@@ -1315,9 +1316,9 @@ def main():
         # Execute the mode's function
         args.func(args)
 
-def main_checked():
+def main():
     try:
-        main()
+        autokernel_main()
     except PermissionError as e:
         log.die(str(e))
     except Exception as e: # pylint: disable=broad-except
@@ -1326,4 +1327,4 @@ def main_checked():
         log.die("Aborted because of previous errors")
 
 if __name__ == '__main__':
-    main_checked()
+    main()

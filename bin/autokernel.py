@@ -12,4 +12,4 @@ sys.path.insert(0, parent_dir)
 import autokernel.autokernel
 
 if __name__ == "__main__":
-    autokernel.autokernel.main_checked()
+    autokernel.autokernel.main()
