@@ -14,12 +14,12 @@
 Autokernel is primarily a kernel configuration management tool.
 Its main purpose is to generate a kernel `.config` file from
 a more formal description of your configuration.
-To help you write a good config, it comes with a set of helpful features:
+To help you writing the configuration, it comes with some helpful features:
 
 * Detect kernel options for your system (based on information from `/sys`)
-* Manage the kernel configuration in a more structured and sane way
-  - Option conflict detection
-  - Conditional expressions for configurations
+* Manage the kernel configuration in a more structured and sane way.
+  Option conflict detection and conditional expressions for configuration statements
+  allow writing a sound, modular and reusable configuration.
 * Build the kernel (and initramfs) and install them
 
 You may use it for any combination of the above, There is no need to
