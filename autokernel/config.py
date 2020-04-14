@@ -1038,8 +1038,8 @@ def load_config(config_file):
     """
     Loads the autokernel configuration file.
     """
-    with config_file_path(config_file) as config_file_path:
-        config_file = config_file_path(config_file)
+    with config_file_path(config_file) as config_file:
+        config_file = str(config_file)
         tree = load_config_tree(config_file)
         config = Config()
 
