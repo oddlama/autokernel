@@ -257,7 +257,7 @@ merge
 assert
 ^^^^^^
 
-.. confval:: module :: assert <aexpr> [<quoted_message>] [if <cexpr>]
+.. confval:: module :: assert <aexpr> [: <quoted_message>] [if <cexpr>]
 
     **Arguments:**
 

@@ -77,7 +77,7 @@ are missing to enable an option:
 
 .. code-block:: bash
 
-    autokernel satisfy -g DVB_USB_RTL28XXU
+    autokernel satisfy -g WLAN
 
 Querying symbol information
 ---------------------------
@@ -86,7 +86,7 @@ Query symbol information (menuconfig help text) with ``info``:
 
 .. code-block:: bash
 
-    autokernel info DVB_USB_RTL28XXU
+    autokernel info WLAN
 
 Querying symbol reverse dependencies
 ------------------------------------

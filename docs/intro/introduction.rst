@@ -47,8 +47,8 @@ Conflict detection
 Satisfying dependencies
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-    If you enable a symbol (for example ``DVB_USB_RTL28XXU``), but forget some of
-    its dependencies (like ``MEDIA_SUPPORT``), autokernel will throw an error.
+    If you enable a symbol (for example ``WLAN``), but forget to enable some of
+    its dependencies (like ``NETDEVICES``), autokernel will throw an error.
     But it can also help you to resolve these dependencies and
     present you with a list of options that need to be enabled to allow the assignment.
     See :ref:`usage-command-satisfy` for more info.
