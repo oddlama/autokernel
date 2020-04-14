@@ -64,17 +64,15 @@ html_static_path = ['_static']
 
 # Force usage of our theme_options
 html_style = None
+#html_logo = "autokernel_banner_social_rounded.svg"
 html_theme = 'sphinx_rtd_theme'
 html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
-
 html_theme_options = {
     # Show only logo without title text
 #    "logo_only": True,
     # Have a tree like navigation
     "collapse_navigation": False,
 }
-
-#html_logo = "autokernel_banner_social_rounded.svg"
 
 # Extensions to theme docs
 def setup(app):

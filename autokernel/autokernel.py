@@ -3,6 +3,7 @@ import autokernel.config
 import autokernel.lkddb
 import autokernel.node_detector
 import autokernel.symbol_tracking
+from autokernel import __version__
 from autokernel import log
 from autokernel import util
 from autokernel.symbol_tracking import set_value_detect_conflicts
@@ -1221,6 +1222,8 @@ def autokernel_main():
             help="The autokernel configuration file to use. Default is to use '/etc/autokernel/autokernel.conf' or an internal fallback if the default path doesn't exist.")
     parser.add_argument('--no-color', dest='use_color', action='store_false',
             help="Disables coloring in normal output.")
+    parser.add_argument('--version', action='version',
+            version='%(prog)s {version}'.format(version=__version__))
 
     # Output options
     output_options = parser.add_mutually_exclusive_group()
