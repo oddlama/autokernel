@@ -194,8 +194,8 @@ For a more in-depth explanation of autokernel's configuration, see the sections 
 
     The default configuration that is generated when using ``autokernel setup`` is
     a great starting point to write your own configuration. If you have already changed
-    it, you can view the original files `on github <https://github.com/oddlama/autokernel/tree/master/contrib/etc>`__
-    or in the autokernel module directory under ``contrib/etc``.
+    it, you can view the original files `on github <https://github.com/oddlama/autokernel/tree/master/autokernel/contrib/etc>`__
+    or in the autokernel module directory under ``autokernel/contrib/etc``.
 
 The most important directives are outlined in the following and by this example:
 
@@ -405,8 +405,8 @@ Hardening the kernel
 
 Autokernel provides a preconfigured module for kernel hardening,
 which is installed to ``/etc/autokernel/modules.d/hardening.conf`` if
-you used ``autokernel setup``. Otherwise you will find it `on github <https://github.com/oddlama/autokernel/tree/master/contrib/etc/modules.d/hardening.conf>`__ or
-in the autokernel module directory under ``contrib/etc/modules.d/hardening.conf``.
+you used ``autokernel setup``. Otherwise you will find it `on github <https://github.com/oddlama/autokernel/tree/master/autokernel/contrib/etc/modules_d/hardening.conf>`__ or
+in the autokernel module directory under ``autokernel/contrib/etc/modules_d/hardening.conf``.
 
 The hardening module is compatible with any kernel version >= 4.0.
 Every choice is also fully documented and explanined. Feel free to adjust it to your needs.
