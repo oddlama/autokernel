@@ -38,25 +38,24 @@ def check_execution_environment(args):
     check_program_exists('make')
 
     cur_uid = os.geteuid()
-    config_file = autokernel.config.get_config_file(args.autokernel_config, warn=True)
+    with autokernel.config.config_file_path(args.autokernel_config, warn=True) as config_file:
+        def _die_writable_config_by(component, name):
+            log.die("Refusing to run, because the path '{0}' is writable by {1}. This allows {1} to replace the configuration '{2}' and thus inject commands.".format(component, name, config_file))
 
-    def _die_writable_config_by(component, name):
-        log.die("Refusing to run, because the path '{0}' is writable by {1}. This allows {1} to replace the configuration '{2}' and thus inject commands.".format(component, name, config_file))
+        if not config_file.exists():
+            log.die("Configuration file '{}' does not exist!".format(config_file))
 
-    if not os.path.exists(config_file):
-        log.die("Configuration file '{}' does not exist!".format(config_file))
-
-    # Ensure that the config file has the correct mode, to prevent command-injection by other users.
-    # No component of the path may be modifiable by anyone else but the current user (or root).
-    config_path = Path(os.path.realpath(config_file))
-    for component in [config_path] + [p for p in config_path.parents]:
-        st = component.stat()
-        if st.st_uid != cur_uid and st.st_uid != 0 and st.st_mode & stat.S_IWUSR:
-            _die_writable_config_by(component, 'user {} ({})'.format(st.st_uid, pwd.getpwuid(st.st_uid).pw_name))
-        if st.st_gid != 0 and st.st_mode & stat.S_IWGRP:
-            _die_writable_config_by(component, 'group {} ({})'.format(st.st_gid, grp.getgrgid(st.st_gid).gr_name))
-        if st.st_mode & stat.S_IWOTH:
-            _die_writable_config_by(component, 'others')
+        # Ensure that the config file has the correct mode, to prevent command-injection by other users.
+        # No component of the path may be modifiable by anyone else but the current user (or root).
+        config_path = config_file.resolve()
+        for component in [config_path] + [p for p in config_path.parents]:
+            st = component.stat()
+            if st.st_uid != cur_uid and st.st_uid != 0 and st.st_mode & stat.S_IWUSR:
+                _die_writable_config_by(component, 'user {} ({})'.format(st.st_uid, pwd.getpwuid(st.st_uid).pw_name))
+            if st.st_gid != 0 and st.st_mode & stat.S_IWGRP:
+                _die_writable_config_by(component, 'group {} ({})'.format(st.st_gid, grp.getgrgid(st.st_gid).gr_name))
+            if st.st_mode & stat.S_IWOTH:
+                _die_writable_config_by(component, 'others')
 
 def replace_common_vars(args, p):
     p = str(p)
@@ -235,12 +234,28 @@ def main_setup(args):
     """
     log.info("Setting up autokernel configuration at '{}'".format(args.setup_dir))
 
-    dirpath = Path(args.setup_dir)
-    if dirpath.exists():
+    setup_dir = Path(args.setup_dir)
+    if setup_dir.exists():
         log.die("Refusing to setup: directory '{}' exists".format(args.setup_dir))
 
     saved_umask = os.umask(0o077)
-    shutil.copytree(os.path.join(os.path.dirname(__file__), 'contrib/etc'), dirpath)
+
+    setup_dir.mkdir()
+    modules_d_dir = setup_dir / 'modules.d'
+    modules_d_dir.mkdir()
+
+    import autokernel.contrib.etc as etc
+    import autokernel.contrib.etc.modules_d as modules_d
+    for i in util.resource_contents(etc):
+        if i.endswith('.conf'):
+            with (setup_dir / i).open('w') as f:
+                f.write(util.read_resource(i, pkg=etc))
+
+    for i in util.resource_contents(modules_d):
+        if i.endswith('.conf'):
+            with (modules_d_dir / i).open('w') as f:
+                f.write(util.read_resource(i, pkg=modules_d))
+
     os.umask(saved_umask)
 
     log.info("A default configuration has been installed")

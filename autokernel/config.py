@@ -3,6 +3,7 @@ import lark
 import lark.exceptions
 import os
 import sys
+from pathlib import Path
 
 import autokernel.util as util
 import autokernel.kconfig
@@ -21,8 +22,8 @@ def get_lark_parser():
     """
     global _lark # pylint: disable=global-statement
     if _lark is None:
-        with open(os.path.join(os.path.dirname(__file__), 'contrib/config.lark'), 'r') as f:
-            _lark = lark.Lark(f.read(), propagate_positions=True, start='blck_root')
+        config_lark = util.read_resource('config.lark')
+        _lark = lark.Lark(config_lark, propagate_positions=True, start='blck_root')
 
     return _lark
 
@@ -1019,17 +1020,17 @@ def load_config_tree(config_file):
             log.print_message_with_file_location(config_file, log.msg_error(str(e).splitlines()[0]), e.line, (e.column, e.column))
             sys.exit(1)
 
-def get_config_file(config_file, warn=False):
+def config_file_path(config_file, warn=False):
     if config_file:
-        return config_file
+        return Path(config_file)
 
-    config_file = '/etc/autokernel/autokernel.conf'
-    if not os.path.exists(config_file):
+    config_file = Path('/etc/autokernel/autokernel.conf')
+    if not config_file.exists():
         if warn:
             log.warn("Configuration file '/etc/autokernel/autokernel.conf' not found")
             log.warn("You may want to run `autokernel setup` to install a default config.")
             log.warn("Falling back to a minimal internal configuration!")
-        config_file = os.path.join(os.path.dirname(__file__), 'contrib/internal.conf')
+        config_file = util.resource_path('internal.conf')
 
     return config_file
 
@@ -1037,40 +1038,41 @@ def load_config(config_file):
     """
     Loads the autokernel configuration file.
     """
-    config_file = get_config_file(config_file)
-    tree = load_config_tree(config_file)
-    config = Config()
+    with config_file_path(config_file) as config_file_path:
+        config_file = config_file_path(config_file)
+        tree = load_config_tree(config_file)
+        config = Config()
 
-    currently_parsed_filenames.append(config_file)
-    config.parse_tree(tree)
-    currently_parsed_filenames.pop()
+        currently_parsed_filenames.append(config_file)
+        config.parse_tree(tree)
+        currently_parsed_filenames.pop()
 
-    def get_module(stmt):
-        if stmt.module_name not in config.modules:
-            log.die_print_error_at(stmt.at, "module '{}' is never defined".format(stmt.module_name))
-        return config.modules[stmt.module_name]
+        def get_module(stmt):
+            if stmt.module_name not in config.modules:
+                log.die_print_error_at(stmt.at, "module '{}' is never defined".format(stmt.module_name))
+            return config.modules[stmt.module_name]
 
-    # Resolve module dependencies
-    for m in config.modules:
-        mod = config.modules[m]
-        for u in mod.uses:
+        # Resolve module dependencies
+        for m in config.modules:
+            mod = config.modules[m]
+            for u in mod.uses:
+                u.module = get_module(u)
+
+        # Resolve kernel dependencies
+        kmod = config.kernel.module
+        for u in kmod.uses:
             u.module = get_module(u)
 
-    # Resolve kernel dependencies
-    kmod = config.kernel.module
-    for u in kmod.uses:
-        u.module = get_module(u)
+        # Assert that build_command and build_output are set if initramfs is enabled.
+        if config.initramfs.enabled:
+            if len(config.initramfs.build_command.value) == 0:
+                log.die("config: initramfs is enabled, but initramfs.build_command has not been defined!")
+            if not config.initramfs.build_output and not any(['{INITRAMFS_OUTPUT}' in a for a in config.initramfs.build_command.value]):
+                log.die("config: initramfs is enabled, and neither {INITRAMFS_OUTPUT} was used in the build_command, nor initramfs.build_output has been defined!")
 
-    # Assert that build_command and build_output are set if initramfs is enabled.
-    if config.initramfs.enabled:
-        if len(config.initramfs.build_command.value) == 0:
-            log.die("config: initramfs is enabled, but initramfs.build_command has not been defined!")
-        if not config.initramfs.build_output and not any(['{INITRAMFS_OUTPUT}' in a for a in config.initramfs.build_command.value]):
-            log.die("config: initramfs is enabled, and neither {INITRAMFS_OUTPUT} was used in the build_command, nor initramfs.build_output has been defined!")
+        if config.install.target_dir.value[0] != '/':
+            log.die("config: install.target_dir must be an absolute path!")
+        if config.install.modules_prefix.value and config.install.modules_prefix.value[0] != '/':
+            log.die("config: install.modules_prefix must be an absolute path!")
 
-    if config.install.target_dir.value[0] != '/':
-        log.die("config: install.target_dir must be an absolute path!")
-    if config.install.modules_prefix.value and config.install.modules_prefix.value[0] != '/':
-        log.die("config: install.modules_prefix must be an absolute path!")
-
-    return config
+        return config

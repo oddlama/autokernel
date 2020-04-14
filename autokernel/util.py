@@ -1,7 +1,14 @@
 import codecs
 import os
 import re
+import autokernel.contrib
 from autokernel import log
+
+try:
+    import importlib.resources as pkg_resources
+except ImportError:
+    # Try backported to py<37 `importlib_resources`.
+    import importlib_resources as pkg_resources
 
 kernel_option_regex = re.compile('^[_A-Z0-9]*[_A-Z][_A-Z0-9]*$')
 
@@ -46,3 +53,12 @@ def resolve_env_variable(hint_at, var):
     if value is None:
         log.die_print_error_at(hint_at, "unknown environment variable '{}'.".format(envvar))
     return value
+
+def read_resource(name, pkg=autokernel.contrib):
+    return pkg_resources.read_text(pkg, name)
+
+def resource_path(name, pkg=autokernel.contrib):
+    return pkg_resources.path(pkg, name)
+
+def resource_contents(pkg):
+    return pkg_resources.contents(pkg)
