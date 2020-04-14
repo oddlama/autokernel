@@ -20,7 +20,6 @@ EXPR_CMP_LEQ: "<="
 EXPR_CMP_NEQ: ( WS "is" WS "not" WS | "!=" )
 EXPR_CMP_EQ:  ( WS "is" WS | "==" )
 
-expr_id: KERNEL_OPTION
 expr_op_neg: "not" WS
            | "!"
 expr_op_cmp: EXPR_CMP_GE
@@ -31,9 +30,12 @@ expr_op_cmp: EXPR_CMP_GE
            | EXPR_CMP_EQ
 
 EXPR_STRING: /[\$_a-zA-Z0-9.,-]+/
-expr_string: ESCAPED_STRING -> string_quoted
-           | EXPR_STRING    -> string
+EXPR_ENV_STRING: "$env[" EXPR_STRING [ ":" ESCAPED_STRING ] "]"
+expr_string: ESCAPED_STRING  -> string_quoted
+           | EXPR_STRING     -> string
+           | EXPR_ENV_STRING -> string
 expr_param: expr_string
+expr_id: expr_string
 
 expr:         expr_term ( WS "or" WS expr_term | "||" expr_term )*
 expr_term:    expr_factor ( WS "and" WS expr_factor | "&&" expr_factor )*
@@ -62,7 +64,7 @@ ctxt_module: ( tok_ignore
 stmt_module_if:          "if"     _expr_ws "{" ctxt_module "}" ( "else" WS "if" _expr_ws "{" ctxt_module "}" )* [ "else" WS "{" ctxt_module "}" ]
 stmt_module_use:         "use"    ( WS IDENTIFIER )+                                 [ WS "if" _expr_ws ] ";"
 stmt_module_merge:       "merge"  WS path                                            [ WS "if" _expr_ws ] ";"
-stmt_module_assert:      "assert" _expr_ws [ WS quoted_param ]                       [ WS "if" _expr_ws ] ";"
+stmt_module_assert:      "assert" _expr_ws [ ":" quoted_param ]                      [ WS "if" _expr_ws ] ";"
 stmt_module_set:         [ TRY ] "set" WS KERNEL_OPTION [ WS kernel_option_value ]   [ WS "if" _expr_ws ] ";"
 stmt_module_add_cmdline: "add_cmdline" ( WS quoted_param )+                          [ WS "if" _expr_ws ] ";"
 
@@ -156,8 +158,9 @@ IDENTIFIER:    ( "_" | "-" | LETTER | DIGIT )+
 
 // The negative lookbehind avoids beeing greedy for the semicolon at the end
 STRING: /\S+(?<!;)/
-string: ESCAPED_STRING -> string_quoted
-      | STRING         -> string
+string: ESCAPED_STRING  -> string_quoted
+      | EXPR_ENV_STRING -> string
+      | STRING          -> string
 quoted_string: ESCAPED_STRING -> string_quoted
 
 // meta
@@ -165,7 +168,8 @@ quoted_string: ESCAPED_STRING -> string_quoted
 
 _STRING_INNER: /.*?/
 _STRING_ESC_INNER: _STRING_INNER /(?<!\\)(\\\\)*?/
-ESCAPED_STRING: "\"" _STRING_ESC_INNER "\"" | "'" _STRING_ESC_INNER "'"
+ESCAPED_STRING: "\"" _STRING_ESC_INNER "\""
+              | "'" _STRING_ESC_INNER "'"
 
 %import common.LETTER
 %import common.DIGIT

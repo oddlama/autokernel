@@ -102,6 +102,39 @@ module
                 set EXAMPLE y;
             }
 
+.. _directive-module-if:
+
+if
+^^
+
+.. confval:: if <expr> { ... } [else if <expr> { ... }]... [else <expr> { ... }]
+
+    **Arguments:**
+
+        =========== =============
+        ``expr``    Expressions
+        =========== =============
+
+    Guards statements with the given expressions.
+
+    **Example:**
+
+        .. code-block:: ruby
+
+            module example {
+                if X86 {
+                    # X86 is set
+                } else if $env[CC] == "gcc" {
+                    # env var CC is "gcc"
+                }
+
+                if $env[HOSTNAME:""] {
+                    # env var HOSTNAME is set
+                } else {
+                    # env var HOSTNAME is empty or unset
+                }
+            }
+
 .. _directive-module-use:
 
 use
@@ -128,8 +161,10 @@ use
 
         .. code-block:: ruby
 
-            use foo;
-            use example module_three;
+            module example {
+                use foo;
+                use other_example module_three;
+            }
 
 .. _directive-module-set:
 
@@ -153,6 +188,9 @@ set
     Symbols are always assigned by string, but restrictions for type conversion apply
     (e.g. integer symbols will only take valid integers).
 
+    Variables can be set to environment variables by using the same syntax as
+    described in :ref:`expr-special-variables`.
+
     If the statement is prefixed with ``try``, it will only be executed if the value is not
     already pinned, and the assignment will also not cause the value to be pinned. Useful
     to set a new default value for a symbol but still allowing the user to change it.
@@ -164,18 +202,27 @@ set
 
         .. code-block:: ruby
 
-            # Enable WIREGUARD if kernel version is at least 5.6
-            set WIREGUARD y if $kernel_version >= 5.6;
-            # Build KVM as module
-            set KVM m;
-            # Set a hex symbol
-            set MAGIC_SYSRQ_DEFAULT_ENABLE 0x1;
-            # Set an integer symbol
-            set DEFAULT_MMAP_MIN_ADDR 65536;
-            # Set a string symbol
-            set DEFAULT_HOSTNAME "my_host";
-            # Try to set MODULES, if it isn't pinned already
-            try set MODULES n;
+            module example {
+                # Enable WIREGUARD if kernel version is at least 5.6
+                set WIREGUARD y if $kernel_version >= 5.6;
+                # Build KVM as module
+                set KVM m;
+
+                # Set a hex symbol
+                set MAGIC_SYSRQ_DEFAULT_ENABLE 0x1;
+                # Set an integer symbol
+                set DEFAULT_MMAP_MIN_ADDR 65536;
+
+                # Set a string symbol
+                set DEFAULT_HOSTNAME "my_host";
+                # Set to an environment variable, throws an error if unset
+                set DEFAULT_HOSTNAME $env[HOSTNAME];
+                # Set to an environment variable, or uses the default value if unset
+                set DEFAULT_HOSTNAME $env[HOSTNAME:"(none)"];
+
+                # Try to set MODULES, if it isn't pinned already
+                try set MODULES n;
+            }
 
 .. _directive-module-merge:
 
@@ -210,8 +257,10 @@ merge
 
         .. code-block:: ruby
 
-            # Merge the x86_64 defconfig file
-            merge "{KERNEL_DIR}/arch/x86/configs/x86_64_defconfig";
+            module example {
+                # Merge the x86_64 defconfig file
+                merge "{KERNEL_DIR}/arch/x86/configs/x86_64_defconfig";
+            }
 
 .. _directive-module-assert:
 
@@ -235,9 +284,11 @@ assert
 
         .. code-block:: ruby
 
-            # Assert that WIREGUARD is enabled if the kernel version is at least 5.6
-            assert $kernel_version >= 5.6 and WIREGUARD
-                "Refusing to compile a 5.6 kernel without wireguard";
+            module example {
+                # Assert that WIREGUARD is enabled if the kernel version is at least 5.6
+                assert $kernel_version >= 5.6 and WIREGUARD :
+                    "Refusing to compile a 5.6 kernel without wireguard";
+            }
 
 .. _directive-module-add-cmdline:
 
@@ -261,8 +312,10 @@ add_cmdline
 
         .. code-block:: ruby
 
-            # Adds the two strings to the builtin command line.
-            add_cmdline "page_alloc.shuffle=1" "second_param";
+            module example {
+                # Adds the two strings to the builtin command line.
+                add_cmdline "page_alloc.shuffle=1" "second_param";
+            }
 
 .. _directive-kernel:
 

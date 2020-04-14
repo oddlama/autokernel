@@ -24,7 +24,7 @@ They are intended to provide a level of encapsulation for groups of symbols.
 
         module example {
             # Asserts that the configured kernel is at least on version 4.0
-            assert $kernel_version >= 4.0 "this kernel is too old!";
+            assert $kernel_version >= 4.0: "this kernel is too old!";
 
             # Merge in the x86_64 defconfig
             merge "{KERNEL_DIR}/arch/x86/configs/x86_64_defconfig";

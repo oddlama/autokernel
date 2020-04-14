@@ -131,25 +131,29 @@ def apply_autokernel_config(args, kconfig, config):
     def set_symbol(stmt):
         # Get the kconfig symbol, and change the value
         sym = get_sym(stmt)
+        value = stmt.value
 
         if not autokernel.kconfig.symbol_can_be_user_assigned(sym):
             autokernel.config.die_print_error_at(stmt.at, "symbol {} can't be user-assigned".format(sym.name))
 
         # Skip assignment if value is already pinned and the statement is in try mode.
         if stmt.has_try and sym in autokernel.symbol_tracking.symbol_changes:
-            log.verbose("skipping {} {}".format(autokernel.kconfig.value_to_str(stmt.value), sym.name))
+            log.verbose("skipping {} {}".format(autokernel.kconfig.value_to_str(value), sym.name))
             return
 
-        if not set_value_detect_conflicts(sym, stmt.value, stmt.at):
-            autokernel.config.die_print_error_at(stmt.at, "invalid value {} for symbol {}".format(autokernel.kconfig.value_to_str(stmt.value), sym.name))
+        if autokernel.config.is_env_var(value):
+            value = autokernel.config.resolve_env_variable(stmt.at, value)
 
-        if sym.str_value != stmt.value:
+        if not set_value_detect_conflicts(sym, value, stmt.at):
+            autokernel.config.die_print_error_at(stmt.at, "invalid value {} for symbol {}".format(autokernel.kconfig.value_to_str(value), sym.name))
+
+        if sym.str_value != value:
             if not stmt.has_try:
                 # Only throw an error if it wasn't a try
                 autokernel.config.die_print_error_at(stmt.at, "symbol assignment failed: {} from {} → {}".format(
                     sym.name,
                     autokernel.kconfig.value_to_str(sym.str_value),
-                    autokernel.kconfig.value_to_str(stmt.value)))
+                    autokernel.kconfig.value_to_str(value)))
             else:
                 log.verbose("failed try set {} {} (symbol is currently not assignable to the chosen value)".format(autokernel.kconfig.value_to_str(stmt.value), sym.name))
 

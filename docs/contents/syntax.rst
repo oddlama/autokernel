@@ -239,6 +239,26 @@ comparisons are different to integer comparisons. The rules are simple:
 #. If no type can be inferred, string comparison will be used (e.g. when comparing two literals).
 #. Variables of different types cannot be mixed.
 
+.. _expr-special-variables:
+
+Special variables
+~~~~~~~~~~~~~~~~~
+
+There are several special variables which you can use in comparison expressions.
+They must be used in unquoted form and will allow you to depend on runtime information.
+
+========================== ======== =================================================
+Variable                   Type     Description
+========================== ======== =================================================
+``$kernel_version``        semver   Expands to the semver of the specified kernel
+``$uname_arch``            string   The uname as reported by ``uname -m``
+``$arch``                  string   The architecture as seen by the kernel internally
+``$false``                 tristate Always ``'n'``
+``$true``                  tristate Always ``'y'``
+``$env[VAR]``              string   Environment variable ``VAR``, throws an error if unset
+``$env[VAR:<quoted_str>]`` string   Environment vairable ``VAR`` or the given default
+========================== ======== =================================================
+
 Comparison types
 ~~~~~~~~~~~~~~~~
 
@@ -273,7 +293,11 @@ Type         Description
     ``SOME_TRISTATE == 'm'``     tristate
     ``SOME_TRISTATE == 'y'``     tristate
     ``12345 != 12``              string
+    ``$env[CC] == "gcc"``        string
     ``$kernel_version >= 5.6``   semver
+    ``SOME_TRISTATE``            tristate (implicit bool conversion)
+    ``SOME_STRING``              string (implicit bool conversion)
+    ``$env[HOSTNAME]``           string (implicit bool conversion)
     ============================ =======================================
 
 .. topic:: Invalid expression examples
@@ -286,23 +310,28 @@ Type         Description
     ``SOME_HEX > 1``                 hex, invalid prefix
     ``SOME_INT == SOME_HEX``         cannot mix types
     ``$kernel_version >= SOME_INT``  cannot mix types
+    ``SOME_HEX``                     hex, invalid implicit bool conversion
     ================================ =======================================
 
-Special variables
-~~~~~~~~~~~~~~~~~
+Implicit bool conversion
+~~~~~~~~~~~~~~~~~~~~~~~~
 
-There are several special variables which you can use in comparison expressions.
-They must be used in unquoted form and will allow you to depend on runtime information.
+All kernel symbols, all tristate special variables and ``$env[...]`` variables can implicitly be converted to bool.
+This means you can use these short forms:
 
-=================== ======== =================================================
-Variable            Type     Description
-=================== ======== =================================================
-``$kernel_version`` semver   Expands to the semver of the specified kernel
-``$uname_arch``     string   The uname as reported by ``uname -m``
-``$arch``           string   The architecture as seen by the kernel internally
-``$false``          tristate Always ``'n'``
-``$true``           tristate Always ``'y'``
-=================== ======== =================================================
+.. code-block:: ruby
+
+    # Same as X86 != n (X86 is a tristate symbol)
+    if X86 { ... }
+
+    # Same as DEFAULT_HOSTNAME != "" (DEFAULT_HOSTNAME is a string symbol)
+    if DEFAULT_HOSTNAME { ... }
+
+    # Same as $false != n
+    if $false { ... }
+
+    # Same as $env[TEST] != ""
+    if $env[TEST] { ... }
 
 Short-circuiting (early-out)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^

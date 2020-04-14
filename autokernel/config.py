@@ -43,9 +43,10 @@ def decode_escapes(s):
 
     return ESCAPE_SEQUENCE_RE.sub(decode_match, s)
 
-def remove_quotes(s):
+def decode_quotes(s):
     """
     Strips leading and trailing quotes from the string, if any.
+    Also decodes escapes inside the string.
     """
     return decode_escapes(s[1:-1]) if s[0] == s[-1] and s[0] in ['"', "'"] else s
 
@@ -145,7 +146,7 @@ def find_token(tree, token_name, ignore_missing=False, strip_quotes=False):
     """
     for c in tree.children:
         if c.__class__ == lark.Token and c.type == token_name:
-            return remove_quotes(str(c)) if strip_quotes else str(c)
+            return decode_quotes(str(c)) if strip_quotes else str(c)
 
     if not ignore_missing:
         die_print_error_at(def_at(tree), "missing token '{}'".format(token_name))
@@ -154,7 +155,13 @@ def find_token(tree, token_name, ignore_missing=False, strip_quotes=False):
 class TokenRawInfo:
     def __init__(self, tree, value, is_quoted):
         self.at = def_at(tree)
-        self.value = remove_quotes(value) if is_quoted else value
+        self.value = decode_quotes(value) if is_quoted else value
+        self.was_quoted = is_quoted
+
+class TokenRawLiteral:
+    def __init__(self, at, value, is_quoted):
+        self.at = at
+        self.value = decode_quotes(value) if is_quoted else value
         self.was_quoted = is_quoted
 
 def find_named_token_raw(tree, token_name, ignore_missing=False):
@@ -196,7 +203,7 @@ def find_all_tokens(tree, token_name, strip_quotes=False):
     """
     Finds all tokens by name in the children of the given tree.
     """
-    return [remove_quotes(str(c)) if strip_quotes else str(c) \
+    return [decode_quotes(str(c)) if strip_quotes else str(c) \
             for c in tree.children \
                 if c.__class__ == lark.Token and c.type == token_name]
 
@@ -331,10 +338,24 @@ special_var_cmp_mode = {
     '$true':  'tristate',
 }
 
+def is_env_var(var):
+    return var.startswith('$env[') and var.endswith(']')
+
 def get_special_var_cmp_mode(hint_at, var):
-    if var not in special_var_cmp_mode:
-        die_print_error_at(hint_at, "unknown special variable '{}'".format(var))
-    return special_var_cmp_mode[var]
+    if is_env_var(var):
+        return 'string'
+    if var in special_var_cmp_mode:
+        return special_var_cmp_mode[var]
+    die_print_error_at(hint_at, "unknown special variable '{}'".format(var))
+
+def resolve_env_variable(hint_at, var):
+    tokens = var[len('$env['):-1].split(':', 1)
+    envvar = tokens[0]
+    default = None if len(tokens) == 1 else decode_quotes(tokens[1])
+    value = os.environ.get(envvar, default)
+    if value is None:
+        die_print_error_at(hint_at, "unknown environment variable '{}'.".format(envvar))
+    return value
 
 def resolve_special_variable(hint_at, kconfig, var):
     if var == '$kernel_version':
@@ -347,8 +368,8 @@ def resolve_special_variable(hint_at, kconfig, var):
         return 'y'
     elif var == '$false':
         return 'n'
-    elif var.startswith('$env[') and var.endswith(']'):
-        return 'n'
+    elif is_env_var(var):
+        return resolve_env_variable(hint_at, var)
     else:
         die_print_error_at(hint_at, "unknown special variable '{}'".format(var))
 
@@ -450,11 +471,12 @@ class NegatedConditionView():
         return "not {}".format(self.condition)
 
 class VarInfo:
-    def __init__(self, var, value, special, is_sym, cmp_mode):
+    def __init__(self, var, value, special, is_sym, sym, cmp_mode):
         self.var = var
         self.value = value
         self.special = special
         self.is_sym = is_sym
+        self.sym = sym
         self.cmp_mode =  cmp_mode
 
 class Condition:
@@ -487,7 +509,8 @@ class Condition:
         var_special = var.value.startswith('$')
 
         # Resolve symbols
-        var_is_sym = not var.was_quoted and not var_special and kernel_option_regex.match(var.value)
+        var_is_sym = (not var.was_quoted) and (not var_special) and (kernel_option_regex.match(var.value) is not None)
+        sym = None
         if var_is_sym:
             if var.value.startswith('CONFIG_'):
                 sym_name = var.value[len('CONFIG_'):]
@@ -503,10 +526,10 @@ class Condition:
             var_cmp_mode = get_special_var_cmp_mode(var.at, var.value)
         else:
             value = var.value
-            # Normal strings will always inherit the mode
+            # Literal strings will always inherit the mode
             var_cmp_mode = None
 
-        return VarInfo(var, value, var_special, var_is_sym, var_cmp_mode)
+        return VarInfo(var, value, var_special, var_is_sym, sym, var_cmp_mode)
 
 class CachedCondition(Condition):
     """
@@ -615,6 +638,30 @@ class ConditionVarComparison(CachedCondition):
         op_str = ' {} '.format(_compare_op_to_str[self.compare_op])
         return '(' + op_str.join([v.value for v in self.vars]) + ')'
 
+class ConditionVarTruth(CachedCondition):
+    """
+    A condition that determines its truth value based on implicit truth
+    """
+    def __init__(self, tree, operand):
+        super().__init__(tree)
+        self.var = operand
+
+    def _evaluate(self, kconfig):
+        resolved_var = self.resolve_var(self.var, kconfig)
+        cmp_mode = resolved_var.cmp_mode
+
+        if cmp_mode is 'tristate':
+            implicit_var = self.resolve_var(TokenRawLiteral(self.var.at, '"n"', is_quoted=True), kconfig)
+        elif cmp_mode is 'string' and (resolved_var.is_sym or (resolved_var.special and is_env_var(self.var.value))):
+            implicit_var = self.resolve_var(TokenRawLiteral(self.var.at, '""', is_quoted=True), kconfig)
+        else:
+            die_print_error_at(self.at, "cannot implicitly convert '{}' to a truth value".format(self.var.value))
+
+        return compare_variables([resolved_var, implicit_var], 'EXPR_CMP_NEQ', cmp_mode, self.at)
+
+    def __str__(self):
+        return self.var.value
+
 Condition.true = ConditionConstant(True)
 Condition.false = ConditionConstant(False)
 
@@ -639,12 +686,12 @@ def parse_expr_condition(tree):
                         die_print_error_at(def_at(expr_cmp), "all expression operands must be the same for n-ary comparisons")
             return ConditionVarComparison(expr_cmp, operation, operands).negate(negated)
 
-        expr_id = find_first_child(tree, 'expr_id')
+        expr_id = find_named_token(tree, 'expr_id')
         if expr_id:
-            # Implicit truth value is the same as writing 'SYM != "n"'
-            lhs = TokenRawInfo(expr_id, str(expr_id.children[0]), is_quoted=False)
-            rhs = TokenRawInfo(expr_id, '"n"', is_quoted=True)
-            return ConditionVarComparison(expr_id, 'EXPR_CMP_NEQ', [lhs, rhs]).negate(negated)
+            # Implicit truth value is the same as writing 'var != "n"' for tristate symbols
+            # and 'var != ""' for others.
+            operand = TokenRawInfo(tree, str(expr_id), is_quoted=False)
+            return ConditionVarTruth(tree, operand).negate(negated)
 
         expr = find_first_child(tree, 'expr')
         if expr:
