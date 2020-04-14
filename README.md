@@ -6,6 +6,8 @@
 [Documentation](https://autokernel.oddlama.org/en/latest) \|
 [Gitter Chat](https://gitter.im/oddlama-autokernel/community)
 
+[![PyPI](https://img.shields.io/pypi/v/autokernel.svg)](https://pypi.org/pypi/autokernel/)
+[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Docs](https://readthedocs.org/projects/autokernel/badge/?version=latest)](https://autokernel.oddlama.org/en/latest/?badge=latest)
 [![Gitter](https://badges.gitter.im/oddlama-autokernel/community.svg)](https://gitter.im/oddlama-autokernel/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
@@ -19,8 +21,8 @@ To help you writing the configuration, it comes with some helpful features:
 * Detect kernel options for your system (based on information from `/sys`)
 * Manage the kernel configuration in a more structured and sane way.
   Option conflict detection and conditional expressions for configuration statements
-  allow writing a sound, modular and reusable configuration.
-* Build the kernel (and initramfs) and install them
+  allow writing a sound and modular configuration that can be used with multiple kernel versions.
+* Build the kernel (and initramfs) and install them on the system
 
 You may use it for any combination of the above, There is no need to
 use it as a build system if you only want to detect options for your device.
@@ -40,7 +42,7 @@ For in-depth command explanations, visit the [Usage section](https://autokernel.
 
 ## Installation
 
-Use can use pip to install autokernel, or run from source:
+You can use pip to install autokernel, or run from source:
 
 #### pip
 
