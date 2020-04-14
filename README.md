@@ -2,7 +2,7 @@
 [![autokernel](./docs/imgs/autokernel_banner.svg)](https://autokernel.oddlama.org)
 <br/><br/>
 
-[Quick start guide](https://autokernel.oddlama.org/en/latest/quick-start-guide.html) \|
+[Quick start guide](https://autokernel.oddlama.org/en/latest/intro/quick-start-guide.html) \|
 [Documentation](https://autokernel.oddlama.org/en/latest) \|
 [Gitter Chat](https://gitter.im/oddlama-autokernel/community)
 
@@ -11,19 +11,21 @@
 
 ## About autokernel
 
-Autokernel is primarily a kernel configuration management tool. This means
-its main purpose is to be used as a tool to generate a `.config` file from
-your particular set of kernel options. To help you accomplish this, it
-comes with a set of helpful features:
+Autokernel is primarily a kernel configuration management tool.
+Its main purpose is to generate a kernel `.config` file from
+a more formal description of your configuration.
+To help you write a good config, it comes with a set of helpful features:
 
-* Kernel option detection for your system (based on information from `/sys`)
-* Manage your kernel configuration in a sane way and detect option conflicts immediately
-* Can be used as a kernel build system
+* Detect kernel options for your system (based on information from `/sys`)
+* Manage the kernel configuration in a more structured and sane way
+  - Option conflict detection
+  - Conditional expressions for configurations
+* Build the kernel (and initramfs) and install them
 
 You may use it for any combination of the above, There is no need to
 use it as a build system if you only want to detect options for your device.
 
-Please have a look at the [Introduction](https://autokernel.oddlama.org/en/latest/introduction.html)
+Please have a look at the [Introduction](https://autokernel.oddlama.org/en/latest/intro/introduction.html)
 section from the documentation, which explains more about what
 this tool is designed for, and how it works.
 
@@ -31,30 +33,30 @@ this tool is designed for, and how it works.
 
 ## Quick start
 
-To get started right away, please check out the [Quick start guide](https://autokernel.oddlama.org/en/latest/quick-start-guide.html).
+To get started right away, please check out the [Quick start guide](https://autokernel.oddlama.org/en/latest/intro/quick-start-guide.html).
+For in-depth command explanations, visit the [Usage section](https://autokernel.oddlama.org/en/latest/contents/usage.html).
 
 ## Installation
 
-You can simply install the package with pip.
+Use can use pip to install autokernel, or run from source:
+
+#### pip
 
 ```bash
 pip install autokernel
-# Run setup to create a default configuration
-autokernel setup
 ```
 
-Otherwise, you can also clone this repository, and run
-autokernel locally.
+#### From source
 
 ```bash
-# Clone the repo
 git clone "https://github.com/oddlama/autokernel.git"
 cd autokernel
-# Install requirements
-pip install --user -r requirements.txt
-# Execute autokernel with the wrapper in bin/
+pip install -r requirements.txt
 ./bin/autokernel.py --help
 ```
+
+Afterwards you should run `autokernel setup` once to create a default configuration
+in `/etc/autokernel`.
 
 ## Kernel hardening
 
@@ -66,7 +68,7 @@ and explanined. Feel free to adjust it to your needs.
 
 ## Acknowledgements
 
-I would like to especially thank the following projects and people:
+I would like to especially thank the following projects and people behind them:
 
 - [kconfiglib](https://github.com/ulfalizer/Kconfiglib) for the awesome python library to load and process Kconfig files, whithout which this project would have been impossible.
 - [sympy](https://www.sympy.org/) for the sophisitcated symbolic logic solver

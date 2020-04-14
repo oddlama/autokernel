@@ -8,27 +8,17 @@ This is a documentation of all configuration directives.
 global
 ------
 
-The following block directives may appear in the global scope:
+The following block directives may appear in the unnamed global scope:
 
-.. confval:: module <name> { ... }
-
-    See :ref:`directive-module`.
-
-.. confval:: kernel { ... }
-
-    See :ref:`directive-kernel`.
-
-.. confval:: initramfs { ... }
-
-    See :ref:`directive-initramfs`.
-
-.. confval:: build { ... }
-
-    See :ref:`directive-build`.
-
-.. confval:: install { ... }
-
-    See :ref:`directive-install`.
+========= ===========
+Block     Description
+========= ===========
+module    See :ref:`directive-module`.
+kernel    See :ref:`directive-kernel`.
+initramfs See :ref:`directive-initramfs`.
+build     See :ref:`directive-build`.
+install   See :ref:`directive-install`.
+========= ===========
 
 Additionally the following statements may be used:
 
@@ -107,7 +97,7 @@ module
 if
 ^^
 
-.. confval:: if <expr> { ... } [else if <expr> { ... }]... [else <expr> { ... }]
+.. confval:: module :: if <expr> { ... } [else if <expr> { ... }]... [else <expr> { ... }]
 
     **Arguments:**
 
@@ -140,7 +130,7 @@ if
 use
 ^^^
 
-.. confval:: use <modules>... [if <cexpr>]
+.. confval:: module :: use <modules>... [if <cexpr>]
 
     **Arguments:**
 
@@ -171,7 +161,7 @@ use
 set
 ^^^
 
-.. confval:: [try] set <symbol> [value] [if <cexpr>]
+.. confval:: module :: [try] set <symbol> [value] [if <cexpr>]
 
     **Arguments:**
 
@@ -229,7 +219,7 @@ set
 merge
 ^^^^^
 
-.. confval:: merge <path> [if <cexpr>]
+.. confval:: module :: merge <path> [if <cexpr>]
 
     **Arguments:**
 
@@ -267,7 +257,7 @@ merge
 assert
 ^^^^^^
 
-.. confval:: assert <aexpr> [<quoted_message>] [if <cexpr>]
+.. confval:: module :: assert <aexpr> [<quoted_message>] [if <cexpr>]
 
     **Arguments:**
 
@@ -295,7 +285,7 @@ assert
 add_cmdline
 ^^^^^^^^^^^
 
-.. confval:: add_cmdline <quoted_args>... [if <cexpr>]
+.. confval:: module :: add_cmdline <quoted_args>... [if <cexpr>]
 
     **Arguments:**
 
@@ -361,7 +351,7 @@ initramfs
 enabled
 ^^^^^^^
 
-.. confval:: enabled <bool>
+.. confval:: initramfs :: enabled <bool>
 
     **Arguments:**
 
@@ -386,7 +376,7 @@ enabled
 builtin
 ^^^^^^^
 
-.. confval:: builtin <bool>
+.. confval:: initramfs :: builtin <bool>
 
     **Arguments:**
 
@@ -414,7 +404,7 @@ builtin
 build_command
 ^^^^^^^^^^^^^
 
-.. confval:: build_command <exe> [<args>...]
+.. confval:: initramfs :: build_command <exe> [<args>...]
 
     **Arguments:**
 
@@ -501,7 +491,7 @@ build_command
 build_output
 ^^^^^^^^^^^^
 
-.. confval:: build_output <path>
+.. confval:: initramfs :: build_output <path>
 
     **Arguments:**
 
@@ -542,7 +532,7 @@ build
 umask
 ^^^^^
 
-.. confval:: umask <value>
+.. confval:: build :: umask <value>
 
     **Arguments:**
 
@@ -574,7 +564,7 @@ umask
 hooks
 ^^^^^
 
-.. confval:: hooks { ... }
+.. confval:: build :: hooks { ... }
 
     **Default:** ``None``
 
@@ -596,12 +586,26 @@ hooks
 install
 -------
 
+.. confval:: install { ... }
+
+    A block for options related to target installation.
+    Multiple appearances of this block will be merged.
+
+    **Example:**
+
+        .. code-block:: ruby
+
+            install {
+                # Disable initramfs installation
+                target_initramfs false;
+            }
+
 .. _directive-install-umask:
 
 umask
 ^^^^^
 
-.. confval:: umask <value>
+.. confval:: install :: umask <value>
 
     **Arguments:**
 
@@ -627,7 +631,7 @@ umask
 assert_mounted
 ^^^^^^^^^^^^^^
 
-.. confval:: assert_mounted <path>
+.. confval:: install :: assert_mounted <path>
 
     **Arguments:**
 
@@ -652,7 +656,7 @@ assert_mounted
 mount
 ^^^^^
 
-.. confval:: mount <path>
+.. confval:: install :: mount <path>
 
     **Arguments:**
 
@@ -679,7 +683,7 @@ mount
 modules_prefix
 ^^^^^^^^^^^^^^
 
-.. confval:: modules_prefix <path>
+.. confval:: install :: modules_prefix <path>
 
     **Arguments:**
 
@@ -714,7 +718,7 @@ modules_prefix
 target_dir
 ^^^^^^^^^^
 
-.. confval:: target_dir <path>
+.. confval:: install :: target_dir <path>
 
     **Arguments:**
 
@@ -746,7 +750,7 @@ target_dir
 target_kernel
 ^^^^^^^^^^^^^
 
-.. confval:: target_kernel <path>
+.. confval:: install :: target_kernel <path>
 
     **Arguments:**
 
@@ -781,7 +785,7 @@ target_kernel
 target_config
 ^^^^^^^^^^^^^
 
-.. confval:: target_config <path>
+.. confval:: install :: target_config <path>
 
     **Arguments:**
 
@@ -814,7 +818,7 @@ target_config
 target_initramfs
 ^^^^^^^^^^^^^^^^
 
-.. confval:: target_initramfs <path>
+.. confval:: install :: target_initramfs <path>
 
     **Arguments:**
 
@@ -848,7 +852,7 @@ target_initramfs
 keep_old
 ^^^^^^^^
 
-.. confval:: keep_old <number>
+.. confval:: install :: keep_old <number>
 
     **Arguments:**
 
@@ -859,7 +863,7 @@ keep_old
     **Default:** ``-1`` (disable purging)
 
     Automatic purging of old files. Determines the amount of old installed files to keep.
-    Only has an effect on ``target_dir`` and ``targets_*`` if ``{KERNEL_VERSION}`` is used
+    Only has an effect on ``target_dir`` and ``target_*`` if ``{KERNEL_VERSION}`` is used
     in the path. A negative value like ``-1`` disables purging completely, which is the default.
 
     .. warning::
@@ -882,7 +886,7 @@ keep_old
 hooks
 ^^^^^
 
-.. confval:: hooks { ... }
+.. confval:: install :: hooks { ... }
 
     **Default:** ``None``
 
@@ -923,7 +927,7 @@ hooks
 pre
 ^^^
 
-.. confval:: pre <exe> [<args>...]
+.. confval:: hooks :: pre <exe> [<args>...]
 
     **Arguments:**
 
@@ -961,7 +965,7 @@ pre
 post
 ^^^^
 
-.. confval:: post <exe> [<args>...]
+.. confval:: hooks :: post <exe> [<args>...]
 
     **Arguments:**
 

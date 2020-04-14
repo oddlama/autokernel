@@ -85,4 +85,5 @@ def setup(app):
     app.add_object_type(
         'confval',
         'confval',
+        objname='directive'
     )

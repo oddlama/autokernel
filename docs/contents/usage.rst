@@ -28,7 +28,7 @@ Use can use pip to install autokernel, or run from source:
 
         git clone "https://github.com/oddlama/autokernel.git"
         cd autokernel
-        pip install --user -r requirements.txt
+        pip install -r requirements.txt
         ./bin/autokernel.py --help
 
 .. topic:: Setting up the basic configuration
