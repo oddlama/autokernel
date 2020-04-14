@@ -29,7 +29,9 @@ Please have a look at the [Introduction](https://autokernel.oddlama.org/en/lates
 section from the documentation, which explains more about what
 this tool is designed for, and how it works.
 
-[![asciicast](https://asciinema.org/a/crHuqtvO2TTY1juu95J1sKuSJ.svg)](https://asciinema.org/a/crHuqtvO2TTY1juu95J1sKuSJ)
+Detecting kernel options                                                           | Automatically satisfying a kernel option
+---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------
+[![asciicast](https://asciinema.org/a/320174.svg)](https://asciinema.org/a/320174) | [![asciicast](https://asciinema.org/a/320179.svg)](https://asciinema.org/a/320179)
 
 ## Quick start
 
