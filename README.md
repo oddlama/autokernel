@@ -62,7 +62,7 @@ in `/etc/autokernel`.
 
 A special note if you are interested in hardening your kernel:
 Be aware that autokernel provides a preconfigured module for kernel
-hardening ([hardening.conf](./example/modules.d/hardening.conf)), which is
+hardening ([hardening.conf](./contrib/etc/modules.d/hardening.conf)), which is
 compatible with any kernel version >= 4.0. Every choice is also fully documented
 and explanined. Feel free to adjust it to your needs.
 
