@@ -746,19 +746,26 @@ class Module():
         self.assertions = []
         self.rev_deps = []
 
-def check_config_against_detected_modules(kconfig, modules):
+def check_config_against_detected_modules(kconfig, modules, differences_only):
     log.info("Here are the detected options with both current and desired value.")
     log.info("The output format is: [current] OPTION_NAME = desired")
     log.info("HINT: Options are ordered by dependencies, i.e. applying")
     log.info("      them from top to buttom will work")
-    log.info("Indicators: (=) same, (~) changed")
-    log.info("Detected options:")
+    if differences_only:
+        log.info("Detected options (differences only):")
+    else:
+        log.info("Indicators: (=) same, (~) changed")
+        log.info("Detected options:")
 
     visited = set()
     visited_opts = set()
 
-    indicator_same = log.color('[32m=[m', '=')
-    indicator_changed = log.color('[33m~[m', '~')
+    if differences_only:
+        indicator_same = ""
+        indicator_changed = ""
+    else:
+        indicator_same = log.color('[32m=[m', '=')
+        indicator_changed = log.color('[33m~[m', '~')
 
     def visit_opt(opt, new_value):
         # Ensure we visit only once
@@ -772,7 +779,8 @@ def check_config_against_detected_modules(kconfig, modules):
         if changed:
             print(indicator_changed + " {} → {} {}".format(autokernel.kconfig.value_to_str(sym.str_value), autokernel.kconfig.value_to_str(new_value), sym.name))
         else:
-            print(indicator_same + "       {} {}".format(autokernel.kconfig.value_to_str(sym.str_value), sym.name))
+            if not differences_only:
+                print(indicator_same + "       {} {}".format(autokernel.kconfig.value_to_str(sym.str_value), sym.name))
 
     def visit(m):
         # Ensure we visit only once
@@ -1049,6 +1057,10 @@ def main_detect(args):
     if check_only and args.output:
         log.die("--check and --output are mutually exclusive")
 
+    # Assert that --check is not used together with --output
+    if not check_only and args.check_differences:
+        log.die("--differences cannot be used without --check")
+
     # Determine the config file to check against, if applicable.
     if check_only:
         if args.check_config:
@@ -1071,7 +1083,7 @@ def main_detect(args):
         # Load the given config file or the current kernel's config
         kconfig_load_file_or_current_config(kconfig, args.check_config)
         # Check all detected symbols' values and report them
-        check_config_against_detected_modules(kconfig, module_creator.modules)
+        check_config_against_detected_modules(kconfig, module_creator.modules, differences_only=args.check_differences)
     else:
         # Add fallback for output type.
         if not args.output_type:
@@ -1300,6 +1312,8 @@ def autokernel_main():
     parser_detect = subparsers.add_parser('detect', help='Detects configuration options based on information gathered from the running system')
     parser_detect.add_argument('-c', '--check', nargs='?', default=0, dest='check_config', type=check_file_exists,
             help="Instead of outputting the required configuration values, compare the detected options against the given kernel configuration and report the status of each option. If no config file is given, the script will try to load the current kernel's configuration from '/proc/config.gz'.")
+    parser_detect.add_argument('-d', '--differences', dest='check_differences', action='store_true',
+            help="Requires --check. Only report options when the suggested value differs from the current value.")
     parser_detect.add_argument('-t', '--type', choices=['module', 'kconf'], dest='output_type',
             help="Selects the output type. 'kconf' will output options in the kernel configuration format. 'module' will output a list of autokernel modules to reflect the necessary configuration.")
     parser_detect.add_argument('-m', '--module-name', dest='output_module_name', default='local',
