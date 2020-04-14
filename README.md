@@ -29,7 +29,7 @@ Please have a look at the [Introduction](https://autokernel.oddlama.org/en/lates
 section from the documentation, which explains more about what
 this tool is designed for, and how it works.
 
-<!--SCREENCASTS HERE TODO -->
+[![asciicast](https://asciinema.org/a/crHuqtvO2TTY1juu95J1sKuSJ.svg)](https://asciinema.org/a/crHuqtvO2TTY1juu95J1sKuSJ)
 
 ## Quick start
 
