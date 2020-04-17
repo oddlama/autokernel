@@ -96,7 +96,7 @@ the necessary dependencies.
 It might be beneficial to run detection while using a very generic and
 modular kernel, such as the `kernel from Arch Linux <https://www.archlinux.org/packages/core/x86_64/linux/>`__.
 This increases the likelihood of having all necessary buses and features enabled
-detect most connected devices.
+to detect connected devices.
 
 The problem is that we cannot detect USB devices, if the current kernel does not
 support that bus in the first place.
