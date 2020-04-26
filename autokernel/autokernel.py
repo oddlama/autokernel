@@ -433,11 +433,11 @@ def main_build(args, config=None):
         # Load configuration file
         config = autokernel.config.load_config(args.autokernel_config)
 
-    # Execute pre hook
-    execute_command(args, 'build.hooks.pre', config.build.hooks.pre, replace_common_vars)
-
     # Set umask for build
     saved_umask = os.umask(config.build.umask.value)
+
+    # Execute pre hook
+    execute_command(args, 'build.hooks.pre', config.build.hooks.pre, replace_common_vars)
 
     # Clean the kernel dir, if the user wants that
     if args.clean:
@@ -541,10 +541,10 @@ def main_build(args, config=None):
                 # Rebuild the kernel to pack the new images
                 _build_kernel()
 
-    os.umask(saved_umask)
-
     # Execute post hook
     execute_command(args, 'build.hooks.post', config.build.hooks.post, replace_common_vars)
+
+    os.umask(saved_umask)
 
 def main_install(args, config=None):
     """
@@ -553,9 +553,6 @@ def main_install(args, config=None):
     if not config:
         # Load configuration file
         config = autokernel.config.load_config(args.autokernel_config)
-
-    # Execute pre hook
-    execute_command(args, 'install.hooks.pre', config.install.hooks.pre, replace_common_vars)
 
     # Use correct umask when installing
     saved_umask = os.umask(config.install.umask.value)
@@ -581,6 +578,9 @@ def main_install(args, config=None):
 
         if not os.path.ismount(i):
             log.die("'{}' is not mounted. Aborting.".format(i))
+
+    # Execute pre hook
+    execute_command(args, 'install.hooks.pre', config.install.hooks.pre, replace_common_vars)
 
     kernel_version = autokernel.kconfig.get_kernel_version(args.kernel_dir)
     target_dir = replace_common_vars(args, config.install.target_dir)
@@ -710,6 +710,9 @@ def main_install(args, config=None):
     # Purge old target_dirs (will only be done if it is dynamic)
     _purge_old(str(config.install.target_dir) + '/')
 
+    # Execute post hook
+    execute_command(args, 'install.hooks.post', config.install.hooks.post, replace_common_vars)
+
     # Undo what we have mounted
     for i in reversed(new_mounts):
         log.info("Unmounting {}".format(i))
@@ -720,9 +723,6 @@ def main_install(args, config=None):
 
     # Restore old umask
     os.umask(saved_umask)
-
-    # Execute post hook
-    execute_command(args, 'install.hooks.post', config.install.hooks.post, replace_common_vars)
 
 def main_build_all(args):
     """
