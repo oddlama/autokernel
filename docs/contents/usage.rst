@@ -499,11 +499,9 @@ This means you still only need to install the kernel.
             "--kmoddir"       "{MODULES_PREFIX}/lib/modules/{KERNEL_VERSION}"
             "--kver"          "{KERNEL_VERSION}"
             "--no-compress"   # Only if the initramfs is to be integrated into the kernel
-            "--hostonly"
-            "--hostonly-mode" "strict"
-            "--no-hostonly-cmdline"
+            "--no-hostonly"
             "--ro-mnt"
-            "--modules"       "bash crypt crypt-gpg"
+            "--add"           "bash crypt crypt-gpg"
             "--force"         # Overwrite existing files
             "{INITRAMFS_OUTPUT}";
     }
