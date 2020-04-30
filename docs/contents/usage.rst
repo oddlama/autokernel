@@ -479,13 +479,14 @@ This means you still only need to install the kernel.
 .. hint::
 
     When using builtin initramfs, setting any of the ``INITRAMFS_COMPRESSION_*`` options will
-    still compress it on intregration.
+    still compress it on integration.
 
 .. code-block:: ruby
 
     kernel {
         # Optional: Use LZ4 as compression algorithm for built-in initramfs
-        set INITRAMFS_COMPRESSION_LZ4 y;
+        set RD_LZ4 y if BLK_DEV_INITRD;
+        set INITRAMFS_COMPRESSION_LZ4 y if INITRAMFS_SOURCE;
     }
 
     initramfs {
