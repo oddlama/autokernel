@@ -856,7 +856,7 @@ class ConfigInstall(BlockNode):
 
     def __init__(self):
         self.hooks            = ConfigHooks()
-        self.umask            = UniqueProperty('umask',            default='0077')
+        self.umask            = UniqueProperty('umask',            default=0o077)
         self.target_dir       = UniqueProperty('target_dir',       default='/boot')
         self.target_kernel    = UniqueProperty('target_kernel',    default="bzImage-{KERNEL_VERSION}")
         self.target_config    = UniqueProperty('target_config',    default="config-{KERNEL_VERSION}")
@@ -916,7 +916,7 @@ class ConfigBuild(BlockNode):
 
     def __init__(self):
         self.hooks = ConfigHooks()
-        self.umask = UniqueProperty('umask', default='0077')
+        self.umask = UniqueProperty('umask', default=0o077)
 
     def parse_context(self, ctxt):
         def blck_hooks(tree):
