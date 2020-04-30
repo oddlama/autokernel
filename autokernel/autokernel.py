@@ -221,10 +221,10 @@ def apply_autokernel_config(args, kconfig, config):
 
 def execute_command(args, name, cmd, _replace_vars):
     if len(cmd.value) > 0:
-        log.info("Executing {}: [{}]".format(name, ' '.join(["'{}'".format(i) for i in cmd.value])))
+        command = [_replace_vars(args, p) for p in cmd.value]
+        log.info("Executing {}: [{}]".format(name, ', '.join(["'{}'".format(i) for i in command])))
         try:
             # Replace variables in command and run it
-            command = [_replace_vars(args, p) for p in cmd.value]
             subprocess.run(command, check=True)
         except subprocess.CalledProcessError as e:
             log.die("{} failed with code {}. Aborting.".format(name, e.returncode))
