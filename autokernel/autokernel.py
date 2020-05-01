@@ -504,11 +504,12 @@ def main_build(args, config=None):
     def check_initramfs_source(sym_initramfs_source):
         has_user_initramfs_source = sym_initramfs_source in autokernel.symbol_tracking.symbol_changes
 
-        # Issue a warning, if a custom initramfs source does not contain "{INITRAMFS}", and we have our initramfs enabled.
+        # It is an error to explicitly set INITRAMFS_SOURCE, if our initramfs is set to builtin.
         if has_user_initramfs_source \
                 and config.initramfs.enabled \
-                and config.initramfs.builtin:
-            log.die("INITRAMFS_SOURCE was set manually although a custom initramfs should be built and integrated into the kernel.")
+                and config.initramfs.builtin \
+                and autokernel.symbol_tracking.symbol_changes[sym_initramfs_source].reason == 'explicitly set':
+            log.die("INITRAMFS_SOURCE was set manually, although a custom initramfs should be built and integrated into the kernel.")
 
     # Set CMDLINE_BOOL and CMDLINE
     set_cmdline()
