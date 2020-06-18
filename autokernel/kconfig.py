@@ -74,6 +74,7 @@ def initialize_environment():
     like
     """
     set_env_default("CC", "gcc")
+    set_env_default("LD", "ldd")
     set_env_default("HOSTCC", "gcc")
     set_env_default("HOSTCXX", "g++")
 
