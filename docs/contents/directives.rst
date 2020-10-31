@@ -470,10 +470,10 @@ build_command
 
             # You can use a command like this to build an initramfs with genkernel
             build_command "genkernel"
-                "--module-prefix=${MODULES_PREFIX}"
-                "--cachedir=/tmp/genkernel/cache"
-                "--tmpdir=/tmp/genkernel"
-                "--logfile=/tmp/genkernel/genkernel.log"
+                "--kernel-modules-prefix={MODULES_PREFIX}"
+                "--cachedir=/var/tmp/genkernel/cache"
+                "--tmpdir=/var/tmp/genkernel"
+                "--logfile=/var/tmp/genkernel/genkernel.log"
                 "--kerneldir={KERNEL_DIR}"
                 "--no-install"
                 "--no-mountboot"
@@ -482,7 +482,7 @@ build_command
                 "--luks"
                 "--gpg"
                 "initramfs";
-            build_output "/tmp/genkernel/initramfs-{UNAME_ARCH}-{KERNEL_VERSION}";
+            build_output "/var/tmp/genkernel/initramfs-{UNAME_ARCH}-{KERNEL_VERSION}";
 
 .. _directive-initramfs-build-output:
 
