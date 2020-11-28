@@ -845,7 +845,7 @@ class ModuleConfigWriter:
         for a, v in module.assignments:
             content += "\tset {} {};\n".format(a, v)
         for o, v in module.assertions:
-            content += "\tassert {} == {};\n".format(o, v)
+            content += "\t#assert {} == {};\n".format(o, v)
         content += "}\n\n"
         self.file.write(content)
 
