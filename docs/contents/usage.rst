@@ -130,8 +130,8 @@ be put into ``/etc/autokernel/modules.d`` and included in your configuration.
 
 .. code-block:: bash
 
-    # Generates a module named 'local'
-    autokernel detect -o "/etc/autokernel/modules.d/local.conf"
+    # Generates a module named 'local_detected'
+    autokernel detect -o "/etc/autokernel/modules.d/local_detected.conf"
 
 Alternatively, autokernel can output kconf files (like ``.config``)
 if you want to use other tools:
@@ -239,8 +239,8 @@ Configuration excerpt
         # if you have used `autokernel setup`.
         use hardening;
         # You can detect configuration options for your local system
-        # by using `autokernel detect` and store them in /etc/autokernel/modules.d/local.conf
-        use local;
+        # by using `autokernel detect` and store them in /etc/autokernel/modules.d/local_detected.conf
+        use local_detected;
 
         # Proceed to make your changes.
         use net;
