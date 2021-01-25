@@ -318,8 +318,11 @@ class ModuleNode(LineParserNode):
         """
         Returns all module names of loaded modules
         """
-        with open('/proc/modules', 'r') as f:
-            return set([line.split(' ')[0] for line in f])
+        try:
+            with open('/proc/modules', 'r') as f:
+                return set([line.split(' ')[0] for line in f])
+        except FileNotFoundError:
+            return set()
 
 class NodeDetector:
     """
