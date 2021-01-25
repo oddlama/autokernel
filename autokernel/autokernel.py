@@ -399,7 +399,10 @@ def build_initramfs(args, config, modules_prefix, initramfs_output):
 
     def _replace_vars(args, p):
         p = replace_common_vars(args, p)
-        p = p.replace('{MODULES_PREFIX}', modules_prefix)
+        if '{MODULES_PREFIX}' in p:
+            if modules_prefix is None:
+                log.die(f"A variable used {{MODULES_PREFIX}}, but kernel module support is disabled!")
+            p = p.replace('{MODULES_PREFIX}', modules_prefix)
         p = p.replace('{INITRAMFS_OUTPUT}', initramfs_output)
         return p
 
@@ -458,6 +461,7 @@ def main_build(args, config=None):
     sym_cmdline_bool = kconfig.syms['CMDLINE_BOOL']
     sym_cmdline = kconfig.syms['CMDLINE']
     sym_initramfs_source = kconfig.syms['INITRAMFS_SOURCE']
+    sym_modules = kconfig.syms['MODULES']
 
     # Set some defaults
     sym_cmdline_bool.set_value('y')
@@ -526,10 +530,13 @@ def main_build(args, config=None):
     # Build the initramfs, if enabled
     if config.initramfs.enabled:
         with tempfile.TemporaryDirectory() as tmppath:
-            # Temporarily install modules so the initramfs generator has access to them
-            log.info("Copying modules into temporary directory")
-            tmp_modules_prefix = os.path.join(tmppath, 'modules')
-            install_modules(args, prefix=tmp_modules_prefix)
+            if sym_modules.str_value != 'n':
+                # Temporarily install modules so the initramfs generator has access to them
+                log.info("Copying modules into temporary directory")
+                tmp_modules_prefix = os.path.join(tmppath, 'modules')
+                install_modules(args, prefix=tmp_modules_prefix)
+            else:
+                tmp_modules_prefix = None
 
             # Build the initramfs
             build_initramfs(args, config, tmp_modules_prefix, initramfs_output)
@@ -691,8 +698,12 @@ def main_install(args, config=None):
     if '{KERNEL_VERSION}' in str(config.install.target_dir) and os.path.exists(target_dir):
         _move_to_old(os.path.realpath(target_dir))
 
+    # Load symbols from Kconfig
+    kconfig = autokernel.kconfig.load_kconfig(args.kernel_dir)
+    sym_modules = kconfig.syms['MODULES']
+
     # Install modules
-    if config.install.modules_prefix:
+    if config.install.modules_prefix and sym_modules.str_value != 'n':
         modules_prefix = str(config.install.modules_prefix)
         modules_prefix_with_lib = os.path.join(modules_prefix, "lib/modules")
         modules_dir = os.path.join(modules_prefix_with_lib, kernel_version)
@@ -1048,7 +1059,7 @@ def main_detect(args):
     Main function for the 'main_detect' command.
     """
     # Check if we should write a config or report differences
-    check_only = args.check_config is not 0
+    check_only = args.check_config != 0
 
     # Assert that --check is not used together with --type
     if check_only and args.output_type:

@@ -559,9 +559,9 @@ class ConditionVarTruth(CachedCondition):
         resolved_var = self.resolve_var(self.var, kconfig)
         cmp_mode = resolved_var.cmp_mode
 
-        if cmp_mode is 'tristate':
+        if cmp_mode == 'tristate':
             implicit_var = self.resolve_var(TokenRawLiteral(self.var.at, '"n"', is_quoted=True), kconfig)
-        elif cmp_mode is 'string' and (resolved_var.is_sym or (resolved_var.special and util.is_env_var(self.var.value))):
+        elif cmp_mode == 'string' and (resolved_var.is_sym or (resolved_var.special and util.is_env_var(self.var.value))):
             implicit_var = self.resolve_var(TokenRawLiteral(self.var.at, '""', is_quoted=True), kconfig)
         else:
             log.die_print_error_at(self.at, "cannot implicitly convert '{}' to a truth value".format(self.var.value))
