@@ -17,7 +17,7 @@ import os
 # -- Project information -----------------------------------------------------
 
 project = 'autokernel'
-copyright = '2020, oddlama'
+copyright = '2021, oddlama'
 author = 'oddlama'
 
 
