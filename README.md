@@ -56,10 +56,6 @@ kernel {
 	set EFI_STUB y;
 	set EFIVAR_FS y;
 
-	# Enable and use LZ4 as compression algorithm for built-in initramfs
-	set RD_LZ4 y if BLK_DEV_INITRD;
-	set INITRAMFS_COMPRESSION_LZ4 y if INITRAMFS_SOURCE;
-
 	# Set initramfs (genkernel) keymap
 	add_cmdline "keymap=de";
 }
