@@ -10,7 +10,7 @@ Autokernel docs
 |
 
 Welcome to the official documentation of autokernel!
-If you are visiting for the fist time, we recommend that you read the :ref:`introduction` page
+If you are visiting for the first time, we recommend that you read the :ref:`introduction` page
 to get an overview of what autokernel has to offer.
 
 Otherwise, the sidebar and the table of contents below should let you easily access
