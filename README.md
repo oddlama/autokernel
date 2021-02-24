@@ -38,8 +38,6 @@ Have a look at the documentation to see equally simple examples which allow you 
 and integrate an initramfs into your kernel.
 
 ```ruby
-# vim: set ft=ruby ts=4 sw=4 sts=-1 noet:
-
 module base {
 	# Begin with the kernel defconfig
 	merge "{KERNEL_DIR}/arch/{ARCH}/configs/{UNAME_ARCH}_defconfig";
