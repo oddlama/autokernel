@@ -26,10 +26,46 @@ To help you writing the configuration, it comes with some helpful features:
 
 You may use it for any combination of the above, There is no need to
 use it as a build system if you only want to detect options for your device.
-
 Please have a look at the [Introduction](https://autokernel.oddlama.org/en/latest/intro/introduction.html)
 section from the documentation, which explains more about what
 this tool is designed for, and how it works.
+
+## Short examples
+
+This is a short example config that can be used to build a (almost) defconfig kernel, without an initramfs.
+This style of configuration allows deterministic builds and provides a way of clearly stating your configuration and intentions.
+Have a look at the documentation to see equally simple examples which allow you to generate
+and integrate an initramfs into your kernel.
+
+```ruby
+# vim: set ft=ruby ts=4 sw=4 sts=-1 noet:
+
+module base {
+	# Begin with the kernel defconfig
+	merge "{KERNEL_DIR}/arch/{ARCH}/configs/{UNAME_ARCH}_defconfig";
+
+	# Enable expert options
+	set EXPERT y;
+	# Enable 32-bit emulation
+	set IA32_EMULATION y;
+}
+
+kernel {
+	use base;
+
+ 	# Enable efi
+	set EFI y;
+	set EFI_STUB y;
+	set EFIVAR_FS y;
+
+	# Enable and use LZ4 as compression algorithm for built-in initramfs
+	set RD_LZ4 y if BLK_DEV_INITRD;
+	set INITRAMFS_COMPRESSION_LZ4 y if INITRAMFS_SOURCE;
+
+	# Set initramfs (genkernel) keymap
+	add_cmdline "keymap=de";
+}
+```
 
 Detecting kernel options                                                           | Automatically satisfying a kernel option
 ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------
