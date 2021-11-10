@@ -1,0 +1,25 @@
+GENERAL
+* man page from help
+* bash/zsh completion
+* provide vim syntax highlight?.... really?
+* add tests!
+
+ISSUES
+* profile speed things
+* script executable injection checking
+* investigate why some symbols can't be satisfied USB_DVB_V2 e.g.
+
+FEATURES
+* diff command (two external configs?)
+* search for symbol?
+* out of tree builds, as another user. with config backcopy to silence portage
+  - out_of_tree true;
+  - user u;
+  - group g;
+* keep old by version or date (e.g. last 2 w and last major version)
+* trailing conditions else form
+* (really good idea?) issue warning when try set is used but the value is not pinned afterwards in the same module.
+
+TODO banner codestyle
+
+Show HN: Autokernel - Autodetect and manage kernel configuration options
