@@ -1,3 +1,7 @@
+<p align=center>
+**ATTENTION!** *A dependency of autokernel (Kconfiglib) unfortunately seems to be abandoned. It is an integral part of this tool but unfortunately I don't have the time to take on a project of that size myself. At some point in the future, this project will be rewritten without said dependency. Until then: Proceed with care.*
+</p>
+
 <br/><br/>
 [![autokernel](./docs/imgs/autokernel_banner.svg)](https://autokernel.oddlama.org)
 <br/><br/>
