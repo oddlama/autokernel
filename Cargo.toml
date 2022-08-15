@@ -1,0 +1,16 @@
+[package]
+name = "autokernel"
+version = "0.1.0"
+edition = "2021"
+authors = ["oddlama <oddlama@oddlama.org>", "clotodex <clotodex@online.de>"]
+
+[dependencies]
+clap = { version = "3.2.17", features = ["derive"] }
+dotenv = "0.15.0"
+libc = "*"
+serde = { version = "1.0.143", features = ["derive"] }
+serde_json = { version = "1.0.83", features = ["unbounded_depth"] }
+
+[build-dependencies]
+bindgen = "*"
+cc = "1.0.73"

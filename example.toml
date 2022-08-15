@@ -1,0 +1,13 @@
+[build]
+
+[install]
+
+[build.initramfs]
+enable = true
+buildin = true
+
+command = [] # or "./ some command"
+command_output = # "path to file" or null to use stdout
+
+post_script = ""
+pre_script = []

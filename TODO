@@ -1,0 +1,4 @@
+- remove base64.h (output binary instead)
+- check prequisites like write access to the kernel dir
+- worry about umask
+- check config option under cursor and show which distributions have it enabled (stats)
