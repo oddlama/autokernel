@@ -195,6 +195,7 @@ void serialize_value(struct symbol* sym, struct symbol_value value) {
 	} while (0)
 #define RIGHT_EXPR \
 	do {           \
+		JSON_KV_EXPR("right", ex->right.expr); \
 	} while (0)
 #define LEFT_SYM                                    \
 	do {                                            \

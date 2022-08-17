@@ -36,11 +36,8 @@ if [[ "$1" == "-c" && "$2" == "scripts/kconfig/conf "* ]]; then
 		&& diff -q <(sha256sum scripts/kconfig/autokernel_bridge.c) scripts/kconfig/autokernel_bridge.c.sha256 &>/dev/null
 	} || build_bridge
 
-	rm out.json # TODO
 	echo "---- AUTOKERNEL BRIDGE BEGIN ----"
-	# TODO exec scripts/kconfig/autokernel_bridge Kconfig
-	scripts/kconfig/autokernel_bridge Kconfig | tee out.json
-	python -m json.tool out.json > out_pretty.json
+	exec scripts/kconfig/autokernel_bridge Kconfig
 else
 	exec /bin/bash "$@"
 fi
