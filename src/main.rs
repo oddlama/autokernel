@@ -1,6 +1,6 @@
 mod bridge;
 mod kconfig_types;
-use std::error::Error;
+use std::{error::Error, path::PathBuf};
 
 use clap::Parser;
 
@@ -21,3 +21,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     Ok(())
 }
+
+#[test]
+fn test_parse_args() {
+    let args = Args::parse();
+
+    assert_eq!(args.kernel_dir, PathBuf::from("/usr/src/linux/"))
+}
+
