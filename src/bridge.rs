@@ -57,15 +57,15 @@ pub fn run_bridge(
 
     // Create bridge.c in kernel scripts directory
     fs::OpenOptions::new()
-        .create(true).write(true).mode(0o644)
+        .create(true).write(true).truncate(true).mode(0o644)
         .open(&kconfig_dir.join("autokernel_bridge.c"))?
-        .write_all(include_str!("bridge/bridge.c").as_bytes())?;
+        .write_all(include_bytes!("bridge/bridge.c"))?;
 
     // Create base64.h in kernel scripts directory
     fs::OpenOptions::new()
-        .create(true).write(true).mode(0o644)
+        .create(true).write(true).truncate(true).mode(0o644)
         .open(&kconfig_dir.join("base64.h"))?
-        .write_all(include_str!("bridge/base64.h").as_bytes())?;
+        .write_all(include_bytes!("bridge/base64.h"))?;
 
     // This interceptor script is used to run autokernel's bridge with the
     // correct environment variables, which are set by the Makefile.
@@ -81,9 +81,9 @@ pub fn run_bridge(
     // prerequisite C objects are also required to build our bridge.
     let kconfig_interceptor_sh = kconfig_dir.join("autokernel_interceptor.sh");
     fs::OpenOptions::new()
-        .create(true).write(true).mode(0o755)
+        .create(true).write(true).truncate(true).mode(0o755)
         .open(&kconfig_interceptor_sh)?
-        .write_all(include_str!("bridge/interceptor.sh").as_bytes())?;
+        .write_all(include_bytes!("bridge/interceptor.sh"))?;
 
     let interceptor_shell = fs::canonicalize(&kconfig_interceptor_sh)?
         .into_os_string().into_string()

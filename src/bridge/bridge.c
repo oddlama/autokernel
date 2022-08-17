@@ -1,3 +1,4 @@
+#include <unistd.h>
 #include <string.h>
 #include <strings.h>
 #include <stdlib.h>
@@ -6,121 +7,228 @@
 #include <ctype.h>
 #include "base64.h"
 
-void expr_to_json(struct expr* value);
+void serialize_expr(struct expr* value);
 
 const char* type_to_str(enum symbol_type type) {
 	switch (type) {
-		case S_UNKNOWN:   return "unknown";
-		case S_BOOLEAN:   return "boolean";
-		case S_TRISTATE:  return "tristate";
-		case S_INT:       return "int";
-		case S_HEX:       return "hex";
-		case S_STRING:    return "string";
+		case S_UNKNOWN: return "unknown";
+		case S_BOOLEAN: return "boolean";
+		case S_TRISTATE: return "tristate";
+		case S_INT: return "int";
+		case S_HEX: return "hex";
+		case S_STRING: return "string";
 	}
 	assert(false);
 }
 
 const char* prop_type_to_str(enum prop_type type) {
 	switch (type) {
-		case P_UNKNOWN:  return "unknown";
-		case P_PROMPT:   return "prompt";
-		case P_COMMENT:  return "comment";
-		case P_MENU:     return "menu";
-		case P_DEFAULT:  return "default";
-		case P_CHOICE:   return "choice";
-		case P_SELECT:   return "select";
-		case P_IMPLY:    return "imply";
-		case P_RANGE:    return "range";
-		case P_SYMBOL:   return "symbol";
+		case P_UNKNOWN: return "unknown";
+		case P_PROMPT: return "prompt";
+		case P_COMMENT: return "comment";
+		case P_MENU: return "menu";
+		case P_DEFAULT: return "default";
+		case P_CHOICE: return "choice";
+		case P_SELECT: return "select";
+		case P_IMPLY: return "imply";
+		case P_RANGE: return "range";
+		case P_SYMBOL: return "symbol";
 	}
 	assert(false);
 }
 
 const char* expr_type_to_str(enum expr_type type) {
 	switch (type) {
-		case E_NONE:     return "none";
-		case E_OR:       return "or";
-		case E_AND:      return "and";
-		case E_NOT:      return "not";
-		case E_EQUAL:    return "equal";
-		case E_UNEQUAL:  return "unequal";
-		case E_LTH:      return "lth";
-		case E_LEQ:      return "leq";
-		case E_GTH:      return "gth";
-		case E_GEQ:      return "geq";
-		case E_LIST:     return "list";
-		case E_SYMBOL:   return "symbol";
-		case E_RANGE:    return "range";
+		case E_NONE: return "none";
+		case E_OR: return "or";
+		case E_AND: return "and";
+		case E_NOT: return "not";
+		case E_EQUAL: return "equal";
+		case E_UNEQUAL: return "unequal";
+		case E_LTH: return "lth";
+		case E_LEQ: return "leq";
+		case E_GTH: return "gth";
+		case E_GEQ: return "geq";
+		case E_LIST: return "list";
+		case E_SYMBOL: return "symbol";
+		case E_RANGE: return "range";
 	}
 	assert(false);
 }
 
 const char* tristate_to_str(enum tristate tri) {
 	switch (tri) {
-		case no:  return "no";
+		case no: return "no";
 		case mod: return "mod";
 		case yes: return "yes";
 	}
 	assert(false);
 }
 
-void text_to_json(const char* text) {
-	if (!text) {
-		puts("null");
-		return;
+#define WRITE_LITERAL(s)        \
+	do {                        \
+		(void)!write(1, s, sizeof(s) - 1); \
+	} while (0)
+#define JSON_BEGIN_OBJ      \
+	{                       \
+		WRITE_LITERAL("{"); \
+		const char* _obj_sep = "";
+#define JSON_END_OBJ    \
+	WRITE_LITERAL("}"); \
 	}
+#define JSON_BEGIN_LIST WRITE_LITERAL("[")
+#define JSON_END_LIST WRITE_LITERAL("]")
+#define JSON_COMMA WRITE_LITERAL(",")
+#define JSON_NULL WRITE_LITERAL("null")
 
-	int dummy = 42;
-	char* out = base64(text, strlen(text), &dummy);
-	printf("\"%s\"", out);
-	free(out);
-}
+#define JSON_K(k)                             \
+	do {                                      \
+		(void)!write(1, _obj_sep, strlen(_obj_sep)); \
+		_obj_sep = ",";                       \
+		const char* _k = (k);                 \
+		WRITE_LITERAL("\"");                  \
+		(void)!write(1, _k, strlen(_k));             \
+		WRITE_LITERAL("\":");                 \
+	} while (0)
 
-void value_to_json(struct symbol* sym, struct symbol_value value) {
-	printf("{\n");
+#define JSON_V(v)                 \
+	do {                          \
+		const char* _v = (v);     \
+		WRITE_LITERAL("\"");      \
+		(void)!write(1, _v, strlen(_v)); \
+		WRITE_LITERAL("\"");      \
+	} while (0)
+
+#define JSON_KV(k, v) \
+	do {              \
+		JSON_K(k);    \
+		JSON_V(v);    \
+	} while (0)
+
+#define JSON_KV_OR_NULL(k, v, cond) \
+	do {              \
+		JSON_K(k);    \
+		if (cond) {                   \
+			JSON_V(v);                \
+		} else {                     \
+			JSON_NULL;               \
+		}                            \
+	} while (0)
+
+#define JSON_V_PRINTF(v, ...)        \
+	do {                             \
+		const char* _v = (v);        \
+		WRITE_LITERAL("\"");         \
+		dprintf(1, _v, __VA_ARGS__); \
+		WRITE_LITERAL("\"");         \
+	} while (0)
+
+#define JSON_KV_PRINTF(k, v, ...)      \
+	do {                               \
+		JSON_K(k);                     \
+		JSON_V_PRINTF(v, __VA_ARGS__); \
+	} while (0)
+
+#define JSON_KV_F(k, f, arg) \
+	do {                     \
+		JSON_K(k);           \
+		(f)(arg);            \
+	} while (0)
+
+#define JSON_KV_F_CHECKED(k, f, arg) \
+	do {                             \
+		JSON_K(k);                   \
+		if (arg) {                   \
+			(f)(arg);                \
+		} else {                     \
+			JSON_NULL;               \
+		}                            \
+	} while (0)
+
+#define JSON_KV_EXPR(k, expr) JSON_KV_F_CHECKED(k, serialize_expr, expr)
+#define JSON_KV_EXPR_VAL(k, expr) JSON_KV_F(k, serialize_expr_value, expr)
+#define JSON_KV_VAL(k, sym, val)   \
+	do {                           \
+		JSON_K(k);                 \
+		serialize_value(sym, val); \
+	} while (0)
+
+#define JSON_V_BASE64(v)                                    \
+	do {                                                    \
+		const char* _v = (v);                               \
+		if (_v) {                                           \
+			WRITE_LITERAL("\"");                            \
+			int base64len = 0;                              \
+			char* out = base64(_v, strlen(_v), &base64len); \
+			(void)!write(1, out, base64len);                       \
+			free(out);                                      \
+			WRITE_LITERAL("\"");                            \
+		} else {                                            \
+			JSON_NULL;                                      \
+		}                                                   \
+	} while (0)
+
+#define JSON_KV_BASE64(k, v) \
+	do {                     \
+		JSON_K(k);           \
+		JSON_V_BASE64(v);    \
+	} while (0)
+
+void serialize_value(struct symbol* sym, struct symbol_value value) {
+	JSON_BEGIN_OBJ;
+
+	JSON_K("val");
 	if (sym_is_choice(sym)) {
-		printf("\"val\": \"%p\",\n", value.val);
-	} else if (value.val == NULL) {
-		printf("\"val\": \"null\",\n");
+		JSON_V_PRINTF("%p", value.val);
 	} else {
-		int dummy = 42;
-		char* out = base64(value.val, strlen((const char*)value.val), &dummy);
-		printf("\"val\": \"%s\",\n", out);
-		free(out);
+		JSON_V_BASE64(value.val);
 	}
-	printf("\"tri\": \"%s\"\n", tristate_to_str(value.tri));
-	printf("}\n");
+
+	JSON_KV("tri", tristate_to_str(value.tri));
+
+	JSON_END_OBJ;
 }
 
-void expr_part_to_json(const char* part, union expr_data* data, bool is_expr) {
-	printf("\"%s\":", part);
-	if (is_expr) {
-		expr_to_json(data->expr);
-	} else {
-		printf("\"%p\"", data->sym);
-	}
-	printf(",");
-}
+#define LEFT_EXPR                            \
+	do {                                     \
+		JSON_KV_EXPR("left", ex->left.expr); \
+	} while (0)
+#define RIGHT_EXPR \
+	do {           \
+	} while (0)
+#define LEFT_SYM                                    \
+	do {                                            \
+		JSON_KV_PRINTF("left", "%p", ex->left.sym); \
+	} while (0)
+#define RIGHT_SYM                                     \
+	do {                                              \
+		JSON_KV_PRINTF("right", "%p", ex->right.sym); \
+	} while (0)
+#define RIGHT_NULL       \
+	do {                 \
+		JSON_K("right"); \
+		JSON_NULL;       \
+	} while (0)
 
-void expr_to_json(struct expr* ex) {
+void serialize_expr(struct expr* ex) {
 	if (!ex) {
-		printf("null\n");
+		JSON_NULL;
 		return;
 	}
-	printf("{\n");
-	printf("\"type\": \"%s\",\n", expr_type_to_str(ex->type));
+
+	JSON_BEGIN_OBJ;
+	JSON_KV("type", expr_type_to_str(ex->type));
+
 	switch (ex->type) {
-		case E_NONE:
-			assert(false);
-			break;
+		case E_NONE: assert(false); break;
 		case E_OR:
 		case E_AND:
-			expr_part_to_json("left", &ex->left, true);
-			expr_part_to_json("right", &ex->right, true);
+			LEFT_EXPR;
+			RIGHT_EXPR;
 			break;
 		case E_NOT:
-			expr_part_to_json("left", &ex->left, true);
-			printf("\"right\": null,\n");
+			LEFT_EXPR;
+			RIGHT_NULL;
 			break;
 		case E_EQUAL:
 		case E_UNEQUAL:
@@ -129,94 +237,82 @@ void expr_to_json(struct expr* ex) {
 		case E_GTH:
 		case E_GEQ:
 		case E_RANGE:
-			expr_part_to_json("left", &ex->left, false);
-			expr_part_to_json("right", &ex->right, false);
+			LEFT_SYM;
+			RIGHT_SYM;
 			break;
 		case E_LIST:
-			expr_part_to_json("left", &ex->left, true);
-			expr_part_to_json("right", &ex->right, false);
+			LEFT_EXPR;
+			RIGHT_SYM;
 			break;
 		case E_SYMBOL:
-			expr_part_to_json("left", &ex->left, false);
-			printf("\"right\": null,\n");
+			LEFT_SYM;
+			RIGHT_NULL;
 			break;
 	}
-	printf("\"dummy\": null\n");
-	printf("}\n");
+	JSON_END_OBJ;
 }
 
-void expr_value_to_json(struct expr_value value) {
-	printf("{\n");
-	if (value.expr) {
-		printf("\"expr\": "); expr_to_json(value.expr); printf(",\n");
+void serialize_expr_value(struct expr_value value) {
+	JSON_BEGIN_OBJ;
+	JSON_KV_EXPR("expr", value.expr);
+	JSON_KV("tri", tristate_to_str(value.tri));
+	JSON_END_OBJ;
+}
+
+void serialize_menu(struct menu* menu) {
+	JSON_BEGIN_OBJ;
+	JSON_KV_EXPR("visibility", menu->visibility);
+	JSON_KV_EXPR("dep", menu->dep);
+	JSON_KV_PRINTF("flags", "%d", menu->flags);
+	JSON_KV_BASE64("help", menu->help);
+	JSON_END_OBJ;
+}
+
+void props_to_json_list(struct property* prop) {
+	JSON_BEGIN_LIST;
+	const char* sep = "";
+	for (struct property* p = prop; p; p = p->next) {
+		(void)!write(1, sep, strlen(sep));
+		sep = ",";
+		JSON_BEGIN_OBJ;
+		JSON_KV("type", prop_type_to_str(p->type));
+		JSON_KV_BASE64("text", p->text);
+		JSON_KV_EXPR_VAL("visible", p->visible);
+		JSON_KV_EXPR("expr", p->expr);
+		JSON_KV_F("menu", serialize_menu, p->menu);
+		JSON_KV_OR_NULL("file", p->file->name, p->file);
+		JSON_KV_PRINTF("lineno", "%d", p->lineno);
+		JSON_END_OBJ;
 	}
-	printf("\"tri\": \"%s\"\n", tristate_to_str(value.tri));
-	printf("}\n");
+	JSON_END_LIST;
 }
 
-void menu_to_json(struct menu* menu) {
-	printf("{\n");
-	printf("\"visibility\":"); expr_to_json(menu->visibility); printf(",");
-	printf("\"dep\":"); expr_to_json(menu->dep); printf(",");
-	printf("\"flags\": \"%d\",", menu->flags);
-	printf("\"help\":"); text_to_json(menu->help);
-	printf("}\n");
-}
-
-void props_to_json(struct property * prop) {
-	struct property* p = prop;
-	bool first = true;
-	while (p) {
-		if (!first) {
- 			printf(",\n");
-		} else {
-			first = false;
-		}
-		printf("{\n");
-		printf("\"type\": \"%s\",\n", prop_type_to_str(p->type));
-		printf("\"text\": "); text_to_json(p->text); printf(",\n");
-		printf("\"visible\": "); expr_value_to_json(p->visible); printf(",\n");
-		if (p->expr) {
-			printf("\"expr\": "); expr_to_json(p->expr); printf(",\n");
-		}
-		if (p->menu) {
-			printf("\"menu\": "); menu_to_json(p->menu); printf(",\n");
-		}
-		if (p->file) {
-			printf("\"file\": \"%s\",\n", p->file->name);
-		}
-		printf("\"lineno\": \"%d\"\n", p->lineno);
-		printf("}\n");
-		p = p->next;
-	}
-}
-
-void print_symbol(struct symbol* sym) {
-	printf("{\n");
-	printf("\"ptr\": \"%p\",\n", sym);
-	printf("\"name\": \"%s\",\n", sym->name);
-	printf("\"type\": \"%s\",\n", type_to_str(sym->type));
-	printf("\"curr\": "); value_to_json(sym, sym->curr); printf(",\n");
-	printf("\"def\": {\n");
-	printf("\"user\": "); value_to_json(sym, sym->def[0]); printf(",\n");
-	printf("\"auto\": "); value_to_json(sym, sym->def[1]); printf(",\n");
-	printf("\"def3\": "); value_to_json(sym, sym->def[2]); printf(",\n");
-	printf("\"def4\": "); value_to_json(sym, sym->def[3]); printf("\n");
-	printf("},\n");
-	printf("\"visible\": \"%s\",\n", tristate_to_str(sym->visible));
-	printf("\"flags\": \"%d\",\n", sym->flags);
-	printf("\"properties\": [\n");
-	props_to_json(sym->prop);
-	printf("],\n");
-	printf("\"dir_dep\": "); expr_value_to_json(sym->dir_dep); printf(",\n");
-	printf("\"rev_dep\": "); expr_value_to_json(sym->rev_dep); printf(",\n");
-	printf("\"implied\": "); expr_value_to_json(sym->implied); printf("\n");
-	printf("}");
+void serialize_symbol(struct symbol* sym) {
+	JSON_BEGIN_OBJ;
+	JSON_KV_PRINTF("ptr", "%p", sym);
+	JSON_KV_OR_NULL("name", sym->name, sym->name);
+	JSON_KV("type", type_to_str(sym->type));
+	JSON_KV_VAL("curr", sym, sym->curr);
+	JSON_K("def");
+	JSON_BEGIN_OBJ;
+	JSON_KV_VAL("user", sym, sym->def[0]);
+	JSON_KV_VAL("auto", sym, sym->def[1]);
+	JSON_KV_VAL("def3", sym, sym->def[2]);
+	JSON_KV_VAL("def4", sym, sym->def[3]);
+	JSON_END_OBJ;
+	JSON_KV("visible", tristate_to_str(sym->visible));
+	JSON_KV_PRINTF("flags", "%d", sym->flags);
+	JSON_K("properties");
+	props_to_json_list(sym->prop);
+	JSON_KV_EXPR_VAL("dir_dep", sym->dir_dep);
+	JSON_KV_EXPR_VAL("rev_dep", sym->rev_dep);
+	JSON_KV_EXPR_VAL("implied", sym->implied);
+	JSON_END_OBJ;
 }
 
 int main(int argc, char** argv) {
 	if (argc != 2) {
-		dprintf(2, "usage: %s <Kconfig>", argv[0]);
+		dprintf(2, "usage: %s <Kconfig>\n", argv[0]);
 		return 1;
 	}
 
@@ -225,19 +321,22 @@ int main(int argc, char** argv) {
 	conf_read("/dev/null");
 
 	// Serialize all symbols
-	struct symbol *sym;
+	struct symbol* sym;
 	int i;
-	printf("{\"symbols\": [\n");
+	JSON_BEGIN_OBJ;
+	JSON_K("symbols");
+	JSON_BEGIN_LIST;
 	for_all_symbols(i, sym) {
-		print_symbol(sym);
-		printf(",\n");
+		serialize_symbol(sym);
+		JSON_COMMA;
 	}
-	print_symbol(sym_lookup("n", 0));
-	printf(",\n");
-	print_symbol(sym_lookup("m", 0));
-	printf(",\n");
-	print_symbol(sym_lookup("y", 0));
-	printf("]}\n");
+	serialize_symbol(sym_lookup("n", 0));
+	JSON_COMMA;
+	serialize_symbol(sym_lookup("m", 0));
+	JSON_COMMA;
+	serialize_symbol(sym_lookup("y", 0));
+	JSON_END_LIST;
+	JSON_END_OBJ;
 
 	return 0;
 }
