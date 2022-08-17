@@ -215,14 +215,14 @@ void print_symbol(struct symbol* sym) {
 }
 
 int main(int argc, char** argv) {
-	if (argc != 3) {
-		dprintf(2, "usage: %s ./Kconfig .config", argv[0]);
+	if (argc != 2) {
+		dprintf(2, "usage: %s <Kconfig>", argv[0]);
 		return 1;
 	}
 
-	// Parse Kconfig and load values from .config
+	// Parse Kconfig and load empty .config (/dev/null)
 	conf_parse(argv[1]);
-	conf_read(argv[2]);
+	conf_read("/dev/null");
 
 	// Serialize all symbols
 	struct symbol *sym;

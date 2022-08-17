@@ -15,14 +15,9 @@ struct Args {
 fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
-    println!();
-    println!(" ## Building and installing the bridge ##");
-    println!();
-
+    println!("## Running the bridge ##");
     let symbols = bridge::run_bridge(args.kernel_dir)?;
-
-    println!();
-    println!(" -> Loaded {} symbols.", symbols.symbols.len());
+    println!("-> Loaded {} symbols.", symbols.symbols.len());
 
     Ok(())
 }
