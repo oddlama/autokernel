@@ -55,7 +55,7 @@ pub struct Symbol {
     pub dir_dep: Dep,
     pub flags: String,
     pub implied: Dep,
-    pub name: String,
+    pub name: Option<String>,
     pub properties: Vec<Property>,
     pub ptr: String,
     pub rev_dep: Dep,
@@ -74,7 +74,7 @@ pub struct Symbols {
 #[serde(deny_unknown_fields)]
 pub struct Curr {
     pub tri: String,
-    pub val: String,
+    pub val: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]

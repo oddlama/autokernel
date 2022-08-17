@@ -330,6 +330,7 @@ int main(int argc, char** argv) {
 		serialize_symbol(sym);
 		JSON_COMMA;
 	}
+
 	serialize_symbol(sym_lookup("n", 0));
 	JSON_COMMA;
 	serialize_symbol(sym_lookup("m", 0));
