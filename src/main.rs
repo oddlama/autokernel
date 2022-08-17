@@ -58,6 +58,7 @@ fn test_parse_args() {
 
 #[test]
 fn integrationtest_parse_symbols() {
+    use std::fs;
     use std::env;
     use std::process::{Command, Stdio};
 
