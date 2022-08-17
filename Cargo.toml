@@ -10,6 +10,7 @@ dotenv = "0.15.0"
 libc = "*"
 serde = { version = "1.0.143", features = ["derive"] }
 serde_json = { version = "1.0.83", features = ["unbounded_depth"] }
+toml = "0.5.9"
 
 [build-dependencies]
 bindgen = "*"

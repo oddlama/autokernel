@@ -106,7 +106,7 @@ pub fn run_bridge(
     let bridge_output = bridge_output.split_once("---- AUTOKERNEL BRIDGE BEGIN ----").unwrap().1;
 
     // Deserialize received symbols
-    let mut deserializer = Deserializer::from_str(&bridge_output);
+    let mut deserializer = Deserializer::from_str(bridge_output);
     deserializer.disable_recursion_limit();
     let symbols: Symbols = Symbols::deserialize(&mut deserializer)?;
     Ok(symbols)

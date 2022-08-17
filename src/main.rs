@@ -1,23 +1,47 @@
 mod bridge;
 mod kconfig_types;
-use std::{error::Error, fs};
+mod config;
+
+use std::error::Error;
 
 use clap::Parser;
+use std::path::PathBuf;
 
 #[derive(Parser, Debug)] // requires `derive` feature
 struct Args {
+    /// config toml
+    #[clap(short, long, value_name = "FILE", default_value = "config.toml")]
+    config: PathBuf,
+
+    /// build flag
+    #[clap(short, long)]
+    build: bool,
+
     /// Optional kernel_dir, default /usr/src/linux/
-    #[clap(value_name = "DIR", value_hint = clap::ValueHint::DirPath, default_value = "/usr/src/linux/")]
     #[clap(short, long, value_parser, value_name = "DIR", value_hint = clap::ValueHint::DirPath, default_value = "/usr/src/linux/")]
-    kernel_dir: std::path::PathBuf,
+    kernel_dir: PathBuf,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
+    println!("## Loading Config ##");
+    let _config = config::load(args.config)?;
+    println!("-> Loaded config.");
+
     println!("## Running the bridge ##");
     let symbols = bridge::run_bridge(args.kernel_dir)?;
     println!("-> Loaded {} symbols.", symbols.symbols.len());
+
+
+    //let kconfig = kconfig_types::Kconfig::from_toml(&config.config);
+    //println!("-> Loaded {} Kconfigs.", kconfig
+
+    if args.build {
+        println!("Build mode not supported yet")
+    } else {
+        println!("Config mode not supported yet")
+    }
 
     Ok(())
 }
@@ -27,7 +51,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 #[test]
 fn test_parse_args() {
-    use std::path::PathBuf;
     let args = Args::parse();
 
     assert_eq!(args.kernel_dir, PathBuf::from("/usr/src/linux/"))
