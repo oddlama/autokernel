@@ -1,4 +1,5 @@
 [build]
+CONFIG_NO_HZ_IDLE="CONFIG_NO_HZ_FULL"
 
 [install]
 
