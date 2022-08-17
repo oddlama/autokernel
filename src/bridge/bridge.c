@@ -65,8 +65,8 @@ const char* tristate_to_str(enum tristate tri) {
 	assert(false);
 }
 
-#define WRITE_LITERAL(s)        \
-	do {                        \
+#define WRITE_LITERAL(s)                   \
+	do {                                   \
 		(void)!write(1, s, sizeof(s) - 1); \
 	} while (0)
 #define JSON_BEGIN_OBJ      \
@@ -81,22 +81,22 @@ const char* tristate_to_str(enum tristate tri) {
 #define JSON_COMMA WRITE_LITERAL(",")
 #define JSON_NULL WRITE_LITERAL("null")
 
-#define JSON_K(k)                             \
-	do {                                      \
+#define JSON_K(k)                                    \
+	do {                                             \
 		(void)!write(1, _obj_sep, strlen(_obj_sep)); \
-		_obj_sep = ",";                       \
-		const char* _k = (k);                 \
-		WRITE_LITERAL("\"");                  \
+		_obj_sep = ",";                              \
+		const char* _k = (k);                        \
+		WRITE_LITERAL("\"");                         \
 		(void)!write(1, _k, strlen(_k));             \
-		WRITE_LITERAL("\":");                 \
+		WRITE_LITERAL("\":");                        \
 	} while (0)
 
-#define JSON_V(v)                 \
-	do {                          \
-		const char* _v = (v);     \
-		WRITE_LITERAL("\"");      \
+#define JSON_V(v)                        \
+	do {                                 \
+		const char* _v = (v);            \
+		WRITE_LITERAL("\"");             \
 		(void)!write(1, _v, strlen(_v)); \
-		WRITE_LITERAL("\"");      \
+		WRITE_LITERAL("\"");             \
 	} while (0)
 
 #define JSON_KV(k, v) \
@@ -106,13 +106,13 @@ const char* tristate_to_str(enum tristate tri) {
 	} while (0)
 
 #define JSON_KV_OR_NULL(k, v, cond) \
-	do {              \
-		JSON_K(k);    \
-		if (cond) {                   \
-			JSON_V(v);                \
-		} else {                     \
-			JSON_NULL;               \
-		}                            \
+	do {                            \
+		JSON_K(k);                  \
+		if (cond) {                 \
+			JSON_V(v);              \
+		} else {                    \
+			JSON_NULL;              \
+		}                           \
 	} while (0)
 
 #define JSON_V_PRINTF(v, ...)        \
@@ -160,7 +160,7 @@ const char* tristate_to_str(enum tristate tri) {
 			WRITE_LITERAL("\"");                            \
 			int base64len = 0;                              \
 			char* out = base64(_v, strlen(_v), &base64len); \
-			(void)!write(1, out, base64len);                       \
+			(void)!write(1, out, base64len);                \
 			free(out);                                      \
 			WRITE_LITERAL("\"");                            \
 		} else {                                            \
@@ -330,7 +330,6 @@ int main(int argc, char** argv) {
 		serialize_symbol(sym);
 		JSON_COMMA;
 	}
-
 	serialize_symbol(sym_lookup("n", 0));
 	JSON_COMMA;
 	serialize_symbol(sym_lookup("m", 0));
