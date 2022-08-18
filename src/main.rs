@@ -17,6 +17,10 @@ struct Args {
     #[clap(short, long)]
     build: bool,
 
+    /// build flag
+    #[clap(short, long)]
+    interactive: bool,
+
     /// Optional kernel_dir, default /usr/src/linux/
     #[clap(short, long, value_parser, value_name = "DIR", value_hint = clap::ValueHint::DirPath, default_value = "/usr/src/linux/")]
     kernel_dir: PathBuf,
@@ -38,7 +42,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     //println!("-> Loaded {} Kconfigs.", kconfig
 
     if args.build {
-        println!("Build mode not supported yet")
+        println!("Build mode not supported yet");
+        // Merge configs
+        // Build kernel
+        // Build modules
+        // Build initramfs
     } else {
         println!("Config mode not supported yet")
     }
