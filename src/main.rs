@@ -1,6 +1,7 @@
 mod bridge;
 mod config;
 mod kconfig_types;
+mod validate;
 
 use std::{collections::HashSet, error::Error};
 
@@ -23,6 +24,10 @@ struct Args {
     /// build flag
     #[clap(short, long)]
     interactive: bool,
+
+    /// config toml
+    #[clap(short, long, value_name = "FILE", default_value = ".config")]
+    validate: PathBuf,
 
     /// Optional kernel_dir, default /usr/src/linux/
     #[clap(short, long, value_parser, value_name = "DIR", value_hint = clap::ValueHint::DirPath, default_value = "/usr/src/linux/")]
@@ -77,6 +82,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("-> Loaded {} symbols.", symbols.symbols.len());
 
     print_smybol_types(&symbols);
+
+    if args.validate.exists() {
+        println!("## Validating the kernel config ##");
+        validate::validate_dotconfig(&symbols, &args.validate);
+    }
 
     //let kconfig = kconfig_types::Kconfig::from_toml(&config.config);
     //println!("-> Loaded {} Kconfigs.", kconfig
