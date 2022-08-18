@@ -36,17 +36,20 @@ impl Error for StringConversionError {}
 #[derive(Debug)]
 struct CommandCallError {
     msg: String,
-    cause: std::io::Error,
+    cause: Option<std::io::Error>,
 }
 impl Display for CommandCallError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         // print cause
-        write!(formatter, "{} {}", self.msg, self.cause)
+        write!(formatter, "{} {:?}", self.msg, self.cause)
     }
 }
 impl Error for CommandCallError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
-        Some(&self.cause)
+        match &self.cause {
+            Some(e) => Some(e),
+            None => None,
+        }
     }
 }
 
@@ -101,20 +104,25 @@ pub fn run_bridge(kernel_dir: PathBuf) -> Result<Symbols, Box<dyn Error>> {
         .spawn()
         .map_err(|e| CommandCallError {
             msg: "Failed to execute bridge with interceptor".into(),
-            cause: e,
+            cause: Some(e),
         })?;
     let elapsed = now.elapsed();
     println!("({:7.4?} bridge total)", elapsed);
     let now = Instant::now();
-    //let len = bridge_child.stdout.unwrap().rea
-    //let len = reader.read_line(&mut line)?;
+
     let mut stdout = bridge_child.stdout.unwrap();
     let mut bufread = BufReader::new(stdout.by_ref());
+
+    //let separator = "---- AUTOKERNEL BRIDGE BEGIN ----";
+    let separator = "AUTOKERNEL BRIDGE";
     let mut line = String::new();
-    bufread.read_line(&mut line).unwrap();
-    println!("{}", line);
-    bufread.read_line(&mut line).unwrap();
-    println!("{}", line);
+    while bufread.read_line(&mut line).is_ok() {
+        if line.contains(&separator) {
+            break;
+        }
+        println!("{}", line);
+    }
+
     let mut deserializer = Deserializer::from_reader(bufread);
 
     //let bridge_output = String::from_utf8_lossy(&bridge_output.stdout).to_string();
