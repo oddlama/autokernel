@@ -8,7 +8,18 @@
 #include "lkc.h"
 #include <ctype.h>
 
+void load_env() {
+	putenv("HOME=YOLO");
+}
+extern char** environ;
+
 int add(int a, int b) {
+	system("env");
+	printf("-----------\n");
+	environ = malloc(4096);
+	environ[0] = 0;
+	putenv("HOME=YOLO");
+	system("env");
 	return a + b;
 }
 

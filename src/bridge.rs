@@ -174,7 +174,10 @@ pub struct Bridge {
 
 impl Bridge {
     pub fn add(&self, a: c_int, b: c_int) -> c_int {
-        (self.vtable.add)(a, b)
+        let a = (self.vtable.add)(a, b);
+        use std::env;
+        println!("EEEEEEEEEEEEENV {}", env::var("HOME").unwrap());
+        a
     }
 }
 
@@ -253,6 +256,8 @@ pub fn create_bridge(kernel_dir: PathBuf) -> Result<Bridge, Box<dyn Error>> {
         // TODO: we need the env to be correct inside the shared library.
         // TODO: set it initially inside the shared library by modifying the C global variable
         println!("EEEEEEEEEEEEENV {}", env["HOME"]);
+        use std::env;
+        println!("EEEEEEEEEEEEENV {}", env::var("HOME").unwrap());
         Ok(Bridge{
             library,
             vtable,

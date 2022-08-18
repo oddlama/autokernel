@@ -16,14 +16,14 @@ function build_bridge() {
 	for i in conf confdata expr menu preprocess symbol util lexer.lex parser.tab autokernel_bridge; do
 		o="scripts/kconfig/$i.autokernel.o"
 		o_files+=("$o")
-		gcc -g -Og -fPIC -Wp,-MMD,scripts/kconfig/."$i".o.d \
+		gcc -O3 -fPIC -Wp,-MMD,scripts/kconfig/."$i".o.d \
 			-Wall -Wmissing-prototypes -Wstrict-prototypes \
 			-fomit-frame-pointer -std=gnu11 -Wdeclaration-after-statement \
 			-I ./scripts/kconfig -c -o "$o" scripts/kconfig/"$i".c \
 			|| die "Failed to compile $i for autokernel bridge!"
 	done
 
-	gcc -g -Og -Wall -fPIC -shared -o "$BRIDGE_SO" "${o_files[@]}" \
+	gcc -O3 -Wall -fPIC -shared -o "$BRIDGE_SO" "${o_files[@]}" \
 		|| die "Failed to link autokernel bridge!"
 }
 
