@@ -12,7 +12,7 @@ use std::error::Error;
 use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs;
-use std::io::prelude::*;
+use std::io::{prelude::*, BufReader};
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -91,29 +91,40 @@ pub fn run_bridge(kernel_dir: PathBuf) -> Result<Symbols, Box<dyn Error>> {
     use std::time::Instant;
     let now = Instant::now();
     // Build and run our bridge by intercepting the final call of a make defconfig invocation.
-    let bridge_output = Command::new("bash")
+    let bridge_child = Command::new("bash")
         .args(["-c", "--"])
         .arg("umask 022 && make SHELL=\"$INTERCEPTOR_SHELL\" defconfig")
         .env("INTERCEPTOR_SHELL", interceptor_shell)
         .current_dir(&kernel_dir)
         .stderr(Stdio::inherit())
-        .output()
+        .stdout(Stdio::piped())
+        .spawn()
         .map_err(|e| CommandCallError {
             msg: "Failed to execute bridge with interceptor".into(),
             cause: e,
         })?;
     let elapsed = now.elapsed();
     println!("({:7.4?} bridge total)", elapsed);
-
     let now = Instant::now();
-    let bridge_output = String::from_utf8_lossy(&bridge_output.stdout).to_string();
-    let bridge_output = bridge_output
-        .split_once("---- AUTOKERNEL BRIDGE BEGIN ----")
-        .unwrap()
-        .1;
+    //let len = bridge_child.stdout.unwrap().rea
+    //let len = reader.read_line(&mut line)?;
+    let mut stdout = bridge_child.stdout.unwrap();
+    let mut bufread = BufReader::new(stdout.by_ref());
+    let mut line = String::new();
+    bufread.read_line(&mut line).unwrap();
+    println!("{}", line);
+    bufread.read_line(&mut line).unwrap();
+    println!("{}", line);
+    let mut deserializer = Deserializer::from_reader(bufread);
 
-    // Deserialize received symbols
-    let mut deserializer = Deserializer::from_str(bridge_output);
+    //let bridge_output = String::from_utf8_lossy(&bridge_output.stdout).to_string();
+    //let bridge_output = bridge_output
+    //    .split_once("---- AUTOKERNEL BRIDGE BEGIN ----")
+    //    .unwrap()
+    //    .1;
+
+    //// Deserialize received symbols
+    //let mut deserializer = Deserializer::from_str(bridge_output);
     deserializer.disable_recursion_limit();
     let symbols: Symbols = Symbols::deserialize(&mut deserializer)?;
     let elapsed = now.elapsed();
