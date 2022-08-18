@@ -2,10 +2,89 @@
 #include <string.h>
 #include <strings.h>
 #include <stdlib.h>
+#include <sys/time.h>
+#include <stdint.h>
 
 #include "lkc.h"
 #include <ctype.h>
-#include "base64.h"
+
+////////////////////////////////////////////////////////
+// Base64 encoding
+
+/**
+ * This section is licensed as follows:
+ *
+ * Copyright (C) 2013 William Sherif
+ *
+ * This software is provided 'as-is', without any express or implied
+ * warranty.  In no event will the authors be held liable for any damages
+ * arising from the use of this software.
+ *
+ * Permission is granted to anyone to use this software for any purpose,
+ * including commercial applications, and to alter it and redistribute it
+ * freely, subject to the following restrictions:
+ *
+ * 1. The origin of this software must not be misrepresented; you must not
+ *    claim that you wrote the original software. If you use this software
+ *    in a product, an acknowledgment in the product documentation would be
+ *    appreciated but is not required.
+ * 2. Altered source versions must be plainly marked as such, and must not be
+ *    misrepresented as being the original software.
+ * 3. This notice may not be removed or altered from any source distribution.
+ *
+ * https://github.com/superwills/NibbleAndAHalf
+ *
+ * Modified by autokernel.
+ */
+
+const static char* b64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+// Converts binary data of length=len to base64 characters.
+// Length of the resultant string is stored in flen
+// (you must pass pointer flen).
+char* base64(const void* binaryData, int len, int* flen) {
+	const unsigned char* bin = (const unsigned char*)binaryData;
+	char* res;
+
+	int rc = 0;  // result counter
+	int modulusLen = len % 3;
+	int pad = ((modulusLen & 1) << 1) + ((modulusLen & 2) >> 1);  // 2 gives 1 and 1 gives 2, but 0 gives 0.
+
+	*flen = 4 * (len + pad) / 3;
+	res = (char*)malloc(*flen + 1);  // and one for the null
+	if (!res) {
+		return NULL;
+	}
+
+	int byteNo;
+	for (byteNo = 0; byteNo <= len - 3; byteNo += 3) {
+		unsigned char BYTE0 = bin[byteNo];
+		unsigned char BYTE1 = bin[byteNo + 1];
+		unsigned char BYTE2 = bin[byteNo + 2];
+		res[rc++] = b64[BYTE0 >> 2];
+		res[rc++] = b64[((0x3 & BYTE0) << 4) + (BYTE1 >> 4)];
+		res[rc++] = b64[((0x0f & BYTE1) << 2) + (BYTE2 >> 6)];
+		res[rc++] = b64[0x3f & BYTE2];
+	}
+
+	if (pad == 2) {
+		res[rc++] = b64[bin[byteNo] >> 2];
+		res[rc++] = b64[(0x3 & bin[byteNo]) << 4];
+		res[rc++] = '=';
+		res[rc++] = '=';
+	} else if (pad == 1) {
+		res[rc++] = b64[bin[byteNo] >> 2];
+		res[rc++] = b64[((0x3 & bin[byteNo]) << 4) + (bin[byteNo + 1] >> 4)];
+		res[rc++] = b64[(0x0f & bin[byteNo + 1]) << 2];
+		res[rc++] = '=';
+	}
+
+	res[rc] = 0;
+	return res;
+}
+
+////////////////////////////////////////////////////////
+// JSON serializer
 
 void serialize_expr(struct expr* value);
 
@@ -193,8 +272,8 @@ void serialize_value(struct symbol* sym, struct symbol_value value) {
 	do {                                     \
 		JSON_KV_EXPR("left", ex->left.expr); \
 	} while (0)
-#define RIGHT_EXPR \
-	do {           \
+#define RIGHT_EXPR                             \
+	do {                                       \
 		JSON_KV_EXPR("right", ex->right.expr); \
 	} while (0)
 #define LEFT_SYM                                    \
@@ -317,9 +396,18 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 
+	struct timeval start, now;
+	gettimeofday(&start, NULL);
+
 	// Parse Kconfig and load empty .config (/dev/null)
 	conf_parse(argv[1]);
 	conf_read("/dev/null");
+
+	gettimeofday(&now, NULL);
+	dprintf(2,
+	        "%7.4fs -- Loaded Kconfig\n",
+	        (double)(now.tv_usec - start.tv_usec) / 1000000 + (double)(now.tv_sec - start.tv_sec));
+	start = now;
 
 	// Serialize all symbols
 	struct symbol* sym;
@@ -339,5 +427,108 @@ int main(int argc, char** argv) {
 	JSON_END_LIST;
 	JSON_END_OBJ;
 
+	gettimeofday(&now, NULL);
+	dprintf(2,
+	        "%7.4fs -- Serialize symbols\n",
+	        (double)(now.tv_usec - start.tv_usec) / 1000000 + (double)(now.tv_sec - start.tv_sec));
+	start = now;
+
 	return 0;
 }
+
+////////////////////////////////////////////////////////
+// BINARY serializer
+
+#define WRITE_DIRECT(var) write(1, &(var), sizeof(var));
+#define WRITE_CAST(type, var)        \
+	do {                             \
+		type _v = (type)(var);       \
+		write(1, &_v, sizeof(type)); \
+	} while (0)
+
+#define WRITE_STR(str)                        \
+	do {                                      \
+		uint32_t len = str ? strlen(str) : 0; \
+		write(1, &len, sizeof(len));          \
+		if (str) {                            \
+			write(1, str, len);               \
+		}                                     \
+	} while (0)
+
+// void bin_serialize_value(struct symbol* sym, struct symbol_value value) {
+//	if (sym_is_choice(sym)) {
+//		JSON_V_PRINTF("%p", value.val);
+//	} else {
+//		JSON_V_BASE64(value.val);
+//	}
+//
+//	JSON_KV("tri", tristate_to_str(value.tri));
+// }
+//
+// void bin_serialize_symbol(struct symbol* sym) {
+//	WRITE_CAST(uint64_t, sym); // id (address as unique id)
+//	WRITE_STR(sym->name);
+//	WRITE_DIRECT(sym->type);
+//	WRITE_DIRECT(sym->curr);
+//	JSON_KV_VAL("curr", sym, sym->curr);
+//	JSON_K("def");
+//	JSON_BEGIN_OBJ;
+//	JSON_KV_VAL("user", sym, sym->def[0]);
+//	JSON_KV_VAL("auto", sym, sym->def[1]);
+//	JSON_KV_VAL("def3", sym, sym->def[2]);
+//	JSON_KV_VAL("def4", sym, sym->def[3]);
+//	JSON_END_OBJ;
+//	JSON_KV("visible", tristate_to_str(sym->visible));
+//	JSON_KV_PRINTF("flags", "%d", sym->flags);
+//	JSON_K("properties");
+//	props_to_json_list(sym->prop);
+//	JSON_KV_EXPR_VAL("dir_dep", sym->dir_dep);
+//	JSON_KV_EXPR_VAL("rev_dep", sym->rev_dep);
+//	JSON_KV_EXPR_VAL("implied", sym->implied);
+//	JSON_END_OBJ;
+// }
+//
+// int bin_main(int argc, char** argv) {
+//	if (argc != 2) {
+//		dprintf(2, "usage: %s <Kconfig>\n", argv[0]);
+//		return 1;
+//	}
+//
+//	struct timeval start, now;
+//	gettimeofday(&start, NULL);
+//
+//	// Parse Kconfig and load empty .config (/dev/null)
+//	conf_parse(argv[1]);
+//	conf_read("/dev/null");
+//
+//	gettimeofday(&now, NULL);
+//	dprintf(2,
+//	        "%7.4fs -- Loaded Kconfig\n",
+//	        (double)(now.tv_usec - start.tv_usec) / 1000000 + (double)(now.tv_sec - start.tv_sec));
+//	start = now;
+//
+//	struct symbol* sym;
+//	int i;
+//
+//	// Count symbols
+//	int n_symbols = 0;
+//	for_all_symbols(i, sym) {
+//		++n_symbols;
+//	}
+//
+//	// Serialize all symbols
+//	for_all_symbols(i, sym) {
+//		bin_serialize_symbol(sym);
+//	}
+//	bin_serialize_symbol(sym_lookup("n", 0));
+//	bin_serialize_symbol(sym_lookup("m", 0));
+//	bin_serialize_symbol(sym_lookup("y", 0));
+//
+//	gettimeofday(&now, NULL);
+//	dprintf(2,
+//	        "%7.4fs -- Serialize symbols\n",
+//	        (double)(now.tv_usec - start.tv_usec) / 1000000 + (double)(now.tv_sec - start.tv_sec));
+//	start = now;
+//
+//	return 0;
+// }

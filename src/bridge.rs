@@ -61,12 +61,6 @@ pub fn run_bridge(
         .open(&kconfig_dir.join("autokernel_bridge.c"))?
         .write_all(include_bytes!("bridge/bridge.c"))?;
 
-    // Create base64.h in kernel scripts directory
-    fs::OpenOptions::new()
-        .create(true).write(true).truncate(true).mode(0o644)
-        .open(&kconfig_dir.join("base64.h"))?
-        .write_all(include_bytes!("bridge/base64.h"))?;
-
     // This interceptor script is used to run autokernel's bridge with the
     // correct environment variables, which are set by the Makefile.
     //
@@ -89,6 +83,8 @@ pub fn run_bridge(
         .into_os_string().into_string()
         .map_err(|e| StringConversionError { cause: e })?;
 
+    use std::time::Instant;
+    let now = Instant::now();
     // Build and run our bridge by intercepting the final call of a make defconfig invocation.
     let bridge_output = Command::new("bash")
         .args(["-c", "--"])
@@ -101,7 +97,10 @@ pub fn run_bridge(
             msg: "Failed to execute bridge with interceptor".into(),
             cause: e,
         })?;
+    let elapsed = now.elapsed();
+    println!("({:7.4?} bridge total)", elapsed);
 
+    let now = Instant::now();
     let bridge_output = String::from_utf8_lossy(&bridge_output.stdout).to_string();
     let bridge_output = bridge_output.split_once("---- AUTOKERNEL BRIDGE BEGIN ----").unwrap().1;
 
@@ -109,5 +108,7 @@ pub fn run_bridge(
     let mut deserializer = Deserializer::from_str(bridge_output);
     deserializer.disable_recursion_limit();
     let symbols: Symbols = Symbols::deserialize(&mut deserializer)?;
+    let elapsed = now.elapsed();
+    println!("{:7.4?} time to parse json", elapsed);
     Ok(symbols)
 }

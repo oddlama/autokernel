@@ -66,7 +66,7 @@ fn integrationtest_parse_symbols() {
     println!("creating {} directory", &tmp.display());
     fs::create_dir_all(&tmp).unwrap();
 
-    // latest="$(curl -s https://www.kernel.org/ | grep -A1 'stable:' | grep -oP '(?<=strong>).*(?=</strong.*)' | head -1)" 
+    // latest="$(curl -s https://www.kernel.org/ | grep -A1 'stable:' | grep -oP '(?<=strong>).*(?=</strong.*)' | head -1)"
     let kernel_version = "linux-5.19.1";
     let kernel_tar = format!("{}.tar.xz", kernel_version);
 
@@ -81,13 +81,13 @@ fn integrationtest_parse_symbols() {
         .current_dir(&tmp).status().unwrap();
 
     // download kernel
-    println!("downloading kernel {} ...",kernel_version);
+    println!("downloading kernel {} ...", kernel_version);
     Command::new("wget")
         .arg("-q")
         .arg(format!("https://cdn.kernel.org/pub/linux/kernel/v5.x/{}", kernel_tar))
         .current_dir(&tmp).status().unwrap();
 
-    println!("extracting kernel {} ...",kernel_version);
+    println!("extracting kernel {} ...", kernel_version);
     Command::new("tar")
         .arg("-xvf")
         .arg(&kernel_tar)
