@@ -8,6 +8,12 @@
 #include "lkc.h"
 #include <ctype.h>
 
+int add(int a, int b) {
+	return a + b;
+}
+
+#if 0
+
 ////////////////////////////////////////////////////////
 // Base64 encoding
 
@@ -532,3 +538,4 @@ int main(int argc, char** argv) {
 //
 //	return 0;
 // }
+#endif

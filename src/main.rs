@@ -34,7 +34,7 @@ struct Args {
     kernel_dir: PathBuf,
 }
 
-fn print_smybol_types(symbols: &Symbols) {
+fn print_symbol_types(symbols: &Symbols) {
     let mut sym_types = HashSet::<&String>::new();
     let mut prop_types = HashSet::<&String>::new();
     let mut expr_types = HashSet::<&String>::new();
@@ -77,11 +77,21 @@ fn main() -> Result<(), Box<dyn Error>> {
     let _config = config::load(args.config)?;
     println!("-> Loaded config.");
 
+
+    let bridge = bridge::create_bridge(args.kernel_dir)?;
+    println!("{}", bridge.add(1, 2));
+    panic!("byebye");
+
+
+
+
+
+
     println!("## Running the bridge ##");
     let symbols = bridge::run_bridge(args.kernel_dir)?;
     println!("-> Loaded {} symbols.", symbols.symbols.len());
 
-    print_smybol_types(&symbols);
+    print_symbol_types(&symbols);
 
     if args.validate.exists() {
         println!("## Validating the kernel config ##");
@@ -93,10 +103,68 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     if args.build {
         println!("Build mode not supported yet");
-        // Merge configs
-        // Build kernel
-        // Build modules
-        // Build initramfs
+
+        // let bridge = Bridge::new(kernel_dir)
+        // umask 022 // do we want this from the config? or better: detect from the kernel_dir permissions?
+
+        // run make clean, IFF the user specified --clean
+        // execute pre-build hook
+
+        // let kernel_version = bridge.kernel_version();
+        // let config_output = args.config_output or args.kernel_dir, '.config.autokernel'
+
+        // Load some important symbol values
+        // sym_cmdline_bool = kconfig.syms['CMDLINE_BOOL']
+        // sym_cmdline = kconfig.syms['CMDLINE']
+        // sym_initramfs_source = kconfig.syms['INITRAMFS_SOURCE']
+        // sym_modules = kconfig.syms['MODULES']
+
+        // Set some defaults
+        // sym_cmdline_bool.set_value('y')
+        // sym_cmdline.set_value('')
+        // sym_initramfs_source.set_value('{INITRAMFS}')
+
+        //def _build_kernel():
+        //    # Write configuration to file
+        //    kconfig.write_config(
+        //            filename=config_output,
+        //            header=generated_by_autokernel_header(),
+        //            save_old=False)
+
+        //    # Copy file to .config, which may get changed by the makefiles
+        //    shutil.copyfile(config_output, os.path.join(args.kernel_dir, '.config'))
+        //    # Build the kernel
+        //    build_kernel(args)
+
+        //def set_cmdline():
+        //    kernel_cmdline_str = ' '.join(kernel_cmdline)
+
+        //    has_user_cmdline_bool = sym_cmdline_bool in autokernel.symbol_tracking.symbol_changes
+        //    has_user_cmdline = sym_cmdline in autokernel.symbol_tracking.symbol_changes
+
+        //    if has_user_cmdline_bool and sym_cmdline_bool.str_value == 'n':
+        //        # The user has explicitly disabled the builtin commandline,
+        //        # so there is no need to set it.
+        //        pass
+        //    else:
+        //        sym_cmdline_bool.set_value('y')
+
+        //        # Issue a warning, if a custom cmdline does not contain "{CMDLINE}", and we have gathered add_cmdline options.
+        //        if has_user_cmdline and not sym_cmdline.str_value.contains('{CMDLINE}') and len(kernel_cmdline) > 0:
+        //            log.warn("CMDLINE was set manually and doesn't contain a '{CMDLINE}' token, although add_cmdline has also been used.")
+
+        //        if has_user_cmdline:
+        //            sym_cmdline.set_value(sym_cmdline.str_value.replace('{CMDLINE}', kernel_cmdline_str))
+        //        else:
+        //            sym_cmdline.set_value(kernel_cmdline_str)
+
+        //info!("Building kernel");
+        //# On the first pass, disable all initramfs sources
+        //sym_initramfs_source.set_value('')
+        //# Start the build process
+        //_build_kernel()
+
+        // execute post-build hook
     } else {
         println!("Config mode not supported yet")
     }
