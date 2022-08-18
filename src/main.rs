@@ -1,11 +1,14 @@
 mod bridge;
-mod kconfig_types;
 mod config;
+mod kconfig_types;
 
-use std::error::Error;
+use std::{collections::HashSet, error::Error};
 
 use clap::Parser;
+use kconfig_types::Symbols;
 use std::path::PathBuf;
+
+use crate::kconfig_types::{Direction, Expr};
 
 #[derive(Parser, Debug)] // requires `derive` feature
 struct Args {
@@ -26,6 +29,42 @@ struct Args {
     kernel_dir: PathBuf,
 }
 
+fn print_smybol_types(symbols: &Symbols) {
+    let mut sym_types = HashSet::<&String>::new();
+    let mut prop_types = HashSet::<&String>::new();
+    let mut expr_types = HashSet::<&String>::new();
+
+    for sym in &symbols.symbols {
+        sym_types.insert(&sym.typ);
+        for prop in &sym.properties {
+            prop_types.insert(&prop.typ);
+            let mut exprs: Vec<Option<&Expr>> = vec![prop.expr.as_ref()];
+            while let Some(Some(e)) = exprs.pop() {
+                expr_types.insert(&e.typ);
+                if let Direction::There(ex) = &e.left {
+                    exprs.push(Some(ex));
+                }
+                if let Direction::There(ex) = &e.right {
+                    exprs.push(Some(ex));
+                }
+            }
+        }
+    }
+
+    println!();
+    for t in &sym_types {
+        println!("sym type {:?}", t);
+    }
+    println!();
+    for t in &prop_types {
+        println!("prop type {:?}", t);
+    }
+    println!();
+    for t in &expr_types {
+        println!("expr type {:?}", t);
+    }
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
@@ -37,6 +76,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let symbols = bridge::run_bridge(args.kernel_dir)?;
     println!("-> Loaded {} symbols.", symbols.symbols.len());
 
+    print_smybol_types(&symbols);
 
     //let kconfig = kconfig_types::Kconfig::from_toml(&config.config);
     //println!("-> Loaded {} Kconfigs.", kconfig
@@ -66,8 +106,8 @@ fn test_parse_args() {
 
 #[test]
 fn integrationtest_parse_symbols() {
-    use std::fs;
     use std::env;
+    use std::fs;
     use std::process::{Command, Stdio};
 
     let tmp = env::temp_dir().join("autokernel-test");
@@ -82,18 +122,27 @@ fn integrationtest_parse_symbols() {
     println!("cleaning previous test if exists");
     Command::new("rm")
         .arg(&kernel_tar)
-        .current_dir(&tmp).status().unwrap();
+        .current_dir(&tmp)
+        .status()
+        .unwrap();
     Command::new("rm")
         .arg("-r")
         .arg(&kernel_version)
-        .current_dir(&tmp).status().unwrap();
+        .current_dir(&tmp)
+        .status()
+        .unwrap();
 
     // download kernel
     println!("downloading kernel {} ...", kernel_version);
     Command::new("wget")
         .arg("-q")
-        .arg(format!("https://cdn.kernel.org/pub/linux/kernel/v5.x/{}", kernel_tar))
-        .current_dir(&tmp).status().unwrap();
+        .arg(format!(
+            "https://cdn.kernel.org/pub/linux/kernel/v5.x/{}",
+            kernel_tar
+        ))
+        .current_dir(&tmp)
+        .status()
+        .unwrap();
 
     println!("extracting kernel {} ...", kernel_version);
     Command::new("tar")
@@ -101,7 +150,8 @@ fn integrationtest_parse_symbols() {
         .arg(&kernel_tar)
         .current_dir(&tmp)
         .stdout(Stdio::null())
-        .status().unwrap();
+        .status()
+        .unwrap();
 
     let kernel_dir = tmp.join(kernel_version);
 
@@ -113,7 +163,8 @@ fn integrationtest_parse_symbols() {
     Command::new("rm")
         .arg("-r")
         .arg(&tmp)
-        .status().expect("cleanup failed");
+        .status()
+        .expect("cleanup failed");
 
     assert!(symbols.symbols.len() > 0)
 }

@@ -1,6 +1,6 @@
 use serde::Deserialize;
-use std::fs;
 use std::error::Error;
+use std::fs;
 use std::path::PathBuf;
 
 pub fn load(path: PathBuf) -> Result<Config, Box<dyn Error>> {

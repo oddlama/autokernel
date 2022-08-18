@@ -8,14 +8,14 @@
 use crate::kconfig_types::*;
 use serde::Deserialize;
 use serde_json::Deserializer;
-use std::io::prelude::*;
 use std::error::Error;
 use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs;
+use std::io::prelude::*;
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::os::unix::fs::OpenOptionsExt;
 
 #[derive(Debug)]
 struct StringConversionError {
@@ -50,14 +50,15 @@ impl Error for CommandCallError {
     }
 }
 
-pub fn run_bridge(
-    kernel_dir: PathBuf,
-) -> Result<Symbols, Box<dyn Error>> {
+pub fn run_bridge(kernel_dir: PathBuf) -> Result<Symbols, Box<dyn Error>> {
     let kconfig_dir = kernel_dir.join("scripts").join("kconfig");
 
     // Create bridge.c in kernel scripts directory
     fs::OpenOptions::new()
-        .create(true).write(true).truncate(true).mode(0o644)
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .mode(0o644)
         .open(&kconfig_dir.join("autokernel_bridge.c"))?
         .write_all(include_bytes!("bridge/bridge.c"))?;
 
@@ -75,12 +76,16 @@ pub fn run_bridge(
     // prerequisite C objects are also required to build our bridge.
     let kconfig_interceptor_sh = kconfig_dir.join("autokernel_interceptor.sh");
     fs::OpenOptions::new()
-        .create(true).write(true).truncate(true).mode(0o755)
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .mode(0o755)
         .open(&kconfig_interceptor_sh)?
         .write_all(include_bytes!("bridge/interceptor.sh"))?;
 
     let interceptor_shell = fs::canonicalize(&kconfig_interceptor_sh)?
-        .into_os_string().into_string()
+        .into_os_string()
+        .into_string()
         .map_err(|e| StringConversionError { cause: e })?;
 
     use std::time::Instant;
@@ -102,7 +107,10 @@ pub fn run_bridge(
 
     let now = Instant::now();
     let bridge_output = String::from_utf8_lossy(&bridge_output.stdout).to_string();
-    let bridge_output = bridge_output.split_once("---- AUTOKERNEL BRIDGE BEGIN ----").unwrap().1;
+    let bridge_output = bridge_output
+        .split_once("---- AUTOKERNEL BRIDGE BEGIN ----")
+        .unwrap()
+        .1;
 
     // Deserialize received symbols
     let mut deserializer = Deserializer::from_str(bridge_output);
