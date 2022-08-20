@@ -12,4 +12,5 @@ serde = { version = "1.0.143", features = ["derive"] }
 serde_json = { version = "1.0.83", features = ["unbounded_depth"] }
 toml = "0.5.9"
 libloading = "0.7.3"
-snafu = "0.7.1"
+thiserror = "1.0.32"
+anyhow = "1.0.62"

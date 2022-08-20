@@ -14,11 +14,7 @@ use std::process::{Command, Stdio};
 use libloading::os::unix::Symbol as RawSymbol;
 use libloading::{Library, Symbol};
 use libc::c_int;
-
-use snafu::{prelude::*, Whatever, ErrorCompat, ResultExt, Snafu, Error};
-
-type Result<T, E = Whatever> = std::result::Result<T, E>;
-
+use anyhow::{Context, Result, Error};
 
 type AddFunc = extern "C" fn(c_int, c_int) -> c_int;
 type Env = HashMap<String, String>;
@@ -64,8 +60,8 @@ pub fn prepare_bridge(kernel_dir: &PathBuf) -> Result<(PathBuf, Env)> {
         .write(true)
         .truncate(true)
         .mode(0o644)
-        .open(&kconfig_dir.join("autokernel_bridge.c")).whatever_context("TODO failed")?
-        .write_all(include_bytes!("bridge/bridge.c")).whatever_context("TODO failed")?;
+        .open(&kconfig_dir.join("autokernel_bridge.c"))?
+        .write_all(include_bytes!("bridge/bridge.c"))?;
 
     // This interceptor script is used to run autokernel's bridge with the
     // correct environment variables, which are set by the Makefile.
@@ -85,13 +81,13 @@ pub fn prepare_bridge(kernel_dir: &PathBuf) -> Result<(PathBuf, Env)> {
         .write(true)
         .truncate(true)
         .mode(0o755)
-        .open(&kconfig_interceptor_sh).whatever_context("TODO failed")?
-        .write_all(include_bytes!("bridge/interceptor.sh")).whatever_context("TODO failed")?;
+        .open(&kconfig_interceptor_sh)?
+        .write_all(include_bytes!("bridge/interceptor.sh"))?;
 
-    let interceptor_shell = fs::canonicalize(&kconfig_interceptor_sh).whatever_context("TODO failed")?
+    let interceptor_shell = fs::canonicalize(&kconfig_interceptor_sh)?
         .into_os_string()
-        .into_string().map_err(|e| format!("OsString conversion failed for {:?}", e)).whatever_context("TODO failed")?;
-        //.with_whatever_context(|s| "Could not get path of interceptor shell")?;
+        .into_string().map_err(|e| Error::msg(format!("OsString conversion failed for {:?}", e)))?;
+        //.with?;
 
     // Build our bridge by intercepting the final call of a make defconfig invocation.
     let bridge_library = kconfig_dir.join("autokernel_bridge.so");
@@ -102,14 +98,14 @@ pub fn prepare_bridge(kernel_dir: &PathBuf) -> Result<(PathBuf, Env)> {
         .current_dir(&kernel_dir)
         .stderr(Stdio::inherit())
         .output()
-        .whatever_context("Failed to execute bridge with interceptor")?;
+        ?;
 
     let builder_output = String::from_utf8_lossy(&builder_output.stdout).to_string();
     let builder_output = builder_output
-        .split_once("[AUTOKERNEL BRIDGE]").whatever_context("TODO failed")?
+        .split_once("[AUTOKERNEL BRIDGE]").context("interceptor output did not containe [AUTOKERNEL BRIDGE]")?
         .1;
 
-    let env = serde_json::from_str(builder_output).whatever_context("TODO failed")?;
+    let env = serde_json::from_str(builder_output)?;
     Ok((bridge_library, env))
 }
 
