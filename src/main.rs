@@ -87,16 +87,16 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 
 
-    println!("## Running the bridge ##");
-    let symbols = bridge::run_bridge(args.kernel_dir)?;
-    println!("-> Loaded {} symbols.", symbols.symbols.len());
+    // println!("## Running the bridge ##");
+    // let symbols = bridge::run_bridge(args.kernel_dir)?;
+    // println!("-> Loaded {} symbols.", symbols.symbols.len());
 
-    print_symbol_types(&symbols);
+    // print_symbol_types(&symbols);
 
-    if args.validate.exists() {
-        println!("## Validating the kernel config ##");
-        validate::validate_dotconfig(&symbols, &args.validate);
-    }
+    // if args.validate.exists() {
+    //     println!("## Validating the kernel config ##");
+    //     validate::validate_dotconfig(&symbols, &args.validate);
+    // }
 
     //let kconfig = kconfig_types::Kconfig::from_toml(&config.config);
     //println!("-> Loaded {} Kconfigs.", kconfig
@@ -234,7 +234,8 @@ fn integrationtest_parse_symbols() {
     let kernel_dir = tmp.join(kernel_version);
 
     println!("building and running bridge to extract all symbols");
-    let symbols = bridge::run_bridge(kernel_dir).unwrap();
+    //let symbols = bridge::run_bridge(kernel_dir).unwrap();
+    // TODO:
 
     // remove kernel tar and folder if they already exists
     println!("cleaning up");
@@ -243,6 +244,4 @@ fn integrationtest_parse_symbols() {
         .arg(&tmp)
         .status()
         .expect("cleanup failed");
-
-    assert!(symbols.symbols.len() > 0)
 }
