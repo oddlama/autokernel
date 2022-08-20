@@ -5,18 +5,18 @@
  * - build and run it with gcc
  */
 
-use crate::kconfig_types::*;
 use std::collections::HashMap;
-use serde::Deserialize;
-use serde_json::Deserializer;
 use std::error::Error;
 use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs;
-use std::io::{prelude::*, BufReader};
+use std::io::prelude::*;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use libloading::os::unix::Symbol as RawSymbol;
+use libloading::{Library, Symbol};
+use libc::c_int;
 
 #[derive(Debug)]
 struct StringConversionError {
@@ -53,99 +53,6 @@ impl Error for CommandCallError {
         }
     }
 }
-
-pub fn run_bridge(kernel_dir: PathBuf) -> Result<Symbols, Box<dyn Error>> {
-    let kconfig_dir = kernel_dir.join("scripts").join("kconfig");
-
-    // Create bridge.c in kernel scripts directory
-    fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .mode(0o644)
-        .open(&kconfig_dir.join("autokernel_bridge.c"))?
-        .write_all(include_bytes!("bridge/bridge.c"))?;
-
-    // This interceptor script is used to run autokernel's bridge with the
-    // correct environment variables, which are set by the Makefile.
-    //
-    // We do this by replacing the shell used internally by the Makefile
-    // with our interceptor script. This script will examine all commands
-    // run by the Makefile.
-    // If it detects that the kernel's "conf" tool is being run by the Makefile
-    // (e.g. by make defconfig), it replaces the executed command with a short
-    // function that builds and runs the autokernel bridge.
-    //
-    // It is necessary that some kind of "conf" tool is being run, as their
-    // prerequisite C objects are also required to build our bridge.
-    let kconfig_interceptor_sh = kconfig_dir.join("autokernel_interceptor.sh");
-    fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .mode(0o755)
-        .open(&kconfig_interceptor_sh)?
-        .write_all(include_bytes!("bridge/interceptor.sh"))?;
-
-    let interceptor_shell = fs::canonicalize(&kconfig_interceptor_sh)?
-        .into_os_string()
-        .into_string()
-        .map_err(|e| StringConversionError { cause: e })?;
-
-    // Build and run our bridge by intercepting the final call of a make defconfig invocation.
-    let bridge_child = Command::new("bash")
-        .args(["-c", "--"])
-        .arg("umask 022 && make SHELL=\"$INTERCEPTOR_SHELL\" defconfig")
-        .env("INTERCEPTOR_SHELL", interceptor_shell)
-        .current_dir(&kernel_dir)
-        .stderr(Stdio::inherit())
-        .stdout(Stdio::piped())
-        .spawn()
-        .map_err(|e| CommandCallError {
-            msg: "Failed to execute bridge with interceptor".into(),
-            cause: Some(e),
-        })?;
-
-    use std::time::Instant;
-    let now = Instant::now();
-
-    let mut stdout = bridge_child.stdout.unwrap();
-    let mut bufread = BufReader::new(stdout.by_ref());
-
-    //let separator = "---- AUTOKERNEL BRIDGE BEGIN ----";
-    let separator = "AUTOKERNEL BRIDGE";
-    let mut line = String::new();
-    while bufread.read_line(&mut line).is_ok() {
-        if line.contains(&separator) {
-            break;
-        }
-        println!("{}", line);
-    }
-
-    let mut deserializer = Deserializer::from_reader(bufread);
-
-    //let bridge_output = String::from_utf8_lossy(&bridge_output.stdout).to_string();
-    //let bridge_output = bridge_output
-    //    .split_once("---- AUTOKERNEL BRIDGE BEGIN ----")
-    //    .unwrap()
-    //    .1;
-
-    //// Deserialize received symbols
-    //let mut deserializer = Deserializer::from_str(bridge_output);
-    deserializer.disable_recursion_limit();
-    let symbols: Symbols = Symbols::deserialize(&mut deserializer)?;
-    let elapsed = now.elapsed();
-    println!("{:7.4?} time to parse json", elapsed);
-    Ok(symbols)
-}
-
-
-////////////////////////////////////////////////////////////////
-// dynamic bridge loading
-
-use libloading::os::unix::Symbol as RawSymbol;
-use libloading::{Library, Symbol};
-use libc::c_int;
 
 type AddFunc = extern "C" fn(c_int, c_int) -> c_int;
 type Env = HashMap<String, String>;
@@ -224,7 +131,7 @@ pub fn prepare_bridge(kernel_dir: &PathBuf) -> Result<(PathBuf, Env), Box<dyn Er
     let bridge_library = kconfig_dir.join("autokernel_bridge.so");
     let builder_output = Command::new("bash")
         .args(["-c", "--"])
-        .arg("umask 022 && make SHELL=\"$INTERCEPTOR_SHELL\" CC='gcc -fPIE' defconfig")
+        .arg("umask 022 && make SHELL=\"$INTERCEPTOR_SHELL\" defconfig")
         .env("INTERCEPTOR_SHELL", interceptor_shell)
         .current_dir(&kernel_dir)
         .stderr(Stdio::inherit())
