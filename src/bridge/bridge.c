@@ -1,3 +1,4 @@
+char** environ = 0;
 #include <unistd.h>
 #include <string.h>
 #include <strings.h>
@@ -8,19 +9,67 @@
 #include "lkc.h"
 #include <ctype.h>
 
-void load_env() {
-	putenv("HOME=YOLO");
-}
-extern char** environ;
+extern struct symbol symbol_yes, symbol_no, symbol_mod;
+size_t n_symbols = 0;
 
-int add(int a, int b) {
-	system("env");
-	printf("-----------\n");
-	environ = malloc(4096);
-	environ[0] = 0;
-	putenv("HOME=YOLO");
-	system("env");
-	return a + b;
+/**
+ * Initializes the bridge:
+ * 1. Replaces the environment with a local duplicate
+ * 2. Loads and parses the kconfig file.
+ * 3. Counts the amount of loaded symbols.
+ */
+void init() {
+	struct timeval start, now;
+	struct symbol* sym;
+	int i;
+
+	// TODO: home is not KERNEL_VERSION (changed for debug)
+	printf("Initializing autokernel bridge for kver %s\n", getenv("HOME"));
+	char buf[3000];
+	getcwd(buf, 3000);
+	printf("cwd: %s\n", buf);
+
+	// Parse Kconfig and load empty .config (/dev/null)
+	gettimeofday(&start, NULL);
+	// TODO: cwd is somewhere random. use env variable
+	chdir("../linux-5.19.1");
+	conf_parse("Kconfig");
+	conf_read("/dev/null");
+	chdir(buf);
+
+	gettimeofday(&now, NULL);
+	dprintf(2, "Parsed Kconfig in %7.4fs\n", (double)(now.tv_usec - start.tv_usec) / 1000000 + (double)(now.tv_sec - start.tv_sec));
+	start = now;
+
+
+	// TODO: replace environ
+	//environ = malloc(4096);
+
+	// Three static symbols plus all parsed symbols
+	n_symbols = 3;
+	for_all_symbols(i, sym) { ++n_symbols; }
+	printf("Found %ld symbols\n", n_symbols);
+}
+
+/**
+ * Returns a list of all known symbols.
+ */
+struct symbol** get_all_symbols() {
+	struct symbol* sym;
+	int i;
+
+	struct symbol** all_syms = malloc((n_symbols + 1) * sizeof(struct symbol*));
+	struct symbol** next = all_syms;
+
+	*(next++) = &symbol_yes;
+	*(next++) = &symbol_no;
+	*(next++) = &symbol_mod;
+	for_all_symbols(i, sym) {
+		*(next++) = sym;
+	}
+	*(next++) = NULL;
+
+	return all_syms;
 }
 
 #if 0

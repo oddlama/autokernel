@@ -77,15 +77,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let _config = config::load(args.config)?;
     println!("-> Loaded config.");
 
-
     let bridge = bridge::create_bridge(args.kernel_dir)?;
-    println!("{}", bridge.add(1, 2));
+    println!("{}", bridge.get_all_symbols());
     panic!("byebye");
-
-
-
-
-
 
     // println!("## Running the bridge ##");
     // let symbols = bridge::run_bridge(args.kernel_dir)?;

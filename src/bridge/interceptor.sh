@@ -17,8 +17,7 @@ function build_bridge() {
 		o="scripts/kconfig/$i.autokernel.o"
 		o_files+=("$o")
 		gcc -O3 -fPIC -Wp,-MMD,scripts/kconfig/."$i".o.d \
-			-Wall -Wmissing-prototypes -Wstrict-prototypes \
-			-fomit-frame-pointer -std=gnu11 -Wdeclaration-after-statement \
+			-Wall -fomit-frame-pointer -std=gnu11 -Wdeclaration-after-statement \
 			-I ./scripts/kconfig -c -o "$o" scripts/kconfig/"$i".c \
 			|| die "Failed to compile $i for autokernel bridge!"
 	done

@@ -5,30 +5,41 @@
  * - build and run it with gcc
  */
 
+use libloading::os::unix::Symbol as RawSymbol;
+use libloading::{Library, Symbol};
+use libc::c_char;
 use std::collections::HashMap;
 use std::fs;
 use std::io::prelude::*;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use libloading::os::unix::Symbol as RawSymbol;
-use libloading::{Library, Symbol};
-use libc::c_int;
 use anyhow::{Context, Result, Error};
 
-type AddFunc = extern "C" fn(c_int, c_int) -> c_int;
+#[repr(C)]
+struct CSymbol {
+    next: *mut CSymbol,
+    name: *const c_char,
+}
+
+type FuncInit = extern "C" fn() -> ();
+type FuncGetAllSymbols = extern "C" fn() -> *mut *mut CSymbol;
 type Env = HashMap<String, String>;
 
 struct BridgeVTable {
-    add: RawSymbol<AddFunc>,
+    init: RawSymbol<FuncInit>,
+    get_all_symbols: RawSymbol<FuncGetAllSymbols>,
 }
 
 impl BridgeVTable {
     unsafe fn new(library: &Library) -> BridgeVTable {
-        let fn_add: Symbol<AddFunc> = library.get(b"add").unwrap();
+        let fn_init: Symbol<FuncInit> = library.get(b"init").unwrap();
+        let fn_get_all_symbols: Symbol<FuncGetAllSymbols> =
+            library.get(b"get_all_symbols").unwrap();
 
         BridgeVTable {
-            add: fn_add.into_raw(),
+            init: fn_init.into_raw(),
+            get_all_symbols: fn_get_all_symbols.into_raw(),
         }
     }
 }
@@ -42,11 +53,22 @@ pub struct Bridge {
 }
 
 impl Bridge {
-    pub fn add(&self, a: c_int, b: c_int) -> c_int {
-        let a = (self.vtable.add)(a, b);
-        use std::env;
-        println!("EEEEEEEEEEEEENV {}", env::var("HOME").unwrap());
-        a
+    pub fn init(&self) {
+        (self.vtable.init)();
+    }
+    pub fn get_all_symbols(&self) -> isize {
+        let symbols = (self.vtable.get_all_symbols)();
+        let mut next = symbols;
+
+        unsafe {
+            while !(*next).is_null() {
+                next = next.add(1);
+            }
+        }
+
+        unsafe {
+            next.offset_from(symbols)
+        }
     }
 }
 
@@ -118,16 +140,20 @@ pub fn create_bridge(kernel_dir: PathBuf) -> Result<Bridge> {
         let library = Library::new(library_path).unwrap();
         let vtable = BridgeVTable::new(&library);
 
+        // TODO: this is temporary
+        for (key, value) in &env {
+            std::env::set_var(key, value)
+        }
+
         // TODO: we need the env to be correct inside the shared library.
         // TODO: set it initially inside the shared library by modifying the C global variable
-        println!("EEEEEEEEEEEEENV {}", env["HOME"]);
-        use std::env;
-        println!("EEEEEEEEEEEEENV {}", env::var("HOME").unwrap());
-        Ok(Bridge{
+        let bridge = Bridge {
             library,
             vtable,
             kernel_dir,
             environment: env,
-        })
+        };
+        bridge.init();
+        Ok(bridge)
     }
 }
