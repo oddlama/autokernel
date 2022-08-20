@@ -6,9 +6,6 @@
  */
 
 use std::collections::HashMap;
-use std::error::Error;
-use std::ffi::OsString;
-use std::fmt::Display;
 use std::fs;
 use std::io::prelude::*;
 use std::os::unix::fs::OpenOptionsExt;
@@ -18,41 +15,10 @@ use libloading::os::unix::Symbol as RawSymbol;
 use libloading::{Library, Symbol};
 use libc::c_int;
 
-#[derive(Debug)]
-struct StringConversionError {
-    cause: OsString,
-}
-impl Display for StringConversionError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        // print cause
-        write!(
-            formatter,
-            "failed to convert  OsString to String: {}",
-            self.cause.to_string_lossy()
-        )
-    }
-}
-impl Error for StringConversionError {}
+use snafu::{prelude::*, Whatever, ErrorCompat, ResultExt, Snafu, Error};
 
-#[derive(Debug)]
-struct CommandCallError {
-    msg: String,
-    cause: Option<std::io::Error>,
-}
-impl Display for CommandCallError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        // print cause
-        write!(formatter, "{} {:?}", self.msg, self.cause)
-    }
-}
-impl Error for CommandCallError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match &self.cause {
-            Some(e) => Some(e),
-            None => None,
-        }
-    }
-}
+type Result<T, E = Whatever> = std::result::Result<T, E>;
+
 
 type AddFunc = extern "C" fn(c_int, c_int) -> c_int;
 type Env = HashMap<String, String>;
@@ -89,7 +55,7 @@ impl Bridge {
 }
 
 /// Compile (or find existing) bridge shared library.
-pub fn prepare_bridge(kernel_dir: &PathBuf) -> Result<(PathBuf, Env), Box<dyn Error>> {
+pub fn prepare_bridge(kernel_dir: &PathBuf) -> Result<(PathBuf, Env)> {
     let kconfig_dir = kernel_dir.join("scripts").join("kconfig");
 
     // Copy bridge.c to kernel scripts directory
@@ -98,8 +64,8 @@ pub fn prepare_bridge(kernel_dir: &PathBuf) -> Result<(PathBuf, Env), Box<dyn Er
         .write(true)
         .truncate(true)
         .mode(0o644)
-        .open(&kconfig_dir.join("autokernel_bridge.c"))?
-        .write_all(include_bytes!("bridge/bridge.c"))?;
+        .open(&kconfig_dir.join("autokernel_bridge.c")).whatever_context("TODO failed")?
+        .write_all(include_bytes!("bridge/bridge.c")).whatever_context("TODO failed")?;
 
     // This interceptor script is used to run autokernel's bridge with the
     // correct environment variables, which are set by the Makefile.
@@ -119,13 +85,13 @@ pub fn prepare_bridge(kernel_dir: &PathBuf) -> Result<(PathBuf, Env), Box<dyn Er
         .write(true)
         .truncate(true)
         .mode(0o755)
-        .open(&kconfig_interceptor_sh)?
-        .write_all(include_bytes!("bridge/interceptor.sh"))?;
+        .open(&kconfig_interceptor_sh).whatever_context("TODO failed")?
+        .write_all(include_bytes!("bridge/interceptor.sh")).whatever_context("TODO failed")?;
 
-    let interceptor_shell = fs::canonicalize(&kconfig_interceptor_sh)?
+    let interceptor_shell = fs::canonicalize(&kconfig_interceptor_sh).whatever_context("TODO failed")?
         .into_os_string()
-        .into_string()
-        .map_err(|e| StringConversionError { cause: e })?;
+        .into_string().map_err(|e| format!("OsString conversion failed for {:?}", e)).whatever_context("TODO failed")?;
+        //.with_whatever_context(|s| "Could not get path of interceptor shell")?;
 
     // Build our bridge by intercepting the final call of a make defconfig invocation.
     let bridge_library = kconfig_dir.join("autokernel_bridge.so");
@@ -136,25 +102,21 @@ pub fn prepare_bridge(kernel_dir: &PathBuf) -> Result<(PathBuf, Env), Box<dyn Er
         .current_dir(&kernel_dir)
         .stderr(Stdio::inherit())
         .output()
-        .map_err(|e| CommandCallError {
-            msg: "Failed to execute bridge with interceptor".into(),
-            cause: Some(e),
-        })?;
+        .whatever_context("Failed to execute bridge with interceptor")?;
 
     let builder_output = String::from_utf8_lossy(&builder_output.stdout).to_string();
     let builder_output = builder_output
-        .split_once("[AUTOKERNEL BRIDGE]")
-        .unwrap()
+        .split_once("[AUTOKERNEL BRIDGE]").whatever_context("TODO failed")?
         .1;
 
-    let env = serde_json::from_str(builder_output).unwrap();
+    let env = serde_json::from_str(builder_output).whatever_context("TODO failed")?;
     Ok((bridge_library, env))
 }
 
 /// Compile bridge library if necessary, then dynamically
 /// load it and associated functions and create and return a
 /// Bridge object to interface with the C part.
-pub fn create_bridge(kernel_dir: PathBuf) -> Result<Bridge, Box<dyn Error>> {
+pub fn create_bridge(kernel_dir: PathBuf) -> Result<Bridge> {
     let (library_path, env) = prepare_bridge(&kernel_dir)?;
     unsafe {
         let library = Library::new(library_path).unwrap();
