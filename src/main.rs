@@ -39,9 +39,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let bridge = bridge::create_bridge(args.kernel_dir)?;
     let symbols = bridge.get_all_symbols();
     unsafe {
-        for symbol in symbols {
-            println!("{}", (*symbol).name());
-        }
+        println!("{}", (*symbols[100]).name());
     }
 
     if args.build {

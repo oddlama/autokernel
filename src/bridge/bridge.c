@@ -24,10 +24,10 @@ void init() {
 	int i;
 
 	// TODO: home is not KERNEL_VERSION (changed for debug)
-	printf("Initializing autokernel bridge for kver %s\n", getenv("HOME"));
+	printf("[C] Initializing autokernel bridge for kver %s\n", getenv("HOME"));
 	char buf[3000];
 	getcwd(buf, 3000);
-	printf("cwd: %s\n", buf);
+	printf("[C] cwd: %s\n", buf);
 
 	// Parse Kconfig and load empty .config (/dev/null)
 	gettimeofday(&start, NULL);
@@ -38,7 +38,7 @@ void init() {
 	chdir(buf);
 
 	gettimeofday(&now, NULL);
-	dprintf(2, "Parsed Kconfig in %7.4fs\n", (double)(now.tv_usec - start.tv_usec) / 1000000 + (double)(now.tv_sec - start.tv_sec));
+	dprintf(2, "[C] Parsed Kconfig in %7.4fs\n", (double)(now.tv_usec - start.tv_usec) / 1000000 + (double)(now.tv_sec - start.tv_sec));
 	start = now;
 
 
@@ -48,7 +48,7 @@ void init() {
 	// Three static symbols plus all parsed symbols
 	n_symbols = 3;
 	for_all_symbols(i, sym) { ++n_symbols; }
-	printf("Found %ld symbols\n", n_symbols);
+	printf("[C] Found %ld symbols\n", n_symbols);
 }
 
 size_t symbol_count() {

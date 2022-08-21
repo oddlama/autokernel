@@ -6,7 +6,7 @@
  */
 
 use anyhow::{Context, Error, Result};
-use libc::{c_char, size_t};
+use libc::{c_char, c_int, size_t, c_void};
 use libloading::os::unix::Symbol as RawSymbol;
 use libloading::{Library, Symbol};
 use std::collections::HashMap;
@@ -18,10 +18,50 @@ use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
+#[repr(u8)]
+#[allow(dead_code)]
+pub enum Tristate {
+    No,
+    Mod,
+    Yes,
+}
+
+#[repr(u8)]
+#[allow(dead_code)]
+pub enum SymbolType {
+    Unknown,
+    Boolean,
+    Tristate,
+    Int,
+    Hex,
+    String,
+}
+
+#[repr(C)]
+pub struct CSymbolValue {
+    value: *mut c_void,
+    tri: Tristate,
+}
+
+#[repr(C)]
+pub struct CExprValue {
+    expression: *mut c_void,
+    tri: Tristate,
+}
+
 #[repr(C)]
 pub struct CSymbol {
     next: *mut CSymbol,
     name: *const c_char,
+    symbol_type: SymbolType,
+    current_value: CSymbolValue,
+    default_values: [CSymbolValue; 4],
+    visible: Tristate,
+    flags: c_int,
+    properties: *mut c_void,
+    direct_dependencies: CExprValue,
+    reverse_dependencies: CExprValue,
+    implied: CExprValue,
 }
 
 impl CSymbol {
