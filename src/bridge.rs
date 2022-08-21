@@ -5,40 +5,56 @@
  * - build and run it with gcc
  */
 
+use anyhow::{Context, Error, Result};
+use libc::{c_char, size_t};
 use libloading::os::unix::Symbol as RawSymbol;
 use libloading::{Library, Symbol};
-use libc::c_char;
 use std::collections::HashMap;
+use std::ffi::CStr;
+use std::borrow::Cow;
 use std::fs;
 use std::io::prelude::*;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use anyhow::{Context, Result, Error};
 
 #[repr(C)]
-struct CSymbol {
+pub struct CSymbol {
     next: *mut CSymbol,
     name: *const c_char,
 }
 
+impl CSymbol {
+    pub fn name(&self) -> Cow<'_, str> {
+        unsafe {
+            match self.name.as_ref() {
+                Some(obj) => String::from_utf8_lossy(CStr::from_ptr(obj).to_bytes()),
+                None => Cow::from("(null)"),
+            }
+        }
+    }
+}
+
 type FuncInit = extern "C" fn() -> ();
-type FuncGetAllSymbols = extern "C" fn() -> *mut *mut CSymbol;
+type FuncSymbolCount = extern "C" fn() -> size_t;
+type FuncGetAllSymbols = extern "C" fn(*mut *mut CSymbol) -> ();
 type Env = HashMap<String, String>;
 
 struct BridgeVTable {
     init: RawSymbol<FuncInit>,
+    symbol_count: RawSymbol<FuncSymbolCount>,
     get_all_symbols: RawSymbol<FuncGetAllSymbols>,
 }
 
 impl BridgeVTable {
     unsafe fn new(library: &Library) -> BridgeVTable {
         let fn_init: Symbol<FuncInit> = library.get(b"init").unwrap();
-        let fn_get_all_symbols: Symbol<FuncGetAllSymbols> =
-            library.get(b"get_all_symbols").unwrap();
+        let fn_symbol_count: Symbol<FuncSymbolCount> = library.get(b"symbol_count").unwrap();
+        let fn_get_all_symbols: Symbol<FuncGetAllSymbols> = library.get(b"get_all_symbols").unwrap();
 
         BridgeVTable {
             init: fn_init.into_raw(),
+            symbol_count: fn_symbol_count.into_raw(),
             get_all_symbols: fn_get_all_symbols.into_raw(),
         }
     }
@@ -56,19 +72,17 @@ impl Bridge {
     pub fn init(&self) {
         (self.vtable.init)();
     }
-    pub fn get_all_symbols(&self) -> isize {
-        let symbols = (self.vtable.get_all_symbols)();
-        let mut next = symbols;
 
-        unsafe {
-            while !(*next).is_null() {
-                next = next.add(1);
-            }
-        }
+    pub fn symbol_count(&self) -> usize {
+        (self.vtable.symbol_count)() as usize
+    }
 
-        unsafe {
-            next.offset_from(symbols)
-        }
+    pub fn get_all_symbols(&self) -> Vec<*mut CSymbol> {
+        let count = self.symbol_count();
+        let mut symbols = Vec::with_capacity(count);
+        (self.vtable.get_all_symbols)(symbols.as_mut_ptr());
+        unsafe { symbols.set_len(count) };
+        symbols
     }
 }
 
@@ -108,8 +122,9 @@ pub fn prepare_bridge(kernel_dir: &PathBuf) -> Result<(PathBuf, Env)> {
 
     let interceptor_shell = fs::canonicalize(&kconfig_interceptor_sh)?
         .into_os_string()
-        .into_string().map_err(|e| Error::msg(format!("OsString conversion failed for {:?}", e)))?;
-        //.with?;
+        .into_string()
+        .map_err(|e| Error::msg(format!("OsString conversion failed for {:?}", e)))?;
+    //.with?;
 
     // Build our bridge by intercepting the final call of a make defconfig invocation.
     let bridge_library = kconfig_dir.join("autokernel_bridge.so");
@@ -119,12 +134,12 @@ pub fn prepare_bridge(kernel_dir: &PathBuf) -> Result<(PathBuf, Env)> {
         .env("INTERCEPTOR_SHELL", interceptor_shell)
         .current_dir(&kernel_dir)
         .stderr(Stdio::inherit())
-        .output()
-        ?;
+        .output()?;
 
     let builder_output = String::from_utf8_lossy(&builder_output.stdout).to_string();
     let builder_output = builder_output
-        .split_once("[AUTOKERNEL BRIDGE]").context("interceptor output did not containe [AUTOKERNEL BRIDGE]")?
+        .split_once("[AUTOKERNEL BRIDGE]")
+        .context("interceptor output did not containe [AUTOKERNEL BRIDGE]")?
         .1;
 
     let env = serde_json::from_str(builder_output)?;

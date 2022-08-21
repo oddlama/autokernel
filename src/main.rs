@@ -1,15 +1,10 @@
 mod bridge;
 mod config;
-mod kconfig_types;
-mod validate;
 
-use std::{collections::HashSet, error::Error};
+use std::error::Error;
 
 use clap::Parser;
-use kconfig_types::Symbols;
 use std::path::PathBuf;
-
-use crate::kconfig_types::{Direction, Expr};
 
 #[derive(Parser, Debug)] // requires `derive` feature
 struct Args {
@@ -34,42 +29,6 @@ struct Args {
     kernel_dir: PathBuf,
 }
 
-fn print_symbol_types(symbols: &Symbols) {
-    let mut sym_types = HashSet::<&String>::new();
-    let mut prop_types = HashSet::<&String>::new();
-    let mut expr_types = HashSet::<&String>::new();
-
-    for sym in &symbols.symbols {
-        sym_types.insert(&sym.typ);
-        for prop in &sym.properties {
-            prop_types.insert(&prop.typ);
-            let mut exprs: Vec<Option<&Expr>> = vec![prop.expr.as_ref()];
-            while let Some(Some(e)) = exprs.pop() {
-                expr_types.insert(&e.typ);
-                if let Direction::There(ex) = &e.left {
-                    exprs.push(Some(ex));
-                }
-                if let Direction::There(ex) = &e.right {
-                    exprs.push(Some(ex));
-                }
-            }
-        }
-    }
-
-    println!();
-    for t in &sym_types {
-        println!("sym type {:?}", t);
-    }
-    println!();
-    for t in &prop_types {
-        println!("prop type {:?}", t);
-    }
-    println!();
-    for t in &expr_types {
-        println!("expr type {:?}", t);
-    }
-}
-
 fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
@@ -78,22 +37,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("-> Loaded config.");
 
     let bridge = bridge::create_bridge(args.kernel_dir)?;
-    println!("{}", bridge.get_all_symbols());
-    panic!("byebye");
-
-    // println!("## Running the bridge ##");
-    // let symbols = bridge::run_bridge(args.kernel_dir)?;
-    // println!("-> Loaded {} symbols.", symbols.symbols.len());
-
-    // print_symbol_types(&symbols);
-
-    // if args.validate.exists() {
-    //     println!("## Validating the kernel config ##");
-    //     validate::validate_dotconfig(&symbols, &args.validate);
-    // }
-
-    //let kconfig = kconfig_types::Kconfig::from_toml(&config.config);
-    //println!("-> Loaded {} Kconfigs.", kconfig
+    let symbols = bridge.get_all_symbols();
+    unsafe {
+        for symbol in symbols {
+            println!("{}", (*symbol).name());
+        }
+    }
 
     if args.build {
         println!("Build mode not supported yet");

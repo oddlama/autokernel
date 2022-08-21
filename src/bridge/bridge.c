@@ -51,25 +51,24 @@ void init() {
 	printf("Found %ld symbols\n", n_symbols);
 }
 
+size_t symbol_count() {
+	return n_symbols;
+}
+
 /**
  * Returns a list of all known symbols.
  */
-struct symbol** get_all_symbols() {
+void get_all_symbols(struct symbol** out) {
 	struct symbol* sym;
 	int i;
 
-	struct symbol** all_syms = malloc((n_symbols + 1) * sizeof(struct symbol*));
-	struct symbol** next = all_syms;
-
+	struct symbol** next = out;
 	*(next++) = &symbol_yes;
 	*(next++) = &symbol_no;
 	*(next++) = &symbol_mod;
 	for_all_symbols(i, sym) {
 		*(next++) = sym;
 	}
-	*(next++) = NULL;
-
-	return all_syms;
 }
 
 #if 0
