@@ -39,25 +39,31 @@ pub enum SymbolType {
 
 #[repr(C)]
 pub struct CSymbolValue {
+    // TODO where (which type) is this pointing to?
     value: *mut c_void,
     tri: Tristate,
 }
 
 #[repr(C)]
 pub struct CExprValue {
+    // TODO where (which type) is this pointing to?
     expression: *mut c_void,
     tri: Tristate,
 }
 
+// TODO remove raw ust pointers with &* syntax to &Type rust structs, transmute is also possible
 #[repr(C)]
 pub struct CSymbol {
+    // TODO either go with lifetimes or with box for heap allocation
     next: *mut CSymbol,
+    // TODO where (which type) is this pointing to?
     name: *const c_char,
     symbol_type: SymbolType,
     current_value: CSymbolValue,
     default_values: [CSymbolValue; 4],
     visible: Tristate,
     flags: c_int,
+    // TODO where (which type) is this pointing to?
     properties: *mut c_void,
     direct_dependencies: CExprValue,
     reverse_dependencies: CExprValue,
@@ -121,6 +127,7 @@ impl Bridge {
         let count = self.symbol_count();
         let mut symbols = Vec::with_capacity(count);
         (self.vtable.get_all_symbols)(symbols.as_mut_ptr());
+        // TODO why is this necessary since you already created the vec with the capacity?
         unsafe { symbols.set_len(count) };
         symbols
     }

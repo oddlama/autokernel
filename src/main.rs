@@ -176,6 +176,11 @@ fn integrationtest_parse_symbols() {
 
     println!("building and running bridge to extract all symbols");
     //let symbols = bridge::run_bridge(kernel_dir).unwrap();
+    let bridge = bridge::create_bridge(kernel_dir).unwrap();
+    let symbols = bridge.get_all_symbols();
+    unsafe {
+        println!("{}", (*symbols[100]).name());
+    }
     // TODO:
 
     // remove kernel tar and folder if they already exists
