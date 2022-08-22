@@ -1,6 +1,7 @@
 mod bridge;
 mod config;
 
+use bridge::Symbol;
 use std::error::Error;
 
 use clap::Parser;
@@ -40,9 +41,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let bridge = bridge::create_bridge(args.kernel_dir)?;
     let symbols = bridge.get_all_symbols();
-    unsafe {
-        println!("{}", (*symbols[100]).name());
-    }
+    println!("{}", symbols[100].name().unwrap_or("(help)".into()));
 
     match args.action {
         Action::Build => {
