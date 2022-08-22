@@ -122,13 +122,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 // TODO use test_env_logger
 
 #[test]
-fn test_parse_args() {
-    let args = Args::parse();
-
-    assert_eq!(args.kernel_dir, PathBuf::from("/usr/src/linux/"))
-}
-
-#[test]
 fn integrationtest_parse_symbols() {
     use std::env;
     use std::fs;
@@ -177,7 +170,7 @@ fn integrationtest_parse_symbols() {
     let bridge = bridge::create_bridge(kernel_dir).unwrap();
     let symbols = bridge.get_all_symbols();
     unsafe {
-        println!("{}", (*symbols[100]).name());
+        println!("{}", symbols[100].name().unwrap());
     }
     // TODO:
 
