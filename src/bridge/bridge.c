@@ -32,7 +32,7 @@ void init() {
 	// Parse Kconfig and load empty .config (/dev/null)
 	gettimeofday(&start, NULL);
 	// TODO: cwd is somewhere random. use env variable
-	chdir("../linux-5.19.1");
+	chdir("./linux-5.19.1");
 	conf_parse("Kconfig");
 	conf_read("/dev/null");
 	chdir(buf);
