@@ -7,6 +7,8 @@ use std::error::Error;
 use clap::Parser;
 use std::path::PathBuf;
 
+use crate::bridge::Tristate;
+
 #[derive(Parser, Debug)] // requires `derive` feature
 struct Args {
     /// config toml
@@ -169,10 +171,9 @@ fn integrationtest_parse_symbols() {
     //let symbols = bridge::run_bridge(kernel_dir).unwrap();
     let bridge = bridge::create_bridge(kernel_dir).unwrap();
     let symbols = bridge.get_all_symbols();
-    unsafe {
-        println!("{}", symbols[100].name().unwrap());
-    }
-    // TODO:
+    println!("name: {}", symbols[100].name().unwrap());
+    println!("cur_val: {:?}", symbols[100].get_value());
+    println!("defaults: {:?}", symbols[100].get_defaults().collect::<Vec<&Tristate>>());
 
     // remove kernel tar and folder if they already exists
     println!("cleaning up");

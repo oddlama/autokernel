@@ -18,6 +18,7 @@ use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
+#[derive(Debug)]
 #[repr(u8)]
 #[allow(dead_code)]
 pub enum Tristate {
@@ -26,6 +27,7 @@ pub enum Tristate {
     Yes,
 }
 
+#[derive(Debug)]
 #[repr(u8)]
 #[allow(dead_code)]
 pub enum SymbolType {
@@ -53,10 +55,10 @@ pub struct CExprValue {
 pub struct Symbol {
     next: *const c_void,
     name: *const c_char,
-    symbol_type: SymbolType,
+    pub symbol_type: SymbolType,
     current_value: SymbolValue,
     default_values: [SymbolValue; 4],
-    visible: Tristate,
+    pub visible: Tristate,
     flags: c_int,
     // TODO where (which type) is this pointing to?
     properties: *mut c_void,
@@ -75,7 +77,13 @@ impl Symbol {
     }
     // dependencies()
     // set()
-    // get()
+    pub fn get_value(&self) -> &Tristate {
+        &self.current_value.tri
+    }
+
+    pub fn get_defaults(&self) -> impl Iterator<Item = &Tristate>{
+        self.default_values.iter().map(|v| &v.tri)
+    }
 }
 
 type FuncInit = extern "C" fn() -> ();
