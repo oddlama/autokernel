@@ -9,15 +9,21 @@ function die() { echo "error: $*" >&2; exit 1; }
 function build_bridge() {
 	umask 022
 
+	rm "$BRIDGE_SO" &>/dev/null
 	sha256sum "$BRIDGE_C" > "$BRIDGE_C".sha256 \
 		|| die "Could not compute sha256 of autokernel_bridge.c"
 
 	o_files=()
 	for i in conf confdata expr menu preprocess symbol util lexer.lex parser.tab autokernel_bridge; do
+		[[ "$i" == autokernel_bridge ]] \
+			&& getenv_override="" \
+			|| getenv_override="-Dgetenv=autokernel_getenv"
+
 		o="scripts/kconfig/$i.autokernel.o"
 		o_files+=("$o")
 		gcc -O3 -fPIC -Wp,-MMD,scripts/kconfig/."$i".o.d \
 			-Wall -fomit-frame-pointer -std=gnu11 -Wdeclaration-after-statement \
+			$getenv_override \
 			-I ./scripts/kconfig -c -o "$o" scripts/kconfig/"$i".c \
 			|| die "Failed to compile $i for autokernel bridge!"
 	done

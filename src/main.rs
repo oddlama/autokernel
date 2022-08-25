@@ -1,7 +1,6 @@
 mod bridge;
 mod config;
 
-use bridge::Symbol;
 use std::error::Error;
 
 use clap::Parser;

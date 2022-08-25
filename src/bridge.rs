@@ -6,12 +6,12 @@
  */
 
 use anyhow::{Context, Error, Result};
-use libc::{c_char, c_int, size_t, c_void};
+use libc::{c_char, c_int, c_void, size_t};
 use libloading::os::unix::Symbol as RawSymbol;
 use libloading::{Library, Symbol as LSymbol};
-use std::collections::HashMap;
-use std::ffi::CStr;
 use std::borrow::Cow;
+use std::collections::HashMap;
+use std::ffi::{CStr, CString};
 use std::fs;
 use std::io::prelude::*;
 use std::os::unix::fs::OpenOptionsExt;
@@ -70,9 +70,9 @@ pub struct Symbol {
 impl Symbol {
     pub fn name(&self) -> Option<Cow<'_, str>> {
         unsafe {
-            self.name.as_ref().map(|obj| {
-                String::from_utf8_lossy(CStr::from_ptr(obj).to_bytes())
-            })
+            self.name
+                .as_ref()
+                .map(|obj| String::from_utf8_lossy(CStr::from_ptr(obj).to_bytes()))
         }
     }
     // dependencies()
@@ -81,15 +81,15 @@ impl Symbol {
         &self.current_value.tri
     }
 
-    pub fn get_defaults(&self) -> impl Iterator<Item = &Tristate>{
+    pub fn get_defaults(&self) -> impl Iterator<Item = &Tristate> {
         self.default_values.iter().map(|v| &v.tri)
     }
 }
 
-type FuncInit = extern "C" fn() -> ();
+type FuncInit = extern "C" fn(*const *const c_char) -> ();
 type FuncSymbolCount = extern "C" fn() -> size_t;
 type FuncGetAllSymbols = extern "C" fn(*mut *mut Symbol) -> ();
-type Env = HashMap<String, String>;
+type EnvironMap = HashMap<String, String>;
 
 struct BridgeVTable {
     init: RawSymbol<FuncInit>,
@@ -116,12 +116,21 @@ pub struct Bridge {
     library: Library,
     vtable: BridgeVTable,
     pub kernel_dir: PathBuf,
-    pub environment: Env,
 }
 
 impl Bridge {
-    pub fn init(&self) {
-        (self.vtable.init)();
+    pub fn init(&self, env: EnvironMap) {
+        // Create env vector
+        let env: Vec<CString> = env
+            .iter()
+            .map(|(k, v)| {
+                CString::new(format!("{}={}", k, v)).expect("Could not convert environment variable to CString")
+            })
+            .collect();
+        // Create vector of ptrs with NULL at the end
+        let mut ffi_env: Vec<*const c_char> = env.iter().map(|cstr| cstr.as_ptr()).collect();
+        ffi_env.push(std::ptr::null());
+        (self.vtable.init)(ffi_env.as_ptr());
     }
 
     pub fn symbol_count(&self) -> usize {
@@ -138,7 +147,7 @@ impl Bridge {
 }
 
 /// Compile (or find existing) bridge shared library.
-pub fn prepare_bridge(kernel_dir: &PathBuf) -> Result<(PathBuf, Env)> {
+pub fn prepare_bridge(kernel_dir: &PathBuf) -> Result<(PathBuf, EnvironMap)> {
     let kconfig_dir = kernel_dir.join("scripts").join("kconfig");
 
     // Copy bridge.c to kernel scripts directory
@@ -190,7 +199,7 @@ pub fn prepare_bridge(kernel_dir: &PathBuf) -> Result<(PathBuf, Env)> {
     let builder_output = String::from_utf8_lossy(&builder_output.stdout).to_string();
     let builder_output = builder_output
         .split_once("[AUTOKERNEL BRIDGE]")
-        .context("interceptor output did not containe [AUTOKERNEL BRIDGE]")?
+        .context("Interceptor output did not contain [AUTOKERNEL BRIDGE]")?
         .1;
 
     let env = serde_json::from_str(builder_output)?;
@@ -206,20 +215,12 @@ pub fn create_bridge(kernel_dir: PathBuf) -> Result<Bridge> {
         let library = Library::new(library_path).unwrap();
         let vtable = BridgeVTable::new(&library);
 
-        // TODO: this is temporary
-        for (key, value) in &env {
-            std::env::set_var(key, value)
-        }
-
-        // TODO: we need the env to be correct inside the shared library.
-        // TODO: set it initially inside the shared library by modifying the C global variable
         let bridge = Bridge {
             library,
             vtable,
             kernel_dir,
-            environment: env,
         };
-        bridge.init();
+        bridge.init(env);
         Ok(bridge)
     }
 }
