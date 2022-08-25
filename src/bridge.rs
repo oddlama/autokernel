@@ -184,9 +184,9 @@ pub fn prepare_bridge(kernel_dir: &PathBuf) -> Result<(PathBuf, EnvironMap)> {
         .into_os_string()
         .into_string()
         .map_err(|e| Error::msg(format!("OsString conversion failed for {:?}", e)))?;
-    //.with?;
 
     // Build our bridge by intercepting the final call of a make defconfig invocation.
+    println!("Building bridge for {}", (&kernel_dir).display());
     let bridge_library = kconfig_dir.join("autokernel_bridge.so");
     let builder_output = Command::new("bash")
         .args(["-c", "--"])

@@ -9,10 +9,13 @@ char** environ = 0;
 #include "lkc.h"
 #include <ctype.h>
 
+bool autokernel_debug = true;
 extern struct symbol symbol_yes, symbol_no, symbol_mod;
 size_t n_symbols = 0;
 
 char** autokernel_env = NULL;
+
+#define DEBUG(...) do { if (autokernel_debug) { printf("[bridge] " __VA_ARGS__); } } while(0)
 
 /**
  * The compilation script redirects calls to getenv() inside
@@ -29,6 +32,9 @@ char* autokernel_getenv(const char* name) {
 	return NULL;
 }
 
+/**
+ * Copies the given environment so nothing can interfere with it.
+ */
 void init_environment(char const* const* env) {
 	int i = 0;
 	size_t count = 0;
@@ -54,18 +60,17 @@ void init(char const* const* env) {
 	struct symbol* sym;
 	int i;
 
-	printf("[C] Initializing autokernel bridge\n");
+	DEBUG("Initializing environment\n");
 	init_environment(env);
+	DEBUG("Kernel version:   %s\n", autokernel_getenv("KERNELVERSION"));
+	DEBUG("Kernel directory: %s\n", autokernel_getenv("abs_objtree"));
 
-	printf("[C] Kernel version: %s\n", autokernel_getenv("KERNELVERSION"));
-
-	char buf[3000];
-	getcwd(buf, 3000);
-	printf("[C] cwd: %s\n", buf);
+	// Save current working directory
+	char saved_working_directory[2048];
+	getcwd(saved_working_directory, 2048);
 
 	// Parse Kconfig and load empty .config (/dev/null)
 	gettimeofday(&start, NULL);
-	printf("[C] chdir: %s\n", autokernel_getenv("abs_objtree"));
 	if (chdir(autokernel_getenv("abs_objtree")) != 0) {
 		perror("Failed to change directory");
 	}
@@ -73,18 +78,18 @@ void init(char const* const* env) {
 	if (conf_read("/dev/null") != 0) {
 		dprintf(2, "Failed to read /dev/null as dummy config\n");
 	}
-	if (chdir(buf) != 0) {
+	if (chdir(saved_working_directory) != 0) {
 		perror("Failed to change back to original directory");
 	}
 
 	gettimeofday(&now, NULL);
-	dprintf(2, "[C] Parsed Kconfig in %7.4fs\n", (double)(now.tv_usec - start.tv_usec) / 1000000 + (double)(now.tv_sec - start.tv_sec));
+	DEBUG("Parsed Kconfig in %.4fs\n", (double)(now.tv_usec - start.tv_usec) / 1000000 + (double)(now.tv_sec - start.tv_sec));
 	start = now;
 
-	// Three static symbols plus all parsed symbols
+	// Pre-count symbols: Three static symbols plus all parsed symbols
 	n_symbols = 3;
 	for_all_symbols(i, sym) { ++n_symbols; }
-	printf("[C] Found %ld symbols\n", n_symbols);
+	DEBUG("Found %ld symbols\n", n_symbols);
 }
 
 /**
