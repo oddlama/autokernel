@@ -5,7 +5,7 @@
  * - build and run it with gcc
  */
 
-use anyhow::{Context, Error, Result};
+use anyhow::{ensure, Context, Error, Result};
 use libc::{c_char, c_int, c_void, size_t};
 use libloading::os::unix::Symbol as RawSymbol;
 use libloading::{Library, Symbol as LSymbol};
@@ -53,7 +53,7 @@ pub struct CExprValue {
 
 #[repr(C)]
 pub struct Symbol {
-    next: *const c_void,
+    next: *const c_void, // Not needed
     name: *const c_char,
     pub symbol_type: SymbolType,
     current_value: SymbolValue,
@@ -67,34 +67,41 @@ pub struct Symbol {
     implied: CExprValue,
 }
 
-impl Symbol {
+struct BridgeSymbol<'a> {
+    c_symbol: &'a mut Symbol,
+    bridge: &'a mut Bridge<'a>,
+}
+
+impl<'a> BridgeSymbol<'a> {
     pub fn name(&self) -> Option<Cow<'_, str>> {
         unsafe {
-            self.name
+            self.c_symbol.name
                 .as_ref()
                 .map(|obj| String::from_utf8_lossy(CStr::from_ptr(obj).to_bytes()))
         }
     }
     // dependencies()
-    // set()
+
     pub fn get_value(&self) -> &Tristate {
-        &self.current_value.tri
+        &self.c_symbol.current_value.tri
     }
 
     pub fn get_defaults(&self) -> impl Iterator<Item = &Tristate> {
-        self.default_values.iter().map(|v| &v.tri)
+        self.c_symbol.default_values.iter().map(|v| &v.tri)
     }
 }
 
 type FuncInit = extern "C" fn(*const *const c_char) -> ();
 type FuncSymbolCount = extern "C" fn() -> size_t;
 type FuncGetAllSymbols = extern "C" fn(*mut *mut Symbol) -> ();
+type FuncSetSymbolValueTristate = extern "C" fn(*mut Symbol, Tristate) -> c_int;
 type EnvironMap = HashMap<String, String>;
 
 struct BridgeVTable {
     init: RawSymbol<FuncInit>,
     symbol_count: RawSymbol<FuncSymbolCount>,
     get_all_symbols: RawSymbol<FuncGetAllSymbols>,
+    set_symbol_value_tristate: RawSymbol<FuncSetSymbolValueTristate>,
 }
 
 impl BridgeVTable {
@@ -102,23 +109,28 @@ impl BridgeVTable {
         let fn_init: LSymbol<FuncInit> = library.get(b"init").unwrap();
         let fn_symbol_count: LSymbol<FuncSymbolCount> = library.get(b"symbol_count").unwrap();
         let fn_get_all_symbols: LSymbol<FuncGetAllSymbols> = library.get(b"get_all_symbols").unwrap();
+        let fn_set_symbol_value_tristate: LSymbol<FuncSetSymbolValueTristate> =
+            library.get(b"sym_set_tristate_value").unwrap();
 
         BridgeVTable {
             init: fn_init.into_raw(),
             symbol_count: fn_symbol_count.into_raw(),
             get_all_symbols: fn_get_all_symbols.into_raw(),
+            set_symbol_value_tristate: fn_set_symbol_value_tristate.into_raw(),
         }
     }
 }
 
-pub struct Bridge {
+pub struct Bridge<'a> {
     #[allow(dead_code)]
     library: Library,
     vtable: BridgeVTable,
     pub kernel_dir: PathBuf,
+
+    symbols: Vec<BridgeSymbol<'a>>
 }
 
-impl Bridge {
+impl<'a> Bridge<'a> {
     pub fn init(&self, env: EnvironMap) {
         // Create env vector
         let env: Vec<CString> = env
@@ -127,22 +139,37 @@ impl Bridge {
                 CString::new(format!("{}={}", k, v)).expect("Could not convert environment variable to CString")
             })
             .collect();
+
         // Create vector of ptrs with NULL at the end
         let mut ffi_env: Vec<*const c_char> = env.iter().map(|cstr| cstr.as_ptr()).collect();
         ffi_env.push(std::ptr::null());
         (self.vtable.init)(ffi_env.as_ptr());
+
+        // Load all symbols once
+        self.symbols = self.c_get_all_symbols().map(|s| { BridgeSymbol {
+            c_symbol: s,
+            bridge: &mut self,
+        }});
     }
 
-    pub fn symbol_count(&self) -> usize {
+    fn c_symbol_count(&self) -> usize {
         (self.vtable.symbol_count)() as usize
     }
 
-    pub fn get_all_symbols(&self) -> Vec<&mut Symbol> {
-        let count = self.symbol_count();
+    fn c_get_all_symbols(&self) -> Vec<&mut Symbol> {
+        let count = self.c_symbol_count();
         let mut symbols = Vec::with_capacity(count);
         (self.vtable.get_all_symbols)(symbols.as_mut_ptr() as *mut *mut Symbol);
         unsafe { symbols.set_len(count) };
         symbols
+    }
+
+    fn c_set_symbol_value_tristate(&self, symbol: &mut Symbol, value: Tristate) -> Result<()> {
+        ensure!(
+            (self.vtable.set_symbol_value_tristate)(symbol, value) == 1,
+            format!("Could not set symbol {:?}", symbol.name())
+        );
+        Ok(())
     }
 }
 

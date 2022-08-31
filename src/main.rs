@@ -41,7 +41,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let bridge = bridge::create_bridge(args.kernel_dir)?;
     let symbols = bridge.get_all_symbols();
-    println!("{}", symbols[100].name().unwrap_or("(help)".into()));
+    println!("{:?}={:?}", symbols[100].name(), symbols[100].get_value());
+    bridge.set_symbol_value_tristate(symbols[100], Tristate::Yes);
+    println!("{:?}={:?} (after set )", symbols[100].name(), symbols[100].get_value());
 
     match args.action {
         Action::Build => {
