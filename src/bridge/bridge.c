@@ -1,4 +1,3 @@
-char** environ = 0;
 #include <unistd.h>
 #include <string.h>
 #include <strings.h>
@@ -12,7 +11,6 @@ char** environ = 0;
 bool autokernel_debug = true;
 extern struct symbol symbol_yes, symbol_no, symbol_mod;
 size_t n_symbols = 0;
-
 char** autokernel_env = NULL;
 
 #define DEBUG(...) do { if (autokernel_debug) { printf("[bridge] " __VA_ARGS__); } } while(0)
@@ -62,7 +60,7 @@ void init(char const* const* env) {
 
 	DEBUG("Initializing environment\n");
 	init_environment(env);
-	DEBUG("Kernel version:   %s\n", autokernel_getenv("KERNELVERSION"));
+	DEBUG("Kernel version: %s\n", autokernel_getenv("KERNELVERSION"));
 	DEBUG("Kernel directory: %s\n", autokernel_getenv("abs_objtree"));
 
 	// Save current working directory

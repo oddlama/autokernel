@@ -186,7 +186,7 @@ pub fn prepare_bridge(kernel_dir: &PathBuf) -> Result<(PathBuf, EnvironMap)> {
         .map_err(|e| Error::msg(format!("OsString conversion failed for {:?}", e)))?;
 
     // Build our bridge by intercepting the final call of a make defconfig invocation.
-    println!("Building bridge for {}", (&kernel_dir).display());
+    println!("Building bridge for {}", kernel_dir.display());
     let bridge_library = kconfig_dir.join("autokernel_bridge.so");
     let builder_output = Command::new("bash")
         .args(["-c", "--"])
@@ -214,7 +214,6 @@ pub fn create_bridge(kernel_dir: PathBuf) -> Result<Bridge> {
     unsafe {
         let library = Library::new(library_path).unwrap();
         let vtable = BridgeVTable::new(&library);
-
         let bridge = Bridge {
             library,
             vtable,

@@ -36,9 +36,8 @@ enum Action {
 fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
-    println!("## Loading Config ##");
+    println!("Loading config: {}", args.config.display());
     let _config = config::load(args.config)?;
-    println!("-> Loaded config.");
 
     let bridge = bridge::create_bridge(args.kernel_dir)?;
     let symbols = bridge.get_all_symbols();
@@ -110,7 +109,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             // execute post-build hook
         }
-        Action::Config{interactive: _} => {
+        Action::Config { interactive: _ } => {
             println!("Config mode not supported yet")
         }
         Action::Noop => {}
@@ -172,7 +171,10 @@ fn integrationtest_parse_symbols() {
     let symbols = bridge.get_all_symbols();
     println!("name: {}", symbols[100].name().unwrap());
     println!("cur_val: {:?}", symbols[100].get_value());
-    println!("defaults: {:?}", symbols[100].get_defaults().collect::<Vec<&Tristate>>());
+    println!(
+        "defaults: {:?}",
+        symbols[100].get_defaults().collect::<Vec<&Tristate>>()
+    );
 
     // remove kernel tar and folder if they already exists
     println!("cleaning up");
