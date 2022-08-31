@@ -52,7 +52,7 @@ pub struct CExprValue {
 }
 
 #[repr(C)]
-pub struct Symbol {
+struct CSymbol {
     next: *const c_void, // Not needed
     name: *const c_char,
     pub symbol_type: SymbolType,
@@ -67,15 +67,16 @@ pub struct Symbol {
     implied: CExprValue,
 }
 
-struct BridgeSymbol<'a> {
-    c_symbol: &'a mut Symbol,
-    bridge: &'a mut Bridge<'a>,
+pub struct Symbol<'a> {
+    c_symbol: &'a mut CSymbol,
+    vtable: &'a BridgeVTable,
 }
 
-impl<'a> BridgeSymbol<'a> {
+impl<'a> Symbol<'a> {
     pub fn name(&self) -> Option<Cow<'_, str>> {
         unsafe {
-            self.c_symbol.name
+            self.c_symbol
+                .name
                 .as_ref()
                 .map(|obj| String::from_utf8_lossy(CStr::from_ptr(obj).to_bytes()))
         }
@@ -89,12 +90,20 @@ impl<'a> BridgeSymbol<'a> {
     pub fn get_defaults(&self) -> impl Iterator<Item = &Tristate> {
         self.c_symbol.default_values.iter().map(|v| &v.tri)
     }
+
+    pub fn set_symbol_value_tristate(&mut self, value: Tristate) -> Result<()> {
+        ensure!(
+            (self.vtable.set_symbol_value_tristate)(self.c_symbol, value) == 1,
+            format!("Could not set symbol {:?}", self.name())
+        );
+        Ok(())
+    }
 }
 
 type FuncInit = extern "C" fn(*const *const c_char) -> ();
 type FuncSymbolCount = extern "C" fn() -> size_t;
-type FuncGetAllSymbols = extern "C" fn(*mut *mut Symbol) -> ();
-type FuncSetSymbolValueTristate = extern "C" fn(*mut Symbol, Tristate) -> c_int;
+type FuncGetAllSymbols = extern "C" fn(*mut *mut CSymbol) -> ();
+type FuncSetSymbolValueTristate = extern "C" fn(*mut CSymbol, Tristate) -> c_int;
 type EnvironMap = HashMap<String, String>;
 
 struct BridgeVTable {
@@ -119,6 +128,18 @@ impl BridgeVTable {
             set_symbol_value_tristate: fn_set_symbol_value_tristate.into_raw(),
         }
     }
+
+    fn c_symbol_count(&self) -> usize {
+        (self.symbol_count)() as usize
+    }
+
+    fn c_get_all_symbols(&self) -> Vec<&mut CSymbol> {
+        let count = self.c_symbol_count();
+        let mut symbols = Vec::with_capacity(count);
+        (self.get_all_symbols)(symbols.as_mut_ptr() as *mut *mut CSymbol);
+        unsafe { symbols.set_len(count) };
+        symbols
+    }
 }
 
 pub struct Bridge<'a> {
@@ -127,11 +148,11 @@ pub struct Bridge<'a> {
     vtable: BridgeVTable,
     pub kernel_dir: PathBuf,
 
-    symbols: Vec<BridgeSymbol<'a>>
+    pub symbols: Vec<Symbol<'a>>,
 }
 
 impl<'a> Bridge<'a> {
-    pub fn init(&self, env: EnvironMap) {
+    pub fn new(kernel_dir: PathBuf, library: Library, vtable: BridgeVTable, env: EnvironMap) -> Bridge<'a> {
         // Create env vector
         let env: Vec<CString> = env
             .iter()
@@ -143,33 +164,20 @@ impl<'a> Bridge<'a> {
         // Create vector of ptrs with NULL at the end
         let mut ffi_env: Vec<*const c_char> = env.iter().map(|cstr| cstr.as_ptr()).collect();
         ffi_env.push(std::ptr::null());
-        (self.vtable.init)(ffi_env.as_ptr());
+        (vtable.init)(ffi_env.as_ptr());
 
         // Load all symbols once
-        self.symbols = self.c_get_all_symbols().map(|s| { BridgeSymbol {
+        let symbols = vtable.c_get_all_symbols().into_iter().map(|s| Symbol {
             c_symbol: s,
-            bridge: &mut self,
-        }});
-    }
+            vtable: &vtable,
+        }).collect();
 
-    fn c_symbol_count(&self) -> usize {
-        (self.vtable.symbol_count)() as usize
-    }
-
-    fn c_get_all_symbols(&self) -> Vec<&mut Symbol> {
-        let count = self.c_symbol_count();
-        let mut symbols = Vec::with_capacity(count);
-        (self.vtable.get_all_symbols)(symbols.as_mut_ptr() as *mut *mut Symbol);
-        unsafe { symbols.set_len(count) };
-        symbols
-    }
-
-    fn c_set_symbol_value_tristate(&self, symbol: &mut Symbol, value: Tristate) -> Result<()> {
-        ensure!(
-            (self.vtable.set_symbol_value_tristate)(symbol, value) == 1,
-            format!("Could not set symbol {:?}", symbol.name())
-        );
-        Ok(())
+        Bridge {
+            library,
+            vtable,
+            kernel_dir,
+            symbols,
+        }
     }
 }
 
@@ -236,17 +244,12 @@ pub fn prepare_bridge(kernel_dir: &PathBuf) -> Result<(PathBuf, EnvironMap)> {
 /// Compile bridge library if necessary, then dynamically
 /// load it and associated functions and create and return a
 /// Bridge object to interface with the C part.
-pub fn create_bridge(kernel_dir: PathBuf) -> Result<Bridge> {
+pub fn create_bridge<'a>(kernel_dir: PathBuf) -> Result<Bridge<'a>> {
+    // TODO move in Bridge::new
     let (library_path, env) = prepare_bridge(&kernel_dir)?;
     unsafe {
         let library = Library::new(library_path).unwrap();
         let vtable = BridgeVTable::new(&library);
-        let bridge = Bridge {
-            library,
-            vtable,
-            kernel_dir,
-        };
-        bridge.init(env);
-        Ok(bridge)
+        Ok(Bridge::new(kernel_dir, library, vtable, env))
     }
 }

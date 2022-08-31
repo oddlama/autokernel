@@ -40,10 +40,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let _config = config::load(args.config)?;
 
     let bridge = bridge::create_bridge(args.kernel_dir)?;
-    let symbols = bridge.get_all_symbols();
-    println!("{:?}={:?}", symbols[100].name(), symbols[100].get_value());
-    bridge.set_symbol_value_tristate(symbols[100], Tristate::Yes);
-    println!("{:?}={:?} (after set )", symbols[100].name(), symbols[100].get_value());
+    println!("{:?}={:?}", bridge.symbols[100].name(), bridge.symbols[100].get_value());
+    bridge.symbols[100].set_symbol_value_tristate(Tristate::Yes);
+    println!("{:?}={:?} (after set )", bridge.symbols[100].name(), bridge.symbols[100].get_value());
 
     match args.action {
         Action::Build => {
@@ -170,12 +169,11 @@ fn integrationtest_parse_symbols() {
     println!("building and running bridge to extract all symbols");
     //let symbols = bridge::run_bridge(kernel_dir).unwrap();
     let bridge = bridge::create_bridge(kernel_dir).unwrap();
-    let symbols = bridge.get_all_symbols();
-    println!("name: {}", symbols[100].name().unwrap());
-    println!("cur_val: {:?}", symbols[100].get_value());
+    println!("name: {}", bridge.symbols[100].name().unwrap());
+    println!("cur_val: {:?}", bridge.symbols[100].get_value());
     println!(
         "defaults: {:?}",
-        symbols[100].get_defaults().collect::<Vec<&Tristate>>()
+        bridge.symbols[100].get_defaults().collect::<Vec<&Tristate>>()
     );
 
     // remove kernel tar and folder if they already exists
