@@ -16,7 +16,10 @@ use std::fs;
 use std::io::prelude::*;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
+use std::pin::Pin;
 use std::process::{Command, Stdio};
+use std::ptr::NonNull;
+use std::rc::Rc;
 
 #[derive(Debug)]
 #[repr(u8)]
@@ -67,12 +70,16 @@ struct CSymbol {
     implied: CExprValue,
 }
 
+//pub struct Symbol<'a> {
+//    c_symbol: &'a mut CSymbol,
+//    vtable: &'a BridgeVTable,
+//}
 pub struct Symbol<'a> {
     c_symbol: &'a mut CSymbol,
-    vtable: &'a BridgeVTable,
+    vtable: Rc<BridgeVTable>,
 }
 
-impl<'a> Symbol<'a> {
+impl Symbol<'_> {
     pub fn name(&self) -> Option<Cow<'_, str>> {
         unsafe {
             self.c_symbol
@@ -133,7 +140,9 @@ impl BridgeVTable {
         (self.symbol_count)() as usize
     }
 
-    fn c_get_all_symbols(&self) -> Vec<&mut CSymbol> {
+    /// needs to make static lifetime of the pointer explicit, otherwise it assumes CSymbol goes
+    /// out of scope with the vtable reference that was used to call it
+    fn c_get_all_symbols(&self) -> Vec<&'static mut CSymbol> {
         let count = self.c_symbol_count();
         let mut symbols = Vec::with_capacity(count);
         (self.get_all_symbols)(symbols.as_mut_ptr() as *mut *mut CSymbol);
@@ -145,14 +154,22 @@ impl BridgeVTable {
 pub struct Bridge<'a> {
     #[allow(dead_code)]
     library: Library,
-    vtable: BridgeVTable,
+    vtable: Rc<BridgeVTable>,
     pub kernel_dir: PathBuf,
 
     pub symbols: Vec<Symbol<'a>>,
 }
 
-impl<'a> Bridge<'a> {
-    pub fn new(kernel_dir: PathBuf, library: Library, vtable: BridgeVTable, env: EnvironMap) -> Bridge<'a> {
+impl Bridge<'_> {
+
+    /// Compile bridge library if necessary, then dynamically
+    /// load it and associated functions and create and return a
+    /// Bridge object to interface with the C part.
+    pub fn new(kernel_dir: PathBuf) -> Result<Bridge<'static>> {
+        // TODO move in Bridge::new
+        let (library_path, env) = prepare_bridge(&kernel_dir)?;
+        let library = unsafe { Library::new(library_path).unwrap() };
+        let vtable = unsafe { BridgeVTable::new(&library) };
         // Create env vector
         let env: Vec<CString> = env
             .iter()
@@ -166,18 +183,24 @@ impl<'a> Bridge<'a> {
         ffi_env.push(std::ptr::null());
         (vtable.init)(ffi_env.as_ptr());
 
-        // Load all symbols once
-        let symbols = vtable.c_get_all_symbols().into_iter().map(|s| Symbol {
-            c_symbol: s,
-            vtable: &vtable,
-        }).collect();
+        let vtable = Rc::new(vtable);
 
-        Bridge {
+        // Load all symbols once
+        let c_symbols = vtable.c_get_all_symbols();
+        let symbols = c_symbols
+            .into_iter()
+            .map(|s| Symbol {
+                c_symbol: s,
+                vtable: vtable.clone(),
+            })
+            .collect();
+
+        Ok(Bridge {
             library,
             vtable,
             kernel_dir,
             symbols,
-        }
+        })
     }
 }
 
@@ -239,17 +262,4 @@ pub fn prepare_bridge(kernel_dir: &PathBuf) -> Result<(PathBuf, EnvironMap)> {
 
     let env = serde_json::from_str(builder_output)?;
     Ok((bridge_library, env))
-}
-
-/// Compile bridge library if necessary, then dynamically
-/// load it and associated functions and create and return a
-/// Bridge object to interface with the C part.
-pub fn create_bridge<'a>(kernel_dir: PathBuf) -> Result<Bridge<'a>> {
-    // TODO move in Bridge::new
-    let (library_path, env) = prepare_bridge(&kernel_dir)?;
-    unsafe {
-        let library = Library::new(library_path).unwrap();
-        let vtable = BridgeVTable::new(&library);
-        Ok(Bridge::new(kernel_dir, library, vtable, env))
-    }
 }

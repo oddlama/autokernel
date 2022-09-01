@@ -6,7 +6,7 @@ use std::error::Error;
 use clap::Parser;
 use std::path::PathBuf;
 
-use crate::bridge::Tristate;
+use crate::bridge::{Tristate, Bridge};
 
 #[derive(Parser, Debug)] // requires `derive` feature
 struct Args {
@@ -39,9 +39,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("Loading config: {}", args.config.display());
     let _config = config::load(args.config)?;
 
-    let bridge = bridge::create_bridge(args.kernel_dir)?;
+    let mut bridge = Bridge::new(args.kernel_dir)?;
     println!("{:?}={:?}", bridge.symbols[100].name(), bridge.symbols[100].get_value());
-    bridge.symbols[100].set_symbol_value_tristate(Tristate::Yes);
+    bridge.symbols[100].set_symbol_value_tristate(Tristate::Yes)?;
     println!("{:?}={:?} (after set )", bridge.symbols[100].name(), bridge.symbols[100].get_value());
 
     match args.action {
