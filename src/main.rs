@@ -42,7 +42,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut bridge = Bridge::new(args.kernel_dir)?;
     println!("{:?}={:?}", bridge.symbols[100].name(), bridge.symbols[100].get_value());
     bridge.symbols[100].set_symbol_value_tristate(Tristate::Yes)?;
-    println!("{:?}={:?} (after set )", bridge.symbols[100].name(), bridge.symbols[100].get_value());
+    println!("{:?}={:?} (after set)", bridge.symbols[100].name(), bridge.symbols[100].get_value());
 
     match args.action {
         Action::Build => {
@@ -168,13 +168,16 @@ fn integrationtest_parse_symbols() {
 
     println!("building and running bridge to extract all symbols");
     //let symbols = bridge::run_bridge(kernel_dir).unwrap();
-    let bridge = bridge::create_bridge(kernel_dir).unwrap();
+    let mut bridge = Bridge::new(kernel_dir).unwrap();
     println!("name: {}", bridge.symbols[100].name().unwrap());
     println!("cur_val: {:?}", bridge.symbols[100].get_value());
     println!(
         "defaults: {:?}",
         bridge.symbols[100].get_defaults().collect::<Vec<&Tristate>>()
     );
+
+    bridge.symbols[100].set_symbol_value_tristate(Tristate::Yes).unwrap();
+    assert_eq!(*bridge.symbols[100].get_value(), Tristate::Yes, "Setting the symbol failed");
 
     // remove kernel tar and folder if they already exists
     println!("cleaning up");

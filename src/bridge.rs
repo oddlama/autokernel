@@ -16,12 +16,10 @@ use std::fs;
 use std::io::prelude::*;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
-use std::pin::Pin;
 use std::process::{Command, Stdio};
-use std::ptr::NonNull;
 use std::rc::Rc;
 
-#[derive(Debug)]
+#[derive(Debug,Eq, PartialEq, Ord, PartialOrd)]
 #[repr(u8)]
 #[allow(dead_code)]
 pub enum Tristate {
@@ -161,7 +159,6 @@ pub struct Bridge<'a> {
 }
 
 impl Bridge<'_> {
-
     /// Compile bridge library if necessary, then dynamically
     /// load it and associated functions and create and return a
     /// Bridge object to interface with the C part.
