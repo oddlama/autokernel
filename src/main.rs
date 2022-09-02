@@ -1,7 +1,7 @@
 mod bridge;
 mod config;
 
-use std::error::Error;
+use std::{error::Error, process::{Command, Stdio}};
 
 use clap::Parser;
 use std::path::PathBuf;
@@ -24,7 +24,11 @@ struct Args {
 
 #[derive(Debug, clap::Subcommand)]
 enum Action {
-    Build,
+    Build {
+        /// wether to interactively configure
+        #[clap(short, long)]
+        clean: bool,
+    },
     Config {
         /// wether to interactively configure
         #[clap(short, long)]
@@ -39,34 +43,55 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("Loading config: {}", args.config.display());
     let _config = config::load(args.config)?;
 
-    let mut bridge = Bridge::new(args.kernel_dir)?;
+    let mut bridge = Bridge::new(args.kernel_dir.clone())?;
     println!("{:?}={:?}", bridge.symbols[100].name(), bridge.symbols[100].get_value());
     bridge.symbols[100].set_symbol_value_tristate(Tristate::Yes)?;
     println!("{:?}={:?} (after set)", bridge.symbols[100].name(), bridge.symbols[100].get_value());
 
     match args.action {
-        Action::Build => {
-            println!("Build mode not supported yet");
+        Action::Build{clean} => {
 
             // let bridge = Bridge::new(kernel_dir)
             // umask 022 // do we want this from the config? or better: detect from the kernel_dir permissions?
 
             // run make clean, IFF the user specified --clean
-            // execute pre-build hook
+            if clean {
+                // run "make clean" in the kernel folder
+                println!(">> make clean");
+                Command::new("make")
+                    .arg("clean")
+                    .current_dir(&args.kernel_dir)
+                    .stderr(Stdio::inherit())
+                    .output()
+                    .expect("failed to execute make clean");
+            }
+
+            // TODO execute pre-build hook
 
             // let kernel_version = bridge.kernel_version();
             // let config_output = args.config_output or args.kernel_dir, '.config.autokernel'
 
             // Load some important symbol values
-            // sym_cmdline_bool = kconfig.syms['CMDLINE_BOOL']
-            // sym_cmdline = kconfig.syms['CMDLINE']
-            // sym_initramfs_source = kconfig.syms['INITRAMFS_SOURCE']
-            // sym_modules = kconfig.syms['MODULES']
-
             // Set some defaults
-            // sym_cmdline_bool.set_value('y')
-            // sym_cmdline.set_value('')
-            // sym_initramfs_source.set_value('{INITRAMFS}')
+
+            let pos = bridge.get_symbol_pos_by_name("CMDLINE_BOOL").unwrap();
+            let sym_cmdline_bool = &mut bridge.symbols[pos];
+            println!("{:?}", sym_cmdline_bool.get_value());
+            sym_cmdline_bool.set_symbol_value_tristate(Tristate::Yes)?;
+
+            let pos = bridge.get_symbol_pos_by_name("CMDLINE").unwrap();
+            let sym_cmdline = &mut bridge.symbols[pos];
+            println!("{:?}", sym_cmdline.get_value());
+            sym_cmdline.set_symbol_value_string("")?;
+
+            let pos = bridge.get_symbol_pos_by_name("INITRAMFS_SOURCE").unwrap();
+            let sym_initramfs_source = &mut bridge.symbols[pos];
+            println!("{:?}", sym_initramfs_source.get_value());
+            sym_initramfs_source.set_symbol_value_string("{INITRAMFS}")?;
+
+            let pos = bridge.get_symbol_pos_by_name("MODULES").unwrap();
+            let sym_modules = &bridge.symbols[pos];
+            println!("{:?}", sym_modules.get_value());
 
             //def _build_kernel():
             //    # Write configuration to file
@@ -109,13 +134,13 @@ fn main() -> Result<(), Box<dyn Error>> {
             //_build_kernel()
 
             // execute post-build hook
+            println!("Build mode not supported yet");
         }
         Action::Config { interactive: _ } => {
             println!("Config mode not supported yet")
         }
         Action::Noop => {}
     };
-
     Ok(())
 }
 

@@ -19,7 +19,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::rc::Rc;
 
-#[derive(Debug,Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
 #[repr(u8)]
 #[allow(dead_code)]
 pub enum Tristate {
@@ -92,6 +92,7 @@ impl Symbol<'_> {
         &self.c_symbol.current_value.tri
     }
 
+    #[allow(dead_code)]
     pub fn get_defaults(&self) -> impl Iterator<Item = &Tristate> {
         self.c_symbol.default_values.iter().map(|v| &v.tri)
     }
@@ -103,12 +104,22 @@ impl Symbol<'_> {
         );
         Ok(())
     }
+
+    pub fn set_symbol_value_string(&mut self, value: &str) -> Result<()> {
+        let cstr = CString::new(value).unwrap();
+        ensure!(
+            (self.vtable.set_symbol_value_string)(self.c_symbol, cstr.as_ptr()) == 1,
+            format!("Could not set symbol {:?}", self.name())
+        );
+        Ok(())
+    }
 }
 
 type FuncInit = extern "C" fn(*const *const c_char) -> ();
 type FuncSymbolCount = extern "C" fn() -> size_t;
 type FuncGetAllSymbols = extern "C" fn(*mut *mut CSymbol) -> ();
 type FuncSetSymbolValueTristate = extern "C" fn(*mut CSymbol, Tristate) -> c_int;
+type FuncSetSymbolValueString = extern "C" fn(*mut CSymbol, *const c_char) -> c_int;
 type EnvironMap = HashMap<String, String>;
 
 struct BridgeVTable {
@@ -116,6 +127,7 @@ struct BridgeVTable {
     symbol_count: RawSymbol<FuncSymbolCount>,
     get_all_symbols: RawSymbol<FuncGetAllSymbols>,
     set_symbol_value_tristate: RawSymbol<FuncSetSymbolValueTristate>,
+    set_symbol_value_string: RawSymbol<FuncSetSymbolValueString>,
 }
 
 impl BridgeVTable {
@@ -125,12 +137,15 @@ impl BridgeVTable {
         let fn_get_all_symbols: LSymbol<FuncGetAllSymbols> = library.get(b"get_all_symbols").unwrap();
         let fn_set_symbol_value_tristate: LSymbol<FuncSetSymbolValueTristate> =
             library.get(b"sym_set_tristate_value").unwrap();
+        let fn_set_symbol_value_string: LSymbol<FuncSetSymbolValueString> =
+            library.get(b"sym_set_string_value").unwrap();
 
         BridgeVTable {
             init: fn_init.into_raw(),
             symbol_count: fn_symbol_count.into_raw(),
             get_all_symbols: fn_get_all_symbols.into_raw(),
             set_symbol_value_tristate: fn_set_symbol_value_tristate.into_raw(),
+            set_symbol_value_string: fn_set_symbol_value_string.into_raw(),
         }
     }
 
@@ -152,13 +167,14 @@ impl BridgeVTable {
 pub struct Bridge<'a> {
     #[allow(dead_code)]
     library: Library,
+    #[allow(dead_code)]
     vtable: Rc<BridgeVTable>,
     pub kernel_dir: PathBuf,
 
     pub symbols: Vec<Symbol<'a>>,
 }
 
-impl Bridge<'_> {
+impl<'a> Bridge<'a> {
     /// Compile bridge library if necessary, then dynamically
     /// load it and associated functions and create and return a
     /// Bridge object to interface with the C part.
@@ -198,6 +214,21 @@ impl Bridge<'_> {
             kernel_dir,
             symbols,
         })
+    }
+
+    #[allow(dead_code)]
+    /// TODO This does not work since the whole bridge is still in a mutable borrow state
+    pub fn get_symbol_by_name_mut(&mut self, name: &str) -> Option<&'a mut Symbol> {
+        let p = self.get_symbol_pos_by_name(name);
+        if let Some(pos) = p {
+            return Some(&mut self.symbols[pos]);
+        }
+        None
+    }
+    pub fn get_symbol_pos_by_name(&self, name: &str) -> Option<usize> {
+        self.symbols
+            .iter()
+            .position(|sym| sym.name().map_or(false, |n| n.eq_ignore_ascii_case(name)))
     }
 }
 
