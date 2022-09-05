@@ -1,12 +1,21 @@
 mod bridge;
 mod config;
+mod colors;
 
-use std::{error::Error, process::{Command, Stdio}};
+use std::{
+    error::Error,
+    process::{Command, Stdio},
+};
 
 use clap::Parser;
 use std::path::PathBuf;
 
-use crate::bridge::{Tristate, Bridge};
+use crate::bridge::{Bridge, Tristate};
+use colored::Colorize;
+use colors::*;
+
+
+const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 #[derive(Parser, Debug)] // requires `derive` feature
 struct Args {
@@ -40,17 +49,39 @@ enum Action {
 fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
-    println!("Loading config: {}", args.config.display());
-    let config = config::load(args.config)?;
+    println!(
+        "{} {} {}",
+        colorize!("Welcome to", COLOR_WHITE),
+        "autokernel".green().bold(),
+        colorize!(format!("(v{})", VERSION), COLOR_WHITE)
+    );
+    println!();
 
+    println!(
+        "{} {}",
+        colorize!(">> Loading config:", COLOR_MAIN),
+        colorize!(args.config.to_string_lossy(), COLOR_MAIN)
+    );
+    let config = config::load(args.config)?;
+    println!();
+
+    println!("{}", colorize!(">> creating bridge", COLOR_MAIN));
+    print!("{}", termcolor!(COLOR_VERBOSE));
     let mut bridge = Bridge::new(args.kernel_dir.clone())?;
+    println!("\x1b[0m");
+
+    print!("{}", termcolor!(COLOR_VERBOSE));
     println!("{:?}={:?}", bridge.symbols[100].name(), bridge.symbols[100].get_value());
     bridge.symbols[100].set_symbol_value_tristate(Tristate::Yes)?;
-    println!("{:?}={:?} (after set)", bridge.symbols[100].name(), bridge.symbols[100].get_value());
+    println!(
+        "{:?}={:?} (after set)",
+        bridge.symbols[100].name(),
+        bridge.symbols[100].get_value()
+    );
+    println!("\x1b[0m");
 
     match args.action {
-        Action::Build{clean} => {
-
+        Action::Build { clean } => {
             // let bridge = Bridge::new(kernel_dir)
             // umask 022 // do we want this from the config? or better: detect from the kernel_dir permissions?
 
@@ -134,14 +165,17 @@ fn main() -> Result<(), Box<dyn Error>> {
             //_build_kernel()
 
             // execute post-build hook
-            println!("Build mode not supported yet");
+            println!("{}", "Build mode not supported yet".red());
         }
         Action::Config { interactive: _ } => {
-            println!("Config mode not supported yet");
+            println!("{}", "Config mode not supported yet".red());
+            println!();
 
             // validate config
-            println!("{} user-config symbols verified", config.validate(&bridge)?);
-            println!("{:?}", config.build)
+            println!(">> {} {}", config.validate(&bridge)?.to_string().green().bold(), colorize!("user-config symbols verified", COLOR_MAIN));
+            println!();
+
+            println!("{}\n{}{:?}\x1b[0m",colorize!(">> dumping config", COLOR_MAIN), termcolor!(COLOR_VERBOSE), config.build)
         }
         Action::Noop => {}
     };
@@ -206,7 +240,11 @@ fn integrationtest_parse_symbols() {
     );
 
     bridge.symbols[100].set_symbol_value_tristate(Tristate::Yes).unwrap();
-    assert_eq!(*bridge.symbols[100].get_value(), Tristate::Yes, "Setting the symbol failed");
+    assert_eq!(
+        *bridge.symbols[100].get_value(),
+        Tristate::Yes,
+        "Setting the symbol failed"
+    );
 
     // remove kernel tar and folder if they already exists
     println!("cleaning up");
