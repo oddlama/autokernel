@@ -41,7 +41,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
     println!("Loading config: {}", args.config.display());
-    let _config = config::load(args.config)?;
+    let config = config::load(args.config)?;
 
     let mut bridge = Bridge::new(args.kernel_dir.clone())?;
     println!("{:?}={:?}", bridge.symbols[100].name(), bridge.symbols[100].get_value());
@@ -137,7 +137,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             println!("Build mode not supported yet");
         }
         Action::Config { interactive: _ } => {
-            println!("Config mode not supported yet")
+            println!("Config mode not supported yet");
+
+            // validate config
+            println!("{} user-config symbols verified", config.validate(&bridge)?);
+            println!("{:?}", config.build)
         }
         Action::Noop => {}
     };

@@ -1,9 +1,13 @@
 [build]
-CONFIG_NO_HZ_IDLE="CONFIG_NO_HZ_FULL"
+NO_HZ_IDLE="CONFIG_NO_HZ_FULL"
+
+# pipewire
+SND_PROC_FS="y"
+SND_VERBOSE_PROCFS="y"
 
 [install]
 
-[build.initramfs]
+[install.initramfs]
 enable = true
 buildin = true
 
