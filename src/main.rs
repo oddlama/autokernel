@@ -267,10 +267,6 @@ fn integrationtest_parse_symbols() {
     let mut bridge = Bridge::new(kernel_dir).unwrap();
     println!("name: {}", bridge.symbols[100].name().unwrap());
     println!("cur_val: {:?}", bridge.symbols[100].get_value());
-    println!(
-        "defaults: {:?}",
-        bridge.symbols[100].get_defaults().collect::<Vec<&Tristate>>()
-    );
 
     bridge.symbols[100].set_symbol_value_tristate(Tristate::Yes).unwrap();
     assert_eq!(

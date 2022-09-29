@@ -1,11 +1,5 @@
-/*
- * Helper script to dump the kernel config.
- * - run `make defconfig` in the kernel directory
- * - copy the bridge.c to the kernel directory
- * - build and run it with gcc
- */
-
 use anyhow::{ensure, Context, Error, Result};
+use internal::*;
 use libc::{c_char, c_int, c_void, size_t};
 use libloading::os::unix::Symbol as RawSymbol;
 use libloading::{Library, Symbol as LSymbol};
@@ -18,6 +12,39 @@ use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::rc::Rc;
+
+mod internal {
+    use super::*;
+    use libc::{c_char, c_int, c_void};
+
+    #[repr(C)]
+    pub struct SymbolValue {
+        value: *mut c_void,
+        pub tri: Tristate,
+    }
+
+    #[repr(C)]
+    struct CExprValue {
+        expression: *mut c_void,
+        tri: Tristate,
+    }
+
+    #[repr(C)]
+    pub struct CSymbol {
+        next: *const c_void, // Not needed
+        pub name: *const c_char,
+        pub symbol_type: SymbolType,
+        pub current_value: SymbolValue,
+        default_values: [SymbolValue; 4],
+        pub visible: Tristate,
+        flags: c_int,
+        // TODO where (which type) is this pointing to?
+        properties: *mut c_void,
+        direct_dependencies: CExprValue,
+        reverse_dependencies: CExprValue,
+        implied: CExprValue,
+    }
+}
 
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
 #[repr(u8)]
@@ -40,38 +67,6 @@ pub enum SymbolType {
     String,
 }
 
-#[repr(C)]
-pub struct SymbolValue {
-    value: *mut c_void,
-    tri: Tristate,
-}
-
-#[repr(C)]
-pub struct CExprValue {
-    expression: *mut c_void,
-    tri: Tristate,
-}
-
-#[repr(C)]
-struct CSymbol {
-    next: *const c_void, // Not needed
-    name: *const c_char,
-    pub symbol_type: SymbolType,
-    current_value: SymbolValue,
-    default_values: [SymbolValue; 4],
-    pub visible: Tristate,
-    flags: c_int,
-    // TODO where (which type) is this pointing to?
-    properties: *mut c_void,
-    direct_dependencies: CExprValue,
-    reverse_dependencies: CExprValue,
-    implied: CExprValue,
-}
-
-//pub struct Symbol<'a> {
-//    c_symbol: &'a mut CSymbol,
-//    vtable: &'a BridgeVTable,
-//}
 pub struct Symbol<'a> {
     c_symbol: &'a mut CSymbol,
     vtable: Rc<BridgeVTable>,
@@ -92,25 +87,22 @@ impl Symbol<'_> {
         &self.c_symbol.current_value.tri
     }
 
-    #[allow(dead_code)]
-    pub fn get_defaults(&self) -> impl Iterator<Item = &Tristate> {
-        self.c_symbol.default_values.iter().map(|v| &v.tri)
-    }
-
     pub fn set_symbol_value_tristate(&mut self, value: Tristate) -> Result<()> {
         ensure!(
-            (self.vtable.set_symbol_value_tristate)(self.c_symbol, value) == 1,
+            (self.vtable.sym_set_tristate_value)(self.c_symbol, value) == 1,
             format!("Could not set symbol {:?}", self.name())
         );
+        (self.vtable.sym_calc_value)(self.c_symbol);
         Ok(())
     }
 
     pub fn set_symbol_value_string(&mut self, value: &str) -> Result<()> {
         let cstr = CString::new(value).unwrap();
         ensure!(
-            (self.vtable.set_symbol_value_string)(self.c_symbol, cstr.as_ptr()) == 1,
+            (self.vtable.sym_set_string_value)(self.c_symbol, cstr.as_ptr()) == 1,
             format!("Could not set symbol {:?}", self.name())
         );
+        (self.vtable.sym_calc_value)(self.c_symbol);
         Ok(())
     }
 }
@@ -120,32 +112,44 @@ type FuncSymbolCount = extern "C" fn() -> size_t;
 type FuncGetAllSymbols = extern "C" fn(*mut *mut CSymbol) -> ();
 type FuncSetSymbolValueTristate = extern "C" fn(*mut CSymbol, Tristate) -> c_int;
 type FuncSetSymbolValueString = extern "C" fn(*mut CSymbol, *const c_char) -> c_int;
+type FuncSymbolCalcValue = extern "C" fn(*mut CSymbol) -> c_void;
 type EnvironMap = HashMap<String, String>;
 
 struct BridgeVTable {
+    #[allow(dead_code)]
+    library: Library,
     init: RawSymbol<FuncInit>,
     symbol_count: RawSymbol<FuncSymbolCount>,
     get_all_symbols: RawSymbol<FuncGetAllSymbols>,
-    set_symbol_value_tristate: RawSymbol<FuncSetSymbolValueTristate>,
-    set_symbol_value_string: RawSymbol<FuncSetSymbolValueString>,
+    sym_set_tristate_value: RawSymbol<FuncSetSymbolValueTristate>,
+    sym_set_string_value: RawSymbol<FuncSetSymbolValueString>,
+    sym_calc_value: RawSymbol<FuncSymbolCalcValue>,
 }
 
 impl BridgeVTable {
-    unsafe fn new(library: &Library) -> BridgeVTable {
-        let fn_init: LSymbol<FuncInit> = library.get(b"init").unwrap();
-        let fn_symbol_count: LSymbol<FuncSymbolCount> = library.get(b"symbol_count").unwrap();
-        let fn_get_all_symbols: LSymbol<FuncGetAllSymbols> = library.get(b"get_all_symbols").unwrap();
-        let fn_set_symbol_value_tristate: LSymbol<FuncSetSymbolValueTristate> =
-            library.get(b"sym_set_tristate_value").unwrap();
-        let fn_set_symbol_value_string: LSymbol<FuncSetSymbolValueString> =
-            library.get(b"sym_set_string_value").unwrap();
+    unsafe fn new(library_path: PathBuf) -> BridgeVTable {
+        let library = Library::new(&library_path).unwrap();
+        macro_rules! load_symbol {
+            ($type: ty, $name: expr) => {
+                (library.get($name).unwrap() as LSymbol<$type>).into_raw() as RawSymbol<$type>
+            }
+        }
+
+        let init = load_symbol!(FuncInit, b"init");
+        let symbol_count = load_symbol!(FuncSymbolCount, b"symbol_count");
+        let get_all_symbols = load_symbol!(FuncGetAllSymbols, b"get_all_symbols");
+        let sym_set_tristate_value = load_symbol!(FuncSetSymbolValueTristate, b"sym_set_tristate_value");
+        let sym_set_string_value = load_symbol!(FuncSetSymbolValueString, b"sym_set_string_value");
+        let sym_calc_value = load_symbol!(FuncSymbolCalcValue, b"sym_calc_value");
 
         BridgeVTable {
-            init: fn_init.into_raw(),
-            symbol_count: fn_symbol_count.into_raw(),
-            get_all_symbols: fn_get_all_symbols.into_raw(),
-            set_symbol_value_tristate: fn_set_symbol_value_tristate.into_raw(),
-            set_symbol_value_string: fn_set_symbol_value_string.into_raw(),
+            library,
+            init,
+            symbol_count,
+            get_all_symbols,
+            sym_set_tristate_value,
+            sym_set_string_value,
+            sym_calc_value,
         }
     }
 
@@ -166,8 +170,6 @@ impl BridgeVTable {
 
 pub struct Bridge<'a> {
     #[allow(dead_code)]
-    library: Library,
-    #[allow(dead_code)]
     vtable: Rc<BridgeVTable>,
     pub kernel_dir: PathBuf,
 
@@ -179,10 +181,8 @@ impl<'a> Bridge<'a> {
     /// load it and associated functions and create and return a
     /// Bridge object to interface with the C part.
     pub fn new(kernel_dir: PathBuf) -> Result<Bridge<'static>> {
-        // TODO move in Bridge::new
         let (library_path, env) = prepare_bridge(&kernel_dir)?;
-        let library = unsafe { Library::new(library_path).unwrap() };
-        let vtable = unsafe { BridgeVTable::new(&library) };
+        let vtable = unsafe { BridgeVTable::new(library_path) };
         // Create env vector
         let env: Vec<CString> = env
             .iter()
@@ -209,7 +209,6 @@ impl<'a> Bridge<'a> {
             .collect();
 
         Ok(Bridge {
-            library,
             vtable,
             kernel_dir,
             symbols,
