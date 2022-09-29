@@ -202,7 +202,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             println!("{}\n{}{:?}\x1b[0m",colorize!(">> dumping config", COLOR_MAIN), termcolor!(COLOR_VERBOSE), config.build);
             for (sym, _) in &config.build {
                 let pos = bridge.get_symbol_pos_by_name(sym).unwrap();
-                println!("defaults: {:?}", bridge.symbols[pos].get_defaults().collect::<Vec<&Tristate>>());
 
                 let s = &mut bridge.symbols[pos];
                 println!("{:?}", s.get_value());
