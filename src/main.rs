@@ -69,17 +69,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     println!("{}", colorize!(">> creating bridge", COLOR_MAIN));
     print!("{}", termcolor!(COLOR_VERBOSE));
-    let mut bridge = Bridge::new(args.kernel_dir.clone())?;
-    println!("\x1b[0m");
-
-    print!("{}", termcolor!(COLOR_VERBOSE));
-    println!("{:?}={:?}", bridge.symbols[100].name(), bridge.symbols[100].get_value());
-    bridge.symbols[100].set_symbol_value_tristate(Tristate::Yes)?;
-    println!(
-        "{:?}={:?} (after set)",
-        bridge.symbols[100].name(),
-        bridge.symbols[100].get_value()
-    );
+    let bridge = Bridge::new(args.kernel_dir.clone())?;
     println!("\x1b[0m");
 
     match args.action {
@@ -111,13 +101,11 @@ fn main() -> Result<(), Box<dyn Error>> {
              */
             // integrate a terminal in the kernel (e.g. only spectre mitigation can be changed
             // here)
-            let pos = bridge.get_symbol_pos_by_name("CMDLINE_BOOL").unwrap();
-            let sym_cmdline_bool = &mut bridge.symbols[pos];
+            let mut sym_cmdline_bool = bridge.symbol("CMDLINE_BOOL").unwrap();
             println!("{:?}", sym_cmdline_bool.get_value());
             sym_cmdline_bool.set_symbol_value_tristate(Tristate::Yes)?;
 
-            let pos = bridge.get_symbol_pos_by_name("CMDLINE").unwrap();
-            let sym_cmdline = &mut bridge.symbols[pos];
+            let mut sym_cmdline = bridge.symbol("CMDLINE").unwrap();
             println!("{:?}", sym_cmdline.get_value());
             sym_cmdline.set_symbol_value_string("")?; // TODO set to the proper commandline, this
                                                       // can only be set after the config was built
@@ -176,13 +164,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                 // - build initramfs
                 // - build initramfs into kernel
 
-                let pos = bridge.get_symbol_pos_by_name("INITRAMFS_SOURCE").unwrap();
-                let sym_initramfs_source = &mut bridge.symbols[pos];
+                let mut sym_initramfs_source = bridge.symbol("INITRAMFS_SOURCE").unwrap();
                 println!("{:?}", sym_initramfs_source.get_value());
                 sym_initramfs_source.set_symbol_value_string("{INITRAMFS}")?;
 
-                let pos = bridge.get_symbol_pos_by_name("MODULES").unwrap();
-                let sym_modules = &bridge.symbols[pos];
+                let sym_modules = bridge.symbol("MODULES").unwrap();
                 println!("{:?}", sym_modules.get_value());
             } else {
 
@@ -201,9 +187,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             println!("{}\n{}{:?}\x1b[0m",colorize!(">> dumping config", COLOR_MAIN), termcolor!(COLOR_VERBOSE), config.build);
             for (sym, _) in &config.build {
-                let pos = bridge.get_symbol_pos_by_name(sym).unwrap();
-
-                let s = &mut bridge.symbols[pos];
+                let mut s = bridge.symbol(sym).unwrap();
                 println!("{:?}", s.get_value());
                 s.set_symbol_value_tristate(Tristate::Yes)?;
                 println!("{:?}", s.get_value());
@@ -262,14 +246,14 @@ fn integrationtest_parse_symbols() {
     let kernel_dir = tmp.join(kernel_version);
 
     println!("building and running bridge to extract all symbols");
-    //let symbols = bridge::run_bridge(kernel_dir).unwrap();
-    let mut bridge = Bridge::new(kernel_dir).unwrap();
-    println!("name: {}", bridge.symbols[100].name().unwrap());
-    println!("cur_val: {:?}", bridge.symbols[100].get_value());
+    let bridge = Bridge::new(kernel_dir).unwrap();
+    let mut sym_cmdline_bool = bridge.symbol("CMDLINE_BOOL").unwrap();
+    println!("name: {}", sym_cmdline_bool.name().unwrap());
+    println!("cur_val: {:?}", sym_cmdline_bool.get_value());
 
-    bridge.symbols[100].set_symbol_value_tristate(Tristate::Yes).unwrap();
+    sym_cmdline_bool.set_symbol_value_tristate(Tristate::Yes).unwrap();
     assert_eq!(
-        *bridge.symbols[100].get_value(),
+        *sym_cmdline_bool.get_value(),
         Tristate::Yes,
         "Setting the symbol failed"
     );

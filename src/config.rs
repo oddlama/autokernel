@@ -22,7 +22,7 @@ pub struct Config {
 impl Config {
     pub fn validate(&self, bridge: &Bridge) -> Result<usize>{
         for (k,_) in &self.build {
-            ensure!(bridge.get_symbol_pos_by_name(k).is_some(), format!("Key {} does not exist in loaded symbols", &k));
+            ensure!(bridge.symbol(k).is_some(), format!("Key {} does not exist in loaded symbols", &k));
             //TODO validate value in range
         }
         Ok(self.build.len())

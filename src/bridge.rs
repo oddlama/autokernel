@@ -67,15 +67,15 @@ pub enum SymbolType {
     String,
 }
 
-pub struct Symbol<'a> {
-    c_symbol: &'a mut CSymbol,
+pub struct Symbol {
+    c_symbol: *mut CSymbol,
     vtable: Rc<BridgeVTable>,
 }
 
-impl Symbol<'_> {
+impl Symbol {
     pub fn name(&self) -> Option<Cow<'_, str>> {
         unsafe {
-            self.c_symbol
+            (*self.c_symbol)
                 .name
                 .as_ref()
                 .map(|obj| String::from_utf8_lossy(CStr::from_ptr(obj).to_bytes()))
@@ -84,25 +84,25 @@ impl Symbol<'_> {
     // dependencies()
 
     pub fn get_value(&self) -> &Tristate {
-        &self.c_symbol.current_value.tri
+        unsafe { &(*self.c_symbol).current_value.tri }
     }
 
     pub fn set_symbol_value_tristate(&mut self, value: Tristate) -> Result<()> {
         ensure!(
-            (self.vtable.sym_set_tristate_value)(self.c_symbol, value) == 1,
+            (self.vtable.c_sym_set_tristate_value)(self.c_symbol, value) == 1,
             format!("Could not set symbol {:?}", self.name())
         );
-        (self.vtable.sym_calc_value)(self.c_symbol);
+        (self.vtable.c_sym_calc_value)(self.c_symbol);
         Ok(())
     }
 
     pub fn set_symbol_value_string(&mut self, value: &str) -> Result<()> {
         let cstr = CString::new(value).unwrap();
         ensure!(
-            (self.vtable.sym_set_string_value)(self.c_symbol, cstr.as_ptr()) == 1,
+            (self.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr()) == 1,
             format!("Could not set symbol {:?}", self.name())
         );
-        (self.vtable.sym_calc_value)(self.c_symbol);
+        (self.vtable.c_sym_calc_value)(self.c_symbol);
         Ok(())
     }
 }
@@ -118,12 +118,12 @@ type EnvironMap = HashMap<String, String>;
 struct BridgeVTable {
     #[allow(dead_code)]
     library: Library,
-    init: RawSymbol<FuncInit>,
-    symbol_count: RawSymbol<FuncSymbolCount>,
-    get_all_symbols: RawSymbol<FuncGetAllSymbols>,
-    sym_set_tristate_value: RawSymbol<FuncSetSymbolValueTristate>,
-    sym_set_string_value: RawSymbol<FuncSetSymbolValueString>,
-    sym_calc_value: RawSymbol<FuncSymbolCalcValue>,
+    c_init: RawSymbol<FuncInit>,
+    c_symbol_count: RawSymbol<FuncSymbolCount>,
+    c_get_all_symbols: RawSymbol<FuncGetAllSymbols>,
+    c_sym_set_tristate_value: RawSymbol<FuncSetSymbolValueTristate>,
+    c_sym_set_string_value: RawSymbol<FuncSetSymbolValueString>,
+    c_sym_calc_value: RawSymbol<FuncSymbolCalcValue>,
 }
 
 impl BridgeVTable {
@@ -132,55 +132,56 @@ impl BridgeVTable {
         macro_rules! load_symbol {
             ($type: ty, $name: expr) => {
                 (library.get($name).unwrap() as LSymbol<$type>).into_raw() as RawSymbol<$type>
-            }
+            };
         }
 
-        let init = load_symbol!(FuncInit, b"init");
-        let symbol_count = load_symbol!(FuncSymbolCount, b"symbol_count");
-        let get_all_symbols = load_symbol!(FuncGetAllSymbols, b"get_all_symbols");
-        let sym_set_tristate_value = load_symbol!(FuncSetSymbolValueTristate, b"sym_set_tristate_value");
-        let sym_set_string_value = load_symbol!(FuncSetSymbolValueString, b"sym_set_string_value");
-        let sym_calc_value = load_symbol!(FuncSymbolCalcValue, b"sym_calc_value");
+        let c_init = load_symbol!(FuncInit, b"init");
+        let c_symbol_count = load_symbol!(FuncSymbolCount, b"symbol_count");
+        let c_get_all_symbols = load_symbol!(FuncGetAllSymbols, b"get_all_symbols");
+        let c_sym_set_tristate_value = load_symbol!(FuncSetSymbolValueTristate, b"sym_set_tristate_value");
+        let c_sym_set_string_value = load_symbol!(FuncSetSymbolValueString, b"sym_set_string_value");
+        let c_sym_calc_value = load_symbol!(FuncSymbolCalcValue, b"sym_calc_value");
 
         BridgeVTable {
             library,
-            init,
-            symbol_count,
-            get_all_symbols,
-            sym_set_tristate_value,
-            sym_set_string_value,
-            sym_calc_value,
+            c_init,
+            c_symbol_count,
+            c_get_all_symbols,
+            c_sym_set_tristate_value,
+            c_sym_set_string_value,
+            c_sym_calc_value,
         }
     }
 
-    fn c_symbol_count(&self) -> usize {
-        (self.symbol_count)() as usize
+    fn symbol_count(&self) -> usize {
+        (self.c_symbol_count)() as usize
     }
 
     /// needs to make static lifetime of the pointer explicit, otherwise it assumes CSymbol goes
     /// out of scope with the vtable reference that was used to call it
-    fn c_get_all_symbols(&self) -> Vec<&'static mut CSymbol> {
-        let count = self.c_symbol_count();
+    fn get_all_symbols(&self) -> Vec<*mut CSymbol> {
+        let count = self.symbol_count();
         let mut symbols = Vec::with_capacity(count);
-        (self.get_all_symbols)(symbols.as_mut_ptr() as *mut *mut CSymbol);
+        (self.c_get_all_symbols)(symbols.as_mut_ptr() as *mut *mut CSymbol);
         unsafe { symbols.set_len(count) };
         symbols
     }
 }
 
-pub struct Bridge<'a> {
+pub struct Bridge {
     #[allow(dead_code)]
     vtable: Rc<BridgeVTable>,
     pub kernel_dir: PathBuf,
 
-    pub symbols: Vec<Symbol<'a>>,
+    pub symbols: Vec<*mut CSymbol>,
+    pub name_to_symbol: HashMap<String, *mut CSymbol>,
 }
 
-impl<'a> Bridge<'a> {
+impl Bridge {
     /// Compile bridge library if necessary, then dynamically
     /// load it and associated functions and create and return a
     /// Bridge object to interface with the C part.
-    pub fn new(kernel_dir: PathBuf) -> Result<Bridge<'static>> {
+    pub fn new(kernel_dir: PathBuf) -> Result<Bridge> {
         let (library_path, env) = prepare_bridge(&kernel_dir)?;
         let vtable = unsafe { BridgeVTable::new(library_path) };
         // Create env vector
@@ -194,40 +195,42 @@ impl<'a> Bridge<'a> {
         // Create vector of ptrs with NULL at the end
         let mut ffi_env: Vec<*const c_char> = env.iter().map(|cstr| cstr.as_ptr()).collect();
         ffi_env.push(std::ptr::null());
-        (vtable.init)(ffi_env.as_ptr());
+        (vtable.c_init)(ffi_env.as_ptr());
 
         let vtable = Rc::new(vtable);
 
         // Load all symbols once
-        let c_symbols = vtable.c_get_all_symbols();
-        let symbols = c_symbols
-            .into_iter()
-            .map(|s| Symbol {
-                c_symbol: s,
-                vtable: vtable.clone(),
-            })
-            .collect();
+        let symbols = vtable.get_all_symbols();
+        let mut name_to_symbol = HashMap::new();
+        for symbol in &symbols {
+            let name = unsafe {
+                (**symbol)
+                    .name
+                    .as_ref()
+                    .map(|obj| String::from_utf8_lossy(CStr::from_ptr(obj).to_bytes()).into_owned())
+            };
+            if let Some(name) = name {
+                name_to_symbol.insert(name, *symbol);
+            }
+        }
 
         Ok(Bridge {
             vtable,
             kernel_dir,
             symbols,
+            name_to_symbol,
         })
     }
 
-    #[allow(dead_code)]
-    /// TODO This does not work since the whole bridge is still in a mutable borrow state
-    pub fn get_symbol_by_name_mut(&mut self, name: &str) -> Option<&'a mut Symbol> {
-        let p = self.get_symbol_pos_by_name(name);
-        if let Some(pos) = p {
-            return Some(&mut self.symbols[pos]);
+    fn wrap_symbol(&self, symbol: *mut CSymbol) -> Symbol {
+        Symbol {
+            c_symbol: symbol,
+            vtable: self.vtable.clone(),
         }
-        None
     }
-    pub fn get_symbol_pos_by_name(&self, name: &str) -> Option<usize> {
-        self.symbols
-            .iter()
-            .position(|sym| sym.name().map_or(false, |n| n.eq_ignore_ascii_case(name)))
+
+    pub fn symbol(&self, name: &str) -> Option<Symbol> {
+        self.name_to_symbol.get(name).map(|s| self.wrap_symbol(*s))
     }
 }
 

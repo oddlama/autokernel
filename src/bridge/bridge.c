@@ -57,6 +57,7 @@ void init(char const* const* env) {
 	struct timeval start, now;
 	struct symbol* sym;
 	int i;
+	char saved_working_directory[2048];
 
 	DEBUG("Initializing environment\n");
 	init_environment(env);
@@ -64,7 +65,6 @@ void init(char const* const* env) {
 	DEBUG("Kernel directory: %s\n", autokernel_getenv("abs_objtree"));
 
 	// Save current working directory
-	char saved_working_directory[2048];
 	getcwd(saved_working_directory, 2048);
 
 	// Parse Kconfig and load empty .config (/dev/null)
