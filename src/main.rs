@@ -1,6 +1,6 @@
 mod bridge;
-mod config;
 mod colors;
+mod config;
 
 use std::{
     error::Error,
@@ -13,7 +13,6 @@ use std::path::PathBuf;
 use crate::bridge::{Bridge, Tristate};
 use colored::Colorize;
 use colors::*;
-
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
@@ -38,7 +37,7 @@ enum Action {
         #[clap(short, long)]
         clean: bool,
         #[clap(short, long)]
-        bundled_initramfs: bool
+        bundled_initramfs: bool,
     },
     Config {
         /// wether to interactively configure
@@ -73,7 +72,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("\x1b[0m");
 
     match args.action {
-        Action::Build { clean, bundled_initramfs } => {
+        Action::Build {
+            clean,
+            bundled_initramfs,
+        } => {
             // let bridge = Bridge::new(kernel_dir)
             // umask 022 // do we want this from the config? or better: detect from the kernel_dir permissions?
 
@@ -109,14 +111,14 @@ fn main() -> Result<(), Box<dyn Error>> {
             println!("{:?}", sym_cmdline.get_value());
             sym_cmdline.set_symbol_value_string("")?; // TODO set to the proper commandline, this
                                                       // can only be set after the config was built
-            // ## Python example from v1
-            //
-            //def _build_kernel():
-            //    # Write configuration to file
-            //    kconfig.write_config(
-            //            filename=config_output,
-            //            header=generated_by_autokernel_header(),
-            //            save_old=False)
+                                                      // ## Python example from v1
+                                                      //
+                                                      //def _build_kernel():
+                                                      //    # Write configuration to file
+                                                      //    kconfig.write_config(
+                                                      //            filename=config_output,
+                                                      //            header=generated_by_autokernel_header(),
+                                                      //            save_old=False)
 
             //    # Copy file to .config, which may get changed by the makefiles
             //    shutil.copyfile(config_output, os.path.join(args.kernel_dir, '.config'))
@@ -151,7 +153,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             //# Start the build process
             //_build_kernel()
 
-
             // TODO execute pre-build hook
 
             /*
@@ -171,7 +172,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let sym_modules = bridge.symbol("MODULES").unwrap();
                 println!("{:?}", sym_modules.get_value());
             } else {
-
             }
 
             // execute post-build hook
@@ -182,10 +182,19 @@ fn main() -> Result<(), Box<dyn Error>> {
             println!();
 
             // validate config
-            println!(">> {} {}", config.validate(&bridge)?.to_string().green().bold(), colorize!("user-config symbols verified", COLOR_MAIN));
+            println!(
+                ">> {} {}",
+                config.validate(&bridge)?.to_string().green().bold(),
+                colorize!("user-config symbols verified", COLOR_MAIN)
+            );
             println!();
 
-            println!("{}\n{}{:?}\x1b[0m",colorize!(">> dumping config", COLOR_MAIN), termcolor!(COLOR_VERBOSE), config.build);
+            println!(
+                "{}\n{}{:?}\x1b[0m",
+                colorize!(">> dumping config", COLOR_MAIN),
+                termcolor!(COLOR_VERBOSE),
+                config.build
+            );
             for (sym, _) in &config.build {
                 let mut s = bridge.symbol(sym).unwrap();
                 println!("{:?}", s.get_value());

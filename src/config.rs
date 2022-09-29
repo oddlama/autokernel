@@ -1,8 +1,8 @@
-use anyhow::{Result, Ok, ensure};
+use anyhow::{ensure, Ok, Result};
 use serde::Deserialize;
-use toml::value::Map;
 use std::fs;
 use std::path::PathBuf;
+use toml::value::Map;
 
 use crate::bridge::Bridge;
 
@@ -20,9 +20,12 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn validate(&self, bridge: &Bridge) -> Result<usize>{
-        for (k,_) in &self.build {
-            ensure!(bridge.symbol(k).is_some(), format!("Key {} does not exist in loaded symbols", &k));
+    pub fn validate(&self, bridge: &Bridge) -> Result<usize> {
+        for (k, _) in &self.build {
+            ensure!(
+                bridge.symbol(k).is_some(),
+                format!("Key {} does not exist in loaded symbols", &k)
+            );
             //TODO validate value in range
         }
         Ok(self.build.len())
