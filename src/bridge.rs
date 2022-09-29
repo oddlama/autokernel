@@ -11,7 +11,6 @@ use std::io::prelude::*;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::rc::Rc;
 
 mod internal {
     use super::*;
@@ -90,7 +89,6 @@ pub enum SymbolType {
 
 pub struct Symbol<'a> {
     c_symbol: *mut CSymbol,
-    vtable: Rc<BridgeVTable>,
     bridge: &'a Bridge,
 }
 
@@ -106,7 +104,7 @@ impl<'a> Symbol<'a> {
     // dependencies()
 
     pub fn recalculate(&self) {
-        (self.vtable.c_sym_calc_value)(self.c_symbol);
+        (self.bridge.vtable.c_sym_calc_value)(self.c_symbol);
     }
 
     pub fn get_value(&self) -> &Tristate {
@@ -115,7 +113,7 @@ impl<'a> Symbol<'a> {
 
     pub fn set_symbol_value_tristate(&mut self, value: Tristate) -> Result<()> {
         ensure!(
-            (self.vtable.c_sym_set_tristate_value)(self.c_symbol, value) == 1,
+            (self.bridge.vtable.c_sym_set_tristate_value)(self.c_symbol, value) == 1,
             format!("Could not set symbol {:?}", self.name())
         );
         self.bridge.recalculate_all_symbols();
@@ -125,7 +123,7 @@ impl<'a> Symbol<'a> {
     pub fn set_symbol_value_string(&mut self, value: &str) -> Result<()> {
         let cstr = CString::new(value).unwrap();
         ensure!(
-            (self.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr()) == 1,
+            (self.bridge.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr()) == 1,
             format!("Could not set symbol {:?}", self.name())
         );
         self.bridge.recalculate_all_symbols();
@@ -196,7 +194,7 @@ impl BridgeVTable {
 
 pub struct Bridge {
     #[allow(dead_code)]
-    vtable: Rc<BridgeVTable>,
+    vtable: BridgeVTable,
     pub kernel_dir: PathBuf,
 
     pub symbols: Vec<*mut CSymbol>,
@@ -222,8 +220,6 @@ impl Bridge {
         let mut ffi_env: Vec<*const c_char> = env.iter().map(|cstr| cstr.as_ptr()).collect();
         ffi_env.push(std::ptr::null());
         (vtable.c_init)(ffi_env.as_ptr());
-
-        let vtable = Rc::new(vtable);
 
         // Load all symbols once
         let symbols = vtable.get_all_symbols();
@@ -251,7 +247,6 @@ impl Bridge {
     fn wrap_symbol(&self, symbol: *mut CSymbol) -> Symbol {
         Symbol {
             c_symbol: symbol,
-            vtable: self.vtable.clone(),
             bridge: self,
         }
     }
