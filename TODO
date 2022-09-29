@@ -5,3 +5,5 @@
 - optional libnotify integration?
 - resume mode?
 - convert menuconfig text to config elements
+- investigate "unable to set symbol" if symbol recalculation fails
+	- print expression manually and investigate e.g. dependencies

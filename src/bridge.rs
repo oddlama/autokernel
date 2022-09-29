@@ -15,7 +15,7 @@ use std::rc::Rc;
 
 mod internal {
     use super::*;
-    use libc::{c_char, c_int, c_void};
+    use libc::{c_char, c_void};
 
     #[repr(C)]
     pub struct SymbolValue {
@@ -37,12 +37,33 @@ mod internal {
         pub current_value: SymbolValue,
         default_values: [SymbolValue; 4],
         pub visible: Tristate,
-        flags: c_int,
+        pub flags: Flags,
         // TODO where (which type) is this pointing to?
         properties: *mut c_void,
         direct_dependencies: CExprValue,
         reverse_dependencies: CExprValue,
         implied: CExprValue,
+    }
+
+    // TODO handle better (and elsewhere)
+    use bitflags::bitflags;
+
+    bitflags! {
+        #[repr(C)]
+        pub struct Flags: u32 {
+            const SYMBOL_CONST     = 0x0001;/* symbol is const */
+            const SYMBOL_CHECK     = 0x0008;/* used during dependency checking */
+            const SYMBOL_CHOICE    = 0x0010;/* start of a choice block (null name) */
+            const SYMBOL_CHOICEVAL = 0x0020;/* used as a value in a choice block */
+            const SYMBOL_VALID     = 0x0080;/* set when symbol.curr is calculated */
+            const SYMBOL_OPTIONAL  = 0x0100;/* choice is optional - values can be 'n' */
+            const SYMBOL_WRITE     = 0x0200;/* write symbol to file (KCONFIG_CONFIG) */
+            const SYMBOL_CHANGED   = 0x0400;/* ? */
+            const SYMBOL_WRITTEN   = 0x0800;/* track info to avoid double-write to .config */
+            const SYMBOL_NO_WRITE  = 0x1000;/* Symbol for internal use only; it will not be written */
+            const SYMBOL_CHECKED   = 0x2000;/* used during dependency checking */
+            const SYMBOL_WARNED    = 0x8000;/* warning has been issued */
+        }
     }
 }
 
@@ -67,12 +88,13 @@ pub enum SymbolType {
     String,
 }
 
-pub struct Symbol {
+pub struct Symbol<'a> {
     c_symbol: *mut CSymbol,
     vtable: Rc<BridgeVTable>,
+    bridge: &'a Bridge,
 }
 
-impl Symbol {
+impl<'a> Symbol<'a> {
     pub fn name(&self) -> Option<Cow<'_, str>> {
         unsafe {
             (*self.c_symbol)
@@ -83,6 +105,10 @@ impl Symbol {
     }
     // dependencies()
 
+    pub fn recalculate(&self) {
+        (self.vtable.c_sym_calc_value)(self.c_symbol);
+    }
+
     pub fn get_value(&self) -> &Tristate {
         unsafe { &(*self.c_symbol).current_value.tri }
     }
@@ -92,8 +118,7 @@ impl Symbol {
             (self.vtable.c_sym_set_tristate_value)(self.c_symbol, value) == 1,
             format!("Could not set symbol {:?}", self.name())
         );
-        // TODO this must be called on all symbols.
-        (self.vtable.c_sym_calc_value)(self.c_symbol);
+        self.bridge.recalculate_all_symbols();
         Ok(())
     }
 
@@ -103,8 +128,7 @@ impl Symbol {
             (self.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr()) == 1,
             format!("Could not set symbol {:?}", self.name())
         );
-        // TODO this must be called on all symbols.
-        (self.vtable.c_sym_calc_value)(self.c_symbol);
+        self.bridge.recalculate_all_symbols();
         Ok(())
     }
 }
@@ -228,11 +252,32 @@ impl Bridge {
         Symbol {
             c_symbol: symbol,
             vtable: self.vtable.clone(),
+            bridge: self,
         }
     }
 
     pub fn symbol(&self, name: &str) -> Option<Symbol> {
         self.name_to_symbol.get(name).map(|s| self.wrap_symbol(*s))
+    }
+
+    /// Saves all modified (unsaved) values
+    /// Iterates over all symbols, wraps them and recalculates them
+    pub fn recalculate_all_symbols(&self) {
+        //iterate
+        for symbol in &self.symbols {
+            //skip Flags::SYMBOL_CONST
+            if unsafe { &**symbol }.flags.intersects(Flags::SYMBOL_CONST) {
+                continue;
+            }
+            //wrap
+            let symbol = self.wrap_symbol(*symbol);
+            //skip unnamed
+            if symbol.name().is_none() {
+                continue;
+            }
+            //recalculate
+            symbol.recalculate();
+        }
     }
 }
 
