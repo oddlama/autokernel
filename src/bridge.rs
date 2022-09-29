@@ -92,6 +92,7 @@ impl Symbol {
             (self.vtable.c_sym_set_tristate_value)(self.c_symbol, value) == 1,
             format!("Could not set symbol {:?}", self.name())
         );
+        // TODO this must be called on all symbols.
         (self.vtable.c_sym_calc_value)(self.c_symbol);
         Ok(())
     }
@@ -102,6 +103,7 @@ impl Symbol {
             (self.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr()) == 1,
             format!("Could not set symbol {:?}", self.name())
         );
+        // TODO this must be called on all symbols.
         (self.vtable.c_sym_calc_value)(self.c_symbol);
         Ok(())
     }
