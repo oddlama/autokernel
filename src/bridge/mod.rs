@@ -86,8 +86,8 @@ impl Bridge {
     pub fn recalculate_all_symbols(&self) {
         //iterate
         for symbol in &self.symbols {
-            //skip Flags::SYMBOL_CONST
-            if unsafe { &**symbol }.flags.intersects(Flags::SYMBOL_CONST) {
+            // skip constant symbols (Can't be changed)
+            if unsafe { &**symbol }.flags.intersects(SymbolFlags::CONST) {
                 continue;
             }
             //wrap
@@ -103,7 +103,7 @@ impl Bridge {
 }
 
 /// Compile (or find existing) bridge shared library.
-pub fn prepare_bridge(kernel_dir: &PathBuf) -> Result<(PathBuf, EnvironMap)> {
+fn prepare_bridge(kernel_dir: &PathBuf) -> Result<(PathBuf, EnvironMap)> {
     let kconfig_dir = kernel_dir.join("scripts").join("kconfig");
 
     // Copy bridge.c to kernel scripts directory

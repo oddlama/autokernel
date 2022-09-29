@@ -55,6 +55,7 @@ impl<'a> Symbol<'a> {
             format!("Could not set symbol {:?}", self.name())
         );
         self.bridge.recalculate_all_symbols();
+        // TODO check if change was successful
         Ok(())
     }
 
@@ -65,6 +66,19 @@ impl<'a> Symbol<'a> {
             format!("Could not set symbol {:?}", self.name())
         );
         self.bridge.recalculate_all_symbols();
+        // TODO check if change was successful
+        Ok(())
+    }
+
+    pub fn is_choice(&self) -> bool {
+        unsafe { &*self.c_symbol }.flags.intersects(SymbolFlags::CHOICE)
+    }
+
+    pub fn set_symbol_value_choice(&mut self, value: &str) -> Result<()> {
+        // TODO check that the given symbol belongs to the choice.
+        self.bridge.symbol(value).unwrap().set_symbol_value_tristate(Tristate::Yes)?;
+        self.bridge.recalculate_all_symbols();
+        // TODO check if change was successful
         Ok(())
     }
 }

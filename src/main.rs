@@ -1,16 +1,16 @@
+// TODO replace all option unwraps with expects or ? if possible.
 mod bridge;
 mod colors;
 mod config;
 
-use std::{
-    error::Error,
-    process::{Command, Stdio},
-};
+use std::process::{Command, Stdio};
 
 use clap::Parser;
 use std::path::PathBuf;
+use anyhow::{Result, bail};
 
 use crate::bridge::{Bridge, Tristate};
+use crate::config::Config;
 use colored::Colorize;
 use colors::*;
 
@@ -30,24 +30,24 @@ struct Args {
     action: Action,
 }
 
+#[derive(Debug, clap::Args)]
+struct ActionBuild {
+    /// Run make clean before building
+    #[clap(short, long)]
+    clean: bool,
+}
+
 #[derive(Debug, clap::Subcommand)]
 enum Action {
-    Build {
-        /// wether to interactively configure
-        #[clap(short, long)]
-        clean: bool,
-        #[clap(short, long)]
-        bundled_initramfs: bool,
-    },
+    Build(ActionBuild),
     Config {
         /// wether to interactively configure
         #[clap(short, long)]
         interactive: bool,
     },
-    Noop,
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<()> {
     let args = Args::parse();
 
     println!(
@@ -63,7 +63,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         colorize!(">> Loading config:", COLOR_MAIN),
         colorize!(args.config.to_string_lossy(), COLOR_MAIN)
     );
-    let config = config::load(args.config)?;
+    let config = config::load(&args.config)?;
     println!();
 
     println!("{}", colorize!(">> creating bridge", COLOR_MAIN));
@@ -71,112 +71,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let bridge = Bridge::new(args.kernel_dir.clone())?;
     println!("\x1b[0m");
 
-    match args.action {
-        Action::Build {
-            clean,
-            bundled_initramfs,
-        } => {
-            // let bridge = Bridge::new(kernel_dir)
-            // umask 022 // do we want this from the config? or better: detect from the kernel_dir permissions?
-
-            // run make clean, IFF the user specified --clean
-            if clean {
-                // run "make clean" in the kernel folder
-                println!(">> make clean");
-                Command::new("make")
-                    .arg("clean")
-                    .current_dir(&args.kernel_dir)
-                    .stderr(Stdio::inherit())
-                    .output()
-                    .expect("failed to execute make clean");
-            }
-
-            /*
-             * Setting symbols
-             */
-
-            // let kernel_version = bridge.kernel_version();
-            // let config_output = args.config_output or args.kernel_dir, '.config.autokernel'
-
-            /*
-             * Commandline shenanigans
-             */
-            // integrate a terminal in the kernel (e.g. only spectre mitigation can be changed
-            // here)
-            let mut sym_cmdline_bool = bridge.symbol("CMDLINE_BOOL").unwrap();
-            println!("{:?}", sym_cmdline_bool.get_value());
-            sym_cmdline_bool.set_symbol_value_tristate(Tristate::Yes)?;
-
-            let mut sym_cmdline = bridge.symbol("CMDLINE").unwrap();
-            println!("{:?}", sym_cmdline.get_value());
-            sym_cmdline.set_symbol_value_string("")?; // TODO set to the proper commandline, this
-                                                      // can only be set after the config was built
-                                                      // ## Python example from v1
-                                                      //
-                                                      //def _build_kernel():
-                                                      //    # Write configuration to file
-                                                      //    kconfig.write_config(
-                                                      //            filename=config_output,
-                                                      //            header=generated_by_autokernel_header(),
-                                                      //            save_old=False)
-
-            //    # Copy file to .config, which may get changed by the makefiles
-            //    shutil.copyfile(config_output, os.path.join(args.kernel_dir, '.config'))
-            //    # Build the kernel
-            //    build_kernel(args)
-
-            //def set_cmdline():
-            //    kernel_cmdline_str = ' '.join(kernel_cmdline)
-
-            //    has_user_cmdline_bool = sym_cmdline_bool in autokernel.symbol_tracking.symbol_changes
-            //    has_user_cmdline = sym_cmdline in autokernel.symbol_tracking.symbol_changes
-
-            //    if has_user_cmdline_bool and sym_cmdline_bool.str_value == 'n':
-            //        # The user has explicitly disabled the builtin commandline,
-            //        # so there is no need to set it.
-            //        pass
-            //    else:
-            //        sym_cmdline_bool.set_value('y')
-
-            //        # Issue a warning, if a custom cmdline does not contain "{CMDLINE}", and we have gathered add_cmdline options.
-            //        if has_user_cmdline and not sym_cmdline.str_value.contains('{CMDLINE}') and len(kernel_cmdline) > 0:
-            //            log.warn("CMDLINE was set manually and doesn't contain a '{CMDLINE}' token, although add_cmdline has also been used.")
-
-            //        if has_user_cmdline:
-            //            sym_cmdline.set_value(sym_cmdline.str_value.replace('{CMDLINE}', kernel_cmdline_str))
-            //        else:
-            //            sym_cmdline.set_value(kernel_cmdline_str)
-
-            //info!("Building kernel");
-            //# On the first pass, disable all initramfs sources
-            //sym_initramfs_source.set_value('')
-            //# Start the build process
-            //_build_kernel()
-
-            // TODO execute pre-build hook
-
-            /*
-             * Build step
-             */
-            if bundled_initramfs {
-                // TODO
-                // three stage build
-                // - build without initramfs
-                // - build initramfs
-                // - build initramfs into kernel
-
-                let mut sym_initramfs_source = bridge.symbol("INITRAMFS_SOURCE").unwrap();
-                println!("{:?}", sym_initramfs_source.get_value());
-                sym_initramfs_source.set_symbol_value_string("{INITRAMFS}")?;
-
-                let sym_modules = bridge.symbol("MODULES").unwrap();
-                println!("{:?}", sym_modules.get_value());
-            } else {
-            }
-
-            // execute post-build hook
-            println!("{}", "Build mode not supported yet".yellow());
-        }
+    match &args.action {
+        Action::Build(action) => build_kernel(&args, &config, &bridge, action)?,
         Action::Config { interactive: _ } => {
             println!("{}", "Config mode not supported yet".yellow());
             println!();
@@ -202,13 +98,134 @@ fn main() -> Result<(), Box<dyn Error>> {
                 println!("{:?}", s.get_value());
             }
         }
-        Action::Noop => {}
     };
+    Ok(())
+}
+
+fn build_kernel(
+    args: &Args,
+    config: &Config,
+    bridge: &Bridge,
+    action: &ActionBuild,
+) -> Result<()> {
+    // umask 022 // do we want this from the config?
+
+    // Clean output from previous builds if requested
+    if action.clean {
+        // run "make clean" in the kernel folder
+        println!(">> make clean");
+        Command::new("make")
+            .arg("clean")
+            .current_dir(&args.kernel_dir)
+            .stderr(Stdio::inherit())
+            .output()
+            .expect("make clean failed");
+    }
+
+    // TODO check every symbol type and dependencies before/after setting a value
+    for (k, v) in &config.build {
+        let mut sym = bridge.symbol(k).expect(&format!("Invalid symbol in config: {k}"));
+        println!("k={k}, v={v}");
+        match v {
+            toml::Value::String(s) if s == "n" => sym.set_symbol_value_tristate(Tristate::No)?,
+            toml::Value::String(s) if s == "m" => sym.set_symbol_value_tristate(Tristate::Mod)?,
+            toml::Value::String(s) if s == "y" => sym.set_symbol_value_tristate(Tristate::Yes)?,
+            toml::Value::String(s) =>
+                if sym.is_choice() {
+                    sym.set_symbol_value_choice(s)?
+                } else {
+                    sym.set_symbol_value_string(s)?
+                },
+            // TODO assert correct types always! set string can be used on different types too!
+            _ => bail!("Only tristate and string values are currently supported!"),
+        }
+    }
+
+    // TODO get conf_write from vtable and expose as write_config in bridge
+    // bridge.write_config(".config");
+
+    // let kernel_version = bridge.kernel_version();
+    // let config_output = args.config_output or args.kernel_dir, '.config.autokernel'
+
+    /*
+     * Commandline shenanigans
+     */
+    // integrate a terminal in the kernel (e.g. only spectre mitigation can be changed
+    // here)
+    let mut sym_cmdline_bool = bridge.symbol("CMDLINE_BOOL").unwrap();
+    println!("{:?}", sym_cmdline_bool.get_value());
+    sym_cmdline_bool.set_symbol_value_tristate(Tristate::Yes)?;
+
+    let mut sym_cmdline = bridge.symbol("CMDLINE").unwrap();
+    println!("{:?}", sym_cmdline.get_value());
+    sym_cmdline.set_symbol_value_string("")?; // TODO set to the proper commandline, this
+                                              // can only be set after the config was built
+                                              // ## Python example from v1
+                                              //
+                                              //def _build_kernel():
+                                              //    # Write configuration to file
+                                              //    kconfig.write_config(
+                                              //            filename=config_output,
+                                              //            header=generated_by_autokernel_header(),
+                                              //            save_old=False)
+
+    //    # Copy file to .config, which may get changed by the makefiles
+    //    shutil.copyfile(config_output, os.path.join(args.kernel_dir, '.config'))
+    //    # Build the kernel
+    //    build_kernel(args)
+
+    //def set_cmdline():
+    //    kernel_cmdline_str = ' '.join(kernel_cmdline)
+
+    //    has_user_cmdline_bool = sym_cmdline_bool in autokernel.symbol_tracking.symbol_changes
+    //    has_user_cmdline = sym_cmdline in autokernel.symbol_tracking.symbol_changes
+
+    //    if has_user_cmdline_bool and sym_cmdline_bool.str_value == 'n':
+    //        # The user has explicitly disabled the builtin commandline,
+    //        # so there is no need to set it.
+    //        pass
+    //    else:
+    //        sym_cmdline_bool.set_value('y')
+
+    //        # Issue a warning, if a custom cmdline does not contain "{CMDLINE}", and we have gathered add_cmdline options.
+    //        if has_user_cmdline and not sym_cmdline.str_value.contains('{CMDLINE}') and len(kernel_cmdline) > 0:
+    //            log.warn("CMDLINE was set manually and doesn't contain a '{CMDLINE}' token, although add_cmdline has also been used.")
+
+    //        if has_user_cmdline:
+    //            sym_cmdline.set_value(sym_cmdline.str_value.replace('{CMDLINE}', kernel_cmdline_str))
+    //        else:
+    //            sym_cmdline.set_value(kernel_cmdline_str)
+
+    //info!("Building kernel");
+    //# On the first pass, disable all initramfs sources
+    //sym_initramfs_source.set_value('')
+    //# Start the build process
+    //_build_kernel()
+
+    // TODO execute pre-build hook
+
+    //if bundled_initramfs {
+    //    // TODO
+    //    // three stage build
+    //    // - build without initramfs
+    //    // - build initramfs
+    //    // - build initramfs into kernel
+
+    //    let mut sym_initramfs_source = bridge.symbol("INITRAMFS_SOURCE").unwrap();
+    //    println!("{:?}", sym_initramfs_source.get_value());
+    //    sym_initramfs_source.set_symbol_value_string("{INITRAMFS}")?;
+
+    //    let sym_modules = bridge.symbol("MODULES").unwrap();
+    //    println!("{:?}", sym_modules.get_value());
+
+    // execute post-build hook
+    println!("{}", "Build mode not supported yet".yellow());
     Ok(())
 }
 
 // TODO extract into test file (needs lib setup for it)
 // TODO use test_env_logger
+// TODO only download kernel once, then run many tests on it
 
 #[test]
 fn integrationtest_parse_symbols() {

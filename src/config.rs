@@ -1,12 +1,15 @@
 use anyhow::{ensure, Ok, Result};
 use serde::Deserialize;
 use std::fs;
-use std::path::PathBuf;
+use std::path::Path;
 use toml::value::Map;
 
 use crate::bridge::Bridge;
 
-pub fn load(path: PathBuf) -> Result<Config> {
+pub fn load<P>(path: P) -> Result<Config>
+where
+    P: AsRef<Path>,
+{
     let config_str = fs::read_to_string(path)?;
     let config: Config = toml::from_str(config_str.as_str())?;
     Ok(config)
