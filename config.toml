@@ -1,8 +1,0 @@
-[build]
-NO_HZ_IDLE="NO_HZ_FULL"
-SOUND="y"
-SND_PROC_FS="y"
-SND_VERBOSE_PROCFS="y"
-DEFAULT_HOSTNAME = "hallo"
-
-[install]

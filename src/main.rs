@@ -5,9 +5,9 @@ mod config;
 
 use std::process::{Command, Stdio};
 
+use anyhow::{bail, Result};
 use clap::Parser;
 use std::path::PathBuf;
-use anyhow::{Result, bail};
 
 use crate::bridge::{Bridge, Tristate};
 use crate::config::Config;
@@ -18,8 +18,8 @@ const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 #[derive(Parser, Debug)] // requires `derive` feature
 struct Args {
-    /// config toml
-    #[clap(short, long, value_name = "FILE", default_value = "config.toml")]
+    /// config
+    #[clap(short, long, value_name = "FILE", default_value = "config.txt")]
     config: PathBuf,
 
     /// Optional kernel_dir, default /usr/src/linux/
@@ -102,12 +102,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn build_kernel(
-    args: &Args,
-    config: &Config,
-    bridge: &Bridge,
-    action: &ActionBuild,
-) -> Result<()> {
+fn build_kernel(args: &Args, config: &Config, bridge: &Bridge, action: &ActionBuild) -> Result<()> {
     // umask 022 // do we want this from the config?
 
     // Clean output from previous builds if requested
@@ -126,18 +121,17 @@ fn build_kernel(
     for (k, v) in &config.build {
         let mut sym = bridge.symbol(k).expect(&format!("Invalid symbol in config: {k}"));
         println!("k={k}, v={v}");
-        match v {
-            toml::Value::String(s) if s == "n" => sym.set_symbol_value_tristate(Tristate::No)?,
-            toml::Value::String(s) if s == "m" => sym.set_symbol_value_tristate(Tristate::Mod)?,
-            toml::Value::String(s) if s == "y" => sym.set_symbol_value_tristate(Tristate::Yes)?,
-            toml::Value::String(s) =>
+        match v.as_str() {
+            "n" => sym.set_symbol_value_tristate(Tristate::No)?,
+            "m" => sym.set_symbol_value_tristate(Tristate::Mod)?,
+            "y" => sym.set_symbol_value_tristate(Tristate::Yes)?,
+            _ => {
                 if sym.is_choice() {
-                    sym.set_symbol_value_choice(s)?
+                    sym.set_symbol_value_choice(v)?
                 } else {
-                    sym.set_symbol_value_string(s)?
-                },
-            // TODO assert correct types always! set string can be used on different types too!
-            _ => bail!("Only tristate and string values are currently supported!"),
+                    sym.set_symbol_value_string(v)?
+                }
+            } // TODO assert correct types always! set string can be used on different types too!
         }
     }
 

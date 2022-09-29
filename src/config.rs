@@ -1,8 +1,7 @@
-use anyhow::{ensure, Ok, Result};
-use serde::Deserialize;
+use anyhow::{anyhow, ensure, Ok, Result};
+use indexmap::map::IndexMap;
 use std::fs;
 use std::path::Path;
-use toml::value::Map;
 
 use crate::bridge::Bridge;
 
@@ -10,16 +9,23 @@ pub fn load<P>(path: P) -> Result<Config>
 where
     P: AsRef<Path>,
 {
-    let config_str = fs::read_to_string(path)?;
-    let config: Config = toml::from_str(config_str.as_str())?;
-    Ok(config)
+    let mut c = Config { build: IndexMap::new() };
+    for line in fs::read_to_string(path)?.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with("#") {
+            continue;
+        }
+        let (k, v) = line.split_once("=").ok_or(anyhow!(format!("invalid line {line}")))?;
+        // TODO trimming all " might not be desired
+        c.build
+            .insert(k.trim().to_string(), v.trim_matches('"').trim().to_string());
+    }
+    Ok(c)
 }
 
-/// TOML config
-#[derive(Debug, Deserialize)]
+#[derive(Debug)]
 pub struct Config {
-    pub build: Map<String, toml::Value>,
-    pub install: toml::Value,
+    pub build: IndexMap<String, String>,
 }
 
 impl Config {
