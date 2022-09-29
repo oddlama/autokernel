@@ -37,6 +37,8 @@ enum Action {
         /// wether to interactively configure
         #[clap(short, long)]
         clean: bool,
+        #[clap(short, long)]
+        bundled_initramfs: bool
     },
     Config {
         /// wether to interactively configure
@@ -81,7 +83,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("\x1b[0m");
 
     match args.action {
-        Action::Build { clean } => {
+        Action::Build { clean, bundled_initramfs } => {
             // let bridge = Bridge::new(kernel_dir)
             // umask 022 // do we want this from the config? or better: detect from the kernel_dir permissions?
 
@@ -97,14 +99,18 @@ fn main() -> Result<(), Box<dyn Error>> {
                     .expect("failed to execute make clean");
             }
 
-            // TODO execute pre-build hook
+            /*
+             * Setting symbols
+             */
 
             // let kernel_version = bridge.kernel_version();
             // let config_output = args.config_output or args.kernel_dir, '.config.autokernel'
 
-            // Load some important symbol values
-            // Set some defaults
-
+            /*
+             * Commandline shenanigans
+             */
+            // integrate a terminal in the kernel (e.g. only spectre mitigation can be changed
+            // here)
             let pos = bridge.get_symbol_pos_by_name("CMDLINE_BOOL").unwrap();
             let sym_cmdline_bool = &mut bridge.symbols[pos];
             println!("{:?}", sym_cmdline_bool.get_value());
@@ -113,17 +119,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             let pos = bridge.get_symbol_pos_by_name("CMDLINE").unwrap();
             let sym_cmdline = &mut bridge.symbols[pos];
             println!("{:?}", sym_cmdline.get_value());
-            sym_cmdline.set_symbol_value_string("")?;
-
-            let pos = bridge.get_symbol_pos_by_name("INITRAMFS_SOURCE").unwrap();
-            let sym_initramfs_source = &mut bridge.symbols[pos];
-            println!("{:?}", sym_initramfs_source.get_value());
-            sym_initramfs_source.set_symbol_value_string("{INITRAMFS}")?;
-
-            let pos = bridge.get_symbol_pos_by_name("MODULES").unwrap();
-            let sym_modules = &bridge.symbols[pos];
-            println!("{:?}", sym_modules.get_value());
-
+            sym_cmdline.set_symbol_value_string("")?; // TODO set to the proper commandline, this
+                                                      // can only be set after the config was built
+            // ## Python example from v1
+            //
             //def _build_kernel():
             //    # Write configuration to file
             //    kconfig.write_config(
@@ -164,18 +163,52 @@ fn main() -> Result<(), Box<dyn Error>> {
             //# Start the build process
             //_build_kernel()
 
+
+            // TODO execute pre-build hook
+
+            /*
+             * Build step
+             */
+            if bundled_initramfs {
+                // TODO
+                // three stage build
+                // - build without initramfs
+                // - build initramfs
+                // - build initramfs into kernel
+
+                let pos = bridge.get_symbol_pos_by_name("INITRAMFS_SOURCE").unwrap();
+                let sym_initramfs_source = &mut bridge.symbols[pos];
+                println!("{:?}", sym_initramfs_source.get_value());
+                sym_initramfs_source.set_symbol_value_string("{INITRAMFS}")?;
+
+                let pos = bridge.get_symbol_pos_by_name("MODULES").unwrap();
+                let sym_modules = &bridge.symbols[pos];
+                println!("{:?}", sym_modules.get_value());
+            } else {
+
+            }
+
             // execute post-build hook
-            println!("{}", "Build mode not supported yet".red());
+            println!("{}", "Build mode not supported yet".yellow());
         }
         Action::Config { interactive: _ } => {
-            println!("{}", "Config mode not supported yet".red());
+            println!("{}", "Config mode not supported yet".yellow());
             println!();
 
             // validate config
             println!(">> {} {}", config.validate(&bridge)?.to_string().green().bold(), colorize!("user-config symbols verified", COLOR_MAIN));
             println!();
 
-            println!("{}\n{}{:?}\x1b[0m",colorize!(">> dumping config", COLOR_MAIN), termcolor!(COLOR_VERBOSE), config.build)
+            println!("{}\n{}{:?}\x1b[0m",colorize!(">> dumping config", COLOR_MAIN), termcolor!(COLOR_VERBOSE), config.build);
+            for (sym, _) in &config.build {
+                let pos = bridge.get_symbol_pos_by_name(sym).unwrap();
+                println!("defaults: {:?}", bridge.symbols[pos].get_defaults().collect::<Vec<&Tristate>>());
+
+                let s = &mut bridge.symbols[pos];
+                println!("{:?}", s.get_value());
+                s.set_symbol_value_tristate(Tristate::Yes)?;
+                println!("{:?}", s.get_value());
+            }
         }
         Action::Noop => {}
     };
