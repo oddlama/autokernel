@@ -4,10 +4,14 @@ mod colors;
 mod config;
 
 use std::process::{Command, Stdio};
+use std::fs;
 
-use anyhow::{bail, Result};
+use rlua::{self, Function, Lua, Table, UserData, Variadic};
+
+use anyhow::{bail, Error, Ok, Result};
 use clap::Parser;
 use std::path::PathBuf;
+use std::result::Result::Ok as stdOk;
 
 use crate::bridge::{Bridge, Tristate};
 use crate::config::Config;
@@ -35,6 +39,8 @@ struct ActionBuild {
     /// Run make clean before building
     #[clap(short, long)]
     clean: bool,
+    #[clap(short, long)]
+    lua: String,
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -117,8 +123,7 @@ fn build_kernel(args: &Args, config: &Config, bridge: &Bridge, action: &ActionBu
             .expect("make clean failed");
     }
 
-    // TODO check every symbol type and dependencies before/after setting a value
-    for (k, v) in &config.build {
+    let internal_set = |k: &String, v: &String| {
         let mut sym = bridge.symbol(k).expect(&format!("Invalid symbol in config: {k}"));
         println!("k={k}, v={v}");
         match v.as_str() {
@@ -132,6 +137,45 @@ fn build_kernel(args: &Args, config: &Config, bridge: &Bridge, action: &ActionBu
                     sym.set_symbol_value_string(v)?
                 }
             } // TODO assert correct types always! set string can be used on different types too!
+        }
+        Ok(())
+    };
+
+    if !action.lua.is_empty() {
+        let lua_code = fs::read_to_string(&action.lua)?;
+
+        let lua = Lua::new();
+        lua.context(|lua_ctx| {
+            lua_ctx.scope(|scope| {
+            // You can get and set global variables.  Notice that the globals table here is a permanent
+            // reference to _G, and it is mutated behind the scenes as Lua code is loaded.  This API is
+            // based heavily around sharing and internal mutation (just like Lua itself).
+
+            let globals = lua_ctx.globals();
+
+            // TODO implement ToLua and FromLua for Tristate, or UserData
+            globals.set("yes", "y")?;
+            globals.set("mod", "m")?;
+            globals.set("no", "n")?;
+
+            //create the autokernel set function taking in a table (or variadic)
+            let set = scope.create_function(|_, config: Table| {
+                for p in config.pairs::<String, String>() {
+                    let (k, v) = p?;
+                    internal_set(&k,&v).map_err(|ae| rlua::Error::RuntimeError(ae.to_string()))?;
+                }
+                stdOk(())
+            })?;
+            globals.set("set", set)?;
+            assert_eq!(lua_ctx.load(&lua_code).eval::<String>()?, "abc");
+
+            Ok(())
+            })
+        })?;
+    } else {
+        // TODO check every symbol type and dependencies before/after setting a value
+        for (k, v) in &config.build {
+            internal_set(k, v)?;
         }
     }
 

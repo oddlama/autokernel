@@ -1,8 +1,6 @@
-local syms = autokernel.symbols
-local set = autokernel.set
-
 set {
-	"ABC" = yes,
-	"ABC" = no,
-	"ABC" = mod,
+	SOUND = yes,
+	SND = yes,
+	PROC_FS = mod,
+	SND_PROC_FS = no,
 }
