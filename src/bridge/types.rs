@@ -1,9 +1,48 @@
 use super::*;
-use libc::{c_char, c_void};
+use libc::{c_char, c_int, c_void};
+
+#[repr(C)]
+#[allow(dead_code)]
+pub enum SymbolType {
+    UNKNOWN,
+    BOOLEAN,
+    TRISTATE,
+    INT,
+    HEX,
+    STRING,
+}
+
+#[repr(C)]
+#[allow(dead_code)]
+enum PropertyType {
+    UNKNOWN,
+    PROMPT,  /* prompt "foo prompt" or "BAZ Value" */
+    COMMENT, /* text associated with a comment */
+    MENU,    /* prompt associated with a menu or menuconfig symbol */
+    DEFAULT, /* default y */
+    CHOICE,  /* choice value */
+    SELECT,  /* select BAR */
+    IMPLY,   /* imply BAR */
+    RANGE,   /* range 7..100 (for a symbol) */
+    SYMBOL,  /* where a symbol is defined */
+}
+
+#[repr(C)]
+#[allow(dead_code)]
+struct CProperty {
+    next: *mut CProperty,
+    prop_type: PropertyType,
+    text: *const c_char,
+    visible: CExprValue,
+    expr: *mut c_void,
+    menu: *mut c_void,
+    file: *mut c_void,
+    lineno: c_int,
+}
 
 #[repr(C)]
 pub struct SymbolValue {
-    value: *mut c_void,
+    value: *mut SymbolType,
     pub tri: Tristate,
 }
 
@@ -23,7 +62,7 @@ pub struct CSymbol {
     pub visible: Tristate,
     pub flags: SymbolFlags,
     // TODO where (which type) is this pointing to?
-    properties: *mut c_void,
+    properties: *mut CProperty,
     direct_dependencies: CExprValue,
     reverse_dependencies: CExprValue,
     implied: CExprValue,
