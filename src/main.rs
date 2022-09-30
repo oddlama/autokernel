@@ -1,4 +1,3 @@
-// TODO replace all option unwraps with expects or ? if possible.
 mod bridge;
 mod colors;
 mod config;
@@ -8,7 +7,7 @@ use std::fs;
 
 use rlua::{self, Function, Lua, Table, UserData, Variadic};
 
-use anyhow::{bail, Error, Ok, Result};
+use anyhow::{bail, Error, Ok, Result, Context};
 use clap::Parser;
 use std::path::PathBuf;
 use std::result::Result::Ok as stdOk;
@@ -98,7 +97,7 @@ fn main() -> Result<()> {
                 config.build
             );
             for (sym, _) in &config.build {
-                let mut s = bridge.symbol(sym).unwrap();
+                let mut s = bridge.symbol(sym).context("No such symbol")?;
                 println!("{:?}", s.get_value());
                 s.set_symbol_value_tristate(Tristate::Yes)?;
                 println!("{:?}", s.get_value());
@@ -201,11 +200,11 @@ fn build_kernel(args: &Args, config: &Config, bridge: &Bridge, action: &ActionBu
      */
     // integrate a terminal in the kernel (e.g. only spectre mitigation can be changed
     // here)
-    let mut sym_cmdline_bool = bridge.symbol("CMDLINE_BOOL").unwrap();
+    let mut sym_cmdline_bool = bridge.symbol("CMDLINE_BOOL").context("No such symbol")?;
     println!("{:?}", sym_cmdline_bool.get_value());
     sym_cmdline_bool.set_symbol_value_tristate(Tristate::Yes)?;
 
-    let mut sym_cmdline = bridge.symbol("CMDLINE").unwrap();
+    let mut sym_cmdline = bridge.symbol("CMDLINE").context("No such symbol")?;
     println!("{:?}", sym_cmdline.get_value());
     sym_cmdline.set_symbol_value_string("")?; // TODO set to the proper commandline, this
                                               // can only be set after the config was built
@@ -260,11 +259,12 @@ fn build_kernel(args: &Args, config: &Config, bridge: &Bridge, action: &ActionBu
     //    // - build initramfs
     //    // - build initramfs into kernel
 
-    //    let mut sym_initramfs_source = bridge.symbol("INITRAMFS_SOURCE").unwrap();
+    //    let mut sym_initramfs_source = bridge.symbol("INITRAMFS_SOURCE").context("no such
+    //    symbol")?;
     //    println!("{:?}", sym_initramfs_source.get_value());
     //    sym_initramfs_source.set_symbol_value_string("{INITRAMFS}")?;
 
-    //    let sym_modules = bridge.symbol("MODULES").unwrap();
+    //    let sym_modules = bridge.symbol("MODULES").context("no such symbol")?;
     //    println!("{:?}", sym_modules.get_value());
 
     // execute post-build hook

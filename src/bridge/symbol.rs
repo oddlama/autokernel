@@ -1,5 +1,6 @@
 use super::types::*;
 use super::Bridge;
+use anyhow::Context;
 use anyhow::{ensure, Result};
 use std::borrow::Cow;
 use std::ffi::{CStr, CString};
@@ -60,7 +61,7 @@ impl<'a> Symbol<'a> {
     }
 
     pub fn set_symbol_value_string(&mut self, value: &str) -> Result<()> {
-        let cstr = CString::new(value).unwrap();
+        let cstr = CString::new(value)?;
         ensure!(
             (self.bridge.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr()) == 1,
             format!("Could not set symbol {:?}", self.name())
@@ -77,8 +78,7 @@ impl<'a> Symbol<'a> {
     pub fn set_symbol_value_choice(&mut self, value: &str) -> Result<()> {
         // TODO check that the given symbol belongs to the choice.
         self.bridge
-            .symbol(value)
-            .unwrap()
+            .symbol(value).context("No such symbol")?
             .set_symbol_value_tristate(Tristate::Yes)?;
         self.bridge.recalculate_all_symbols();
         // TODO check if change was successful

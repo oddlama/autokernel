@@ -33,7 +33,7 @@ impl Bridge {
     /// Bridge object to interface with the C part.
     pub fn new(kernel_dir: PathBuf) -> Result<Bridge> {
         let (library_path, env) = prepare_bridge(&kernel_dir)?;
-        let vtable = unsafe { BridgeVTable::new(library_path) };
+        let vtable = unsafe { BridgeVTable::new(library_path)? };
         // Create env vector
         let env: Vec<CString> = env
             .iter()

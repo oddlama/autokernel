@@ -29,7 +29,6 @@ pub struct CSymbol {
     implied: CExprValue,
 }
 
-// TODO handle better (and elsewhere)
 use bitflags::bitflags;
 
 bitflags! {

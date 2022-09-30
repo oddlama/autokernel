@@ -1,3 +1,4 @@
+use anyhow::{Ok, Result};
 use super::symbol::*;
 use super::types::*;
 use libc::{c_char, c_int, c_void, size_t};
@@ -26,11 +27,11 @@ pub struct BridgeVTable {
 }
 
 impl BridgeVTable {
-    pub unsafe fn new(library_path: PathBuf) -> BridgeVTable {
-        let library = Library::new(&library_path).unwrap();
+    pub unsafe fn new(library_path: PathBuf) -> Result<BridgeVTable> {
+        let library = Library::new(&library_path)?;
         macro_rules! load_symbol {
             ($type: ty, $name: expr) => {
-                (library.get($name).unwrap() as LSymbol<$type>).into_raw() as RawSymbol<$type>
+                (library.get($name)? as LSymbol<$type>).into_raw() as RawSymbol<$type>
             };
         }
 
@@ -41,7 +42,7 @@ impl BridgeVTable {
         let c_sym_set_string_value = load_symbol!(FuncSymSetStringValue, b"sym_set_string_value");
         let c_sym_calc_value = load_symbol!(FuncSymCalcValue, b"sym_calc_value");
 
-        BridgeVTable {
+        Ok(BridgeVTable {
             library,
             c_init,
             c_symbol_count,
@@ -49,7 +50,7 @@ impl BridgeVTable {
             c_sym_set_tristate_value,
             c_sym_set_string_value,
             c_sym_calc_value,
-        }
+        })
     }
 
     pub fn symbol_count(&self) -> usize {
