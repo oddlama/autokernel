@@ -1,11 +1,11 @@
-use anyhow::{Context, Error, Result};
+use anyhow::{ensure, Context, Error, Result};
 use libc::c_char;
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::fs;
 use std::io::prelude::*;
 use std::os::unix::fs::OpenOptionsExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 mod symbol;
@@ -99,6 +99,16 @@ impl Bridge {
             //recalculate
             symbol.recalculate();
         }
+    }
+
+    pub fn write_config<P>(&self, path: P) -> Result<()>
+    where
+        P: AsRef<Path>,
+    {
+        // TODO do error checks in rust and dont depend on C here for nicer error handling
+        let c: CString = CString::new(path.as_ref().to_str().context("Invalid filename")?)?;
+        ensure!((self.vtable.c_conf_write)(c.as_ptr()) == 0, "Could not write config");
+        Ok(())
     }
 }
 

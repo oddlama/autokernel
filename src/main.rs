@@ -2,12 +2,12 @@ mod bridge;
 mod colors;
 mod config;
 
-use std::process::{Command, Stdio};
 use std::fs;
+use std::process::{Command, Stdio};
 
 use rlua::{self, Function, Lua, Table, UserData, Variadic};
 
-use anyhow::{bail, Error, Ok, Result, Context};
+use anyhow::{bail, Context, Error, Ok, Result};
 use clap::Parser;
 use std::path::PathBuf;
 use std::result::Result::Ok as stdOk;
@@ -146,40 +146,40 @@ fn build_kernel(args: &Args, config: &Config, bridge: &Bridge, action: &ActionBu
         let lua = Lua::new();
         lua.context(|lua_ctx| {
             lua_ctx.scope(|scope| {
-            // You can get and set global variables.  Notice that the globals table here is a permanent
-            // reference to _G, and it is mutated behind the scenes as Lua code is loaded.  This API is
-            // based heavily around sharing and internal mutation (just like Lua itself).
+                // You can get and set global variables.  Notice that the globals table here is a permanent
+                // reference to _G, and it is mutated behind the scenes as Lua code is loaded.  This API is
+                // based heavily around sharing and internal mutation (just like Lua itself).
 
-            let globals = lua_ctx.globals();
+                let globals = lua_ctx.globals();
 
-            // TODO implement ToLua and FromLua for Tristate, or UserData
-            globals.set("yes", "y")?;
-            globals.set("mod", "m")?;
-            globals.set("no", "n")?;
+                // TODO implement ToLua and FromLua for Tristate, or UserData
+                globals.set("yes", "y")?;
+                globals.set("mod", "m")?;
+                globals.set("no", "n")?;
 
-            //create the autokernel set function taking in a table (or variadic)
-            let set = scope.create_function(|_, config: Table| {
-                for p in config.pairs::<String, String>() {
-                    let (k, v) = p?;
-                    internal_set(&k,&v).map_err(|ae| rlua::Error::RuntimeError(ae.to_string()))?;
-                }
-                stdOk(())
-            })?;
-            globals.set("set", set)?;
+                //create the autokernel set function taking in a table (or variadic)
+                let set = scope.create_function(|_, config: Table| {
+                    for p in config.pairs::<String, String>() {
+                        let (k, v) = p?;
+                        internal_set(&k, &v).map_err(|ae| rlua::Error::RuntimeError(ae.to_string()))?;
+                    }
+                    stdOk(())
+                })?;
+                globals.set("set", set)?;
 
-            let set_from_file = scope.create_function(|_, file: String| {
-                // test if file exists
-                let config = config::load(&file).map_err(|ae| rlua::Error::RuntimeError(ae.to_string()))?;
-                for (k, v) in &config.build {
-                    internal_set(k, v).map_err(|ae| rlua::Error::RuntimeError(ae.to_string()))?;
-                }
-                stdOk(())
-            })?;
-            globals.set("set_from_file", set_from_file)?;
+                let set_from_file = scope.create_function(|_, file: String| {
+                    // test if file exists
+                    let config = config::load(&file).map_err(|ae| rlua::Error::RuntimeError(ae.to_string()))?;
+                    for (k, v) in &config.build {
+                        internal_set(k, v).map_err(|ae| rlua::Error::RuntimeError(ae.to_string()))?;
+                    }
+                    stdOk(())
+                })?;
+                globals.set("set_from_file", set_from_file)?;
 
-            assert_eq!(lua_ctx.load(&lua_code).eval::<String>()?, "abc");
+                lua_ctx.load(&lua_code).exec()?;
 
-            Ok(())
+                Ok(())
             })
         })?;
     } else {
@@ -189,8 +189,7 @@ fn build_kernel(args: &Args, config: &Config, bridge: &Bridge, action: &ActionBu
         }
     }
 
-    // TODO get conf_write from vtable and expose as write_config in bridge
-    // bridge.write_config(".config");
+    bridge.write_config(".config")?;
 
     // let kernel_version = bridge.kernel_version();
     // let config_output = args.config_output or args.kernel_dir, '.config.autokernel'
