@@ -167,6 +167,17 @@ fn build_kernel(args: &Args, config: &Config, bridge: &Bridge, action: &ActionBu
                 stdOk(())
             })?;
             globals.set("set", set)?;
+
+            let set_from_file = scope.create_function(|_, file: String| {
+                // test if file exists
+                let config = config::load(&file).map_err(|ae| rlua::Error::RuntimeError(ae.to_string()))?;
+                for (k, v) in &config.build {
+                    internal_set(k, v).map_err(|ae| rlua::Error::RuntimeError(ae.to_string()))?;
+                }
+                stdOk(())
+            })?;
+            globals.set("set_from_file", set_from_file)?;
+
             assert_eq!(lua_ctx.load(&lua_code).eval::<String>()?, "abc");
 
             Ok(())
