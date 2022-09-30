@@ -101,9 +101,7 @@ impl Bridge {
         }
     }
 
-    pub fn write_config<P>(&self, path: P) -> Result<()>
-    where
-        P: AsRef<Path>,
+    pub fn write_config(&self, path: impl AsRef<Path>) -> Result<()>
     {
         // TODO do error checks in rust and dont depend on C here for nicer error handling
         let c: CString = CString::new(path.as_ref().to_str().context("Invalid filename")?)?;

@@ -5,9 +5,7 @@ use std::path::Path;
 
 use crate::bridge::Bridge;
 
-pub fn load<P>(path: P) -> Result<Config>
-where
-    P: AsRef<Path>,
+pub fn load(path: impl AsRef<Path>) -> Result<Config>
 {
     let mut c = Config { build: IndexMap::new() };
     for line in fs::read_to_string(path)?.lines() {
