@@ -5,8 +5,7 @@ use std::path::Path;
 
 use crate::bridge::Bridge;
 
-pub fn load(path: impl AsRef<Path>) -> Result<Config>
-{
+pub fn load(path: impl AsRef<Path>) -> Result<Config> {
     let mut c = Config { build: IndexMap::new() };
     for line in fs::read_to_string(path)?.lines() {
         let line = line.trim();
@@ -15,8 +14,15 @@ pub fn load(path: impl AsRef<Path>) -> Result<Config>
         }
         let (k, v) = line.split_once("=").ok_or(anyhow!(format!("invalid line {line}")))?;
         // TODO trimming all " might not be desired
-        c.build
-            .insert(k.trim().to_string(), v.trim_matches('"').trim().to_string());
+        // TODO trimming CONFIG on right side should only be done for choice symbols
+        c.build.insert(
+            k.trim().trim_start_matches("CONFIG_").to_string(),
+            v.trim()
+                .trim_start_matches('"')
+                .trim_end_matches('"')
+                .trim_start_matches("CONFIG_")
+                .to_string(),
+        );
     }
     Ok(c)
 }
