@@ -1,4 +1,4 @@
-use autokernel;
+use autokernel::bridge::{Tristate, Bridge};
 
 // TODO use test_env_logger
 // TODO only download kernel once, then run many tests on it
