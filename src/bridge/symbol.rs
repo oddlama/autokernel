@@ -40,7 +40,6 @@ impl<'a> Symbol<'a> {
                 .map(|obj| String::from_utf8_lossy(CStr::from_ptr(obj).to_bytes()))
         }
     }
-    // dependencies()
 
     pub fn recalculate(&self) {
         (self.bridge.vtable.c_sym_calc_value)(self.c_symbol);

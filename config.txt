@@ -1,6 +1,6 @@
- #########
- # build #
- #########
+#########
+# build #
+#########
 NO_HZ_IDLE="NO_HZ_FULL"
 
 SOUND="y"
