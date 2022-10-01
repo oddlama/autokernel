@@ -1,6 +1,7 @@
-set_from_file("config.txt")
+function config()
+end
 
-set {
-	SOUND = yes,
-	SND = yes,
-}
+function build()
+end
+
+set_from_file("config.txt")

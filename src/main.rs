@@ -1,4 +1,4 @@
-use autokernel::config::run_lua;
+use autokernel::config::{self, Config};
 use autokernel::bridge::Bridge;
 
 use std::process::{Command, Stdio};
@@ -8,8 +8,9 @@ use anyhow::{Ok, Result};
 use clap::Parser;
 
 #[derive(Parser, Debug)]
+#[clap(version, about, long_about = None)]
 struct Args {
-    /// config
+    /// The configuration file to use
     #[clap(short, long, value_name = "FILE", default_value = "config.lua")]
     config: PathBuf,
 
@@ -30,9 +31,9 @@ struct ActionBuild {
 
 #[derive(Debug, clap::Args)]
 struct ActionGenerateConfig {
-    /// Run make clean before building
-    #[clap(short, long)]
-    clean: bool,
+    /// The output file, defaults to {kernel_dir}/.config if not given.
+    #[clap(short, long, value_parser, value_name = "DIR", value_hint = clap::ValueHint::FilePath)]
+    output: Option<PathBuf>,
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -43,20 +44,26 @@ enum Action {
 
 fn main() -> Result<()> {
     let args = Args::parse();
+    let mut config = config::load(&args.config)?;
     let bridge = Bridge::new(args.kernel_dir.clone())?;
 
     match &args.action {
-        Action::Build(action) => build_kernel(&args, &bridge, action),
-        Action::GenerateConfig(action) => generate_config(&args, &bridge, action),
+        Action::Build(action) => build_kernel(&args, config.as_mut(), &bridge, action),
+        Action::GenerateConfig(action) => generate_config(&args, config.as_mut(), &bridge, action),
     }
 }
 
-fn generate_config(args: &Args, bridge: &Bridge, action: &ActionGenerateConfig) -> Result<()> {
+fn generate_config(args: &Args, config: &mut dyn Config, bridge: &Bridge, action: &ActionGenerateConfig) -> Result<()> {
     println!("Generating config...");
+    config.apply_kernel_config(bridge)?;
+
+    // Write to given output file or fallback to .config in the kernel directory
+    let output = action.output.clone().unwrap_or(args.kernel_dir.join(".config"));
+    bridge.write_config(output)?;
     Ok(())
 }
 
-fn build_kernel(args: &Args, bridge: &Bridge, action: &ActionBuild) -> Result<()> {
+fn build_kernel(args: &Args, config: &mut dyn Config, bridge: &Bridge, action: &ActionBuild) -> Result<()> {
     println!("Building kernel...");
     // umask 022 // do we want this from the config?
 
@@ -72,8 +79,9 @@ fn build_kernel(args: &Args, bridge: &Bridge, action: &ActionBuild) -> Result<()
             .expect("make clean failed");
     }
 
-    run_lua(bridge, "build.lua")?;
-    bridge.write_config(".config")?;
+    config.apply_kernel_config(bridge)?;
+    let output = args.kernel_dir.join(".config");
+    bridge.write_config(output)?;
 
     Ok(())
 }
