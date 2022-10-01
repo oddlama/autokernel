@@ -1,10 +1,10 @@
 use autokernel::config::run_lua;
-use autokernel::bridge::{Bridge, Tristate};
+use autokernel::bridge::Bridge;
 
 use std::process::{Command, Stdio};
 use std::path::PathBuf;
 
-use anyhow::{Context, Ok, Result};
+use anyhow::{Ok, Result};
 use clap::Parser;
 
 #[derive(Parser, Debug)]
@@ -46,13 +46,18 @@ fn main() -> Result<()> {
     let bridge = Bridge::new(args.kernel_dir.clone())?;
 
     match &args.action {
-        Action::Build(action) => build_kernel(&args, &bridge, action)?,
-        Action::GenerateConfig(action) => generate_config(&args, &bridge, action)?,
-    };
+        Action::Build(action) => build_kernel(&args, &bridge, action),
+        Action::GenerateConfig(action) => generate_config(&args, &bridge, action),
+    }
+}
+
+fn generate_config(args: &Args, bridge: &Bridge, action: &ActionGenerateConfig) -> Result<()> {
+    println!("Generating config...");
     Ok(())
 }
 
 fn build_kernel(args: &Args, bridge: &Bridge, action: &ActionBuild) -> Result<()> {
+    println!("Building kernel...");
     // umask 022 // do we want this from the config?
 
     // Clean output from previous builds if requested
