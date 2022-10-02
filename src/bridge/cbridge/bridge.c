@@ -15,6 +15,8 @@ char** autokernel_env = NULL;
 
 #define DEBUG(...) do { if (autokernel_debug) { printf("[bridge] " __VA_ARGS__); } } while(0)
 
+static void dev_null_message_callback(const char* s) {}
+
 /**
  * The compilation script redirects calls to getenv() inside
  * the kernel .c files to this function, which allow us to use
@@ -58,6 +60,9 @@ void init(char const* const* env) {
 	struct symbol* sym;
 	int i;
 	char saved_working_directory[2048];
+
+	// Never let the kconfig parser print any messages
+	conf_set_message_callback(dev_null_message_callback);
 
 	DEBUG("Initializing environment\n");
 	init_environment(env);
