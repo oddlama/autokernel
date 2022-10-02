@@ -10,6 +10,7 @@ use rlua::{self, Lua, Table};
 
 pub(super) struct LuaConfig {
     lua: Lua,
+    filename: String,
     code: String,
 }
 
@@ -18,6 +19,7 @@ impl LuaConfig {
         println!("Loading lua config...");
         Ok(LuaConfig {
             lua: Lua::new(),
+            filename: file.as_ref().display().to_string(),
             code: fs::read_to_string(file)?,
         })
     }
@@ -44,11 +46,8 @@ impl Config for LuaConfig {
         };
 
         self.lua.context(|lua_ctx| {
+            lua_ctx.load(include_bytes!("api.lua")).set_name("api.lua")?.exec()?;
             lua_ctx.scope(|scope| {
-                // You can get and set global variables.  Notice that the globals table here is a permanent
-                // reference to _G, and it is mutated behind the scenes as Lua code is loaded.  This API is
-                // based heavily around sharing and internal mutation (just like Lua itself).
-
                 let globals = lua_ctx.globals();
 
                 // TODO implement ToLua and FromLua for Tristate, or UserData
@@ -76,7 +75,7 @@ impl Config for LuaConfig {
                 })?;
                 globals.set("set_from_file", set_from_file)?;
 
-                lua_ctx.load(&self.code).exec()?;
+                lua_ctx.load(&self.code).set_name(&self.filename)?.exec()?;
 
                 Ok(())
             })
