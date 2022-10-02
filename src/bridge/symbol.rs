@@ -14,6 +14,16 @@ pub enum Tristate {
     Yes,
 }
 
+impl From<bool> for Tristate {
+    fn from(value: bool) -> Self {
+        if value {
+            Tristate::Yes
+        } else {
+            Tristate::No
+        }
+    }
+}
+
 #[derive(Debug)]
 #[repr(u8)]
 #[allow(dead_code)]
@@ -29,6 +39,16 @@ pub enum SymbolType {
 pub struct Symbol<'a> {
     pub(super) c_symbol: *mut CSymbol,
     pub(super) bridge: &'a Bridge,
+}
+
+pub enum SymbolValue {
+    Auto(String),
+    Boolean(bool),
+    Tristate(Tristate),
+    Int(i64),
+    Hex(i64),
+    String(String),
+    Choice(String),
 }
 
 impl<'a> Symbol<'a> {
@@ -49,39 +69,40 @@ impl<'a> Symbol<'a> {
         unsafe { &(*self.c_symbol).current_value.tri }
     }
 
-    pub fn set_symbol_value_tristate(&mut self, value: Tristate) -> Result<()> {
-        ensure!(
-            (self.bridge.vtable.c_sym_set_tristate_value)(self.c_symbol, value) == 1,
-            format!("Could not set symbol {:?}", self.name())
-        );
-        self.bridge.recalculate_all_symbols();
-        // TODO check if change was successful
-        Ok(())
-    }
+    pub fn set_symbol_value(&mut self, value: SymbolValue) -> Result<()> {
+        match value {
+            SymbolValue::Auto(value) => todo!(),
+            SymbolValue::Boolean(value) => {
+                ensure!(
+                    (self.bridge.vtable.c_sym_set_tristate_value)(self.c_symbol, value.into()) == 1,
+                    format!("Could not set symbol {:?}", self.name())
+                )
+            }
+            SymbolValue::Tristate(value) => todo!(),
+            SymbolValue::Int(value) => todo!(),
+            SymbolValue::Hex(value) => todo!(),
+            SymbolValue::String(value) => {
+                let cstr = CString::new(value)?;
+                ensure!(
+                    (self.bridge.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr()) == 1,
+                    format!("Could not set symbol {:?}", self.name())
+                )
+            }
+            SymbolValue::Choice(value) => {
+                // TODO check that the given symbol belongs to the choice.
+                self.bridge
+                    .symbol(&value)
+                    .context("No such symbol")?
+                    .set_symbol_value(SymbolValue::Tristate(Tristate::Yes))?;
+            }
+        }
 
-    pub fn set_symbol_value_string(&mut self, value: &str) -> Result<()> {
-        let cstr = CString::new(value)?;
-        ensure!(
-            (self.bridge.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr()) == 1,
-            format!("Could not set symbol {:?}", self.name())
-        );
-        self.bridge.recalculate_all_symbols();
         // TODO check if change was successful
+        self.bridge.recalculate_all_symbols();
         Ok(())
     }
 
     pub fn is_choice(&self) -> bool {
         unsafe { &*self.c_symbol }.flags.intersects(SymbolFlags::CHOICE)
-    }
-
-    pub fn set_symbol_value_choice(&mut self, value: &str) -> Result<()> {
-        // TODO check that the given symbol belongs to the choice.
-        self.bridge
-            .symbol(value)
-            .context("No such symbol")?
-            .set_symbol_value_tristate(Tristate::Yes)?;
-        self.bridge.recalculate_all_symbols();
-        // TODO check if change was successful
-        Ok(())
     }
 }
