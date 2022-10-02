@@ -1,65 +1,62 @@
-use autokernel::bridge::{Tristate, Bridge};
+use autokernel::{bridge::{SymbolValue, Tristate, Bridge}, config::{Config, LuaConfig, KConfig}};
+use rlua::Lua;
+use log::info;
+
+mod setup_teardown;
+use setup_teardown::{setup, teardown};
+use serial_test::serial;
 
 // TODO use test_env_logger
 // TODO only download kernel once, then run many tests on it
 #[test]
-fn integrationtest_parse_symbols() {
-    use std::env;
-    use std::fs;
-    use std::process::{Command, Stdio};
+#[serial]
+fn integration_test_symbols() {
+    let bridge = setup();
 
-    let tmp = env::temp_dir().join("autokernel-test");
-    println!("creating {} directory", &tmp.display());
-    fs::create_dir_all(&tmp).unwrap();
+    info!("Testing tristate");
+    test_symbol_tristate(&bridge);
+    //TODO more tests
 
-    // latest="$(curl -s https://www.kernel.org/ | grep -A1 'stable:' | grep -oP '(?<=strong>).*(?=</strong.*)' | head -1)"
-    let kernel_version = "linux-5.19.1";
-    let kernel_tar = format!("{}.tar.xz", kernel_version);
+    teardown();
+}
 
-    // remove kernel tar and folder if they already exists
-    println!("cleaning previous test if exists");
-    Command::new("rm").arg(&kernel_tar).current_dir(&tmp).status().unwrap();
-    Command::new("rm")
-        .arg("-r")
-        .arg(&kernel_version)
-        .current_dir(&tmp)
-        .status()
-        .unwrap();
+fn test_symbol_tristate(bridge: &Bridge) {
+    const SYMBOL: &str = "CMDLINE_BOOL";
+    let mut sym = bridge.symbol(SYMBOL).unwrap();
 
-    // download kernel
-    println!("downloading kernel {} ...", kernel_version);
-    Command::new("wget")
-        .arg("-q")
-        .arg(format!("https://cdn.kernel.org/pub/linux/kernel/v5.x/{}", kernel_tar))
-        .current_dir(&tmp)
-        .status()
-        .unwrap();
+    // Getting
+    assert_eq!(sym.name().unwrap(), SYMBOL);
+    assert_eq!(*sym.get_value(), Tristate::No);
 
-    println!("extracting kernel {} ...", kernel_version);
-    Command::new("tar")
-        .arg("-xvf")
-        .arg(&kernel_tar)
-        .current_dir(&tmp)
-        .stdout(Stdio::null())
-        .status()
-        .unwrap();
+    // Setting
+    sym.set_symbol_value(SymbolValue::Tristate(Tristate::Yes)).unwrap();
+    assert_eq!(*sym.get_value(), Tristate::Yes);
+}
 
-    let kernel_dir = tmp.join(kernel_version);
+#[test]
+#[serial]
+fn integration_test_kconfig() {
+    let bridge = setup();
+    info!("testing kconfig");
+    let config = KConfig::from_lines(include_str!("good.kconfig").lines()).unwrap();
+    test_config(&config);
+    teardown();
+}
 
-    println!("building and running bridge to extract all symbols");
-    let bridge = Bridge::new(kernel_dir).unwrap();
-    let mut sym_cmdline_bool = bridge.symbol("CMDLINE_BOOL").unwrap();
-    println!("name: {}", sym_cmdline_bool.name().unwrap());
-    println!("cur_val: {:?}", sym_cmdline_bool.get_value());
 
-    sym_cmdline_bool.set_symbol_value_tristate(Tristate::Yes).unwrap();
-    assert_eq!(
-        *sym_cmdline_bool.get_value(),
-        Tristate::Yes,
-        "Setting the symbol failed"
+#[test]
+#[serial]
+fn integration_test_luaconfig() {
+    let bridge = setup();
+    info!("testing LuaConfig");
+    let config = LuaConfig::from_raw(
+        "good.lua".into(),
+        include_str!("good.lua").into(),
     );
+    teardown();
+}
 
-    // remove kernel tar and folder if they already exists
-    println!("cleaning up");
-    Command::new("rm").arg("-r").arg(&tmp).status().expect("cleanup failed");
+fn test_config(config: &impl Config) {
+    //todo
+
 }

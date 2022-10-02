@@ -47,7 +47,12 @@ impl<'a> Symbol<'a> {
                     format!("Could not set symbol {:?}", self.name())
                 )
             }
-            SymbolValue::Tristate(value) => todo!(),
+            SymbolValue::Tristate(value) => {
+                ensure!(
+                    (self.bridge.vtable.c_sym_set_tristate_value)(self.c_symbol, value) == 1,
+                    format!("Could not set symbol {:?}", self.name())
+                )
+            }
             SymbolValue::Int(value) => todo!(),
             SymbolValue::Hex(value) => todo!(),
             SymbolValue::String(value) => {

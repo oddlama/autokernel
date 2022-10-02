@@ -7,7 +7,7 @@ use std::path::Path;
 use anyhow::{Ok, Result};
 use rlua::{self, Lua};
 
-pub(super) struct LuaConfig {
+pub struct LuaConfig {
     lua: Lua,
     filename: String,
     code: String,
@@ -16,11 +16,17 @@ pub(super) struct LuaConfig {
 impl LuaConfig {
     pub fn new(file: impl AsRef<Path>) -> Result<LuaConfig> {
         println!("Loading lua config...");
-        Ok(LuaConfig {
+        Ok(LuaConfig::from_raw(
+            file.as_ref().display().to_string(),
+            fs::read_to_string(file)?
+                ))
+    }
+    pub fn from_raw(filename: String, code: String) -> LuaConfig {
+        LuaConfig {
             lua: Lua::new(),
-            filename: file.as_ref().display().to_string(),
-            code: fs::read_to_string(file)?,
-        })
+            filename,
+            code
+        }
     }
 }
 

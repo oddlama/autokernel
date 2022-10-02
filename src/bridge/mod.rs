@@ -14,6 +14,7 @@ pub use symbol::*;
 
 mod types;
 use types::*;
+pub use types::{Tristate, SymbolValue};
 
 mod vtable;
 use vtable::*;
