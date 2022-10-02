@@ -51,12 +51,19 @@ impl Bridge {
         let symbols = vtable.get_all_symbols();
         let mut name_to_symbol = HashMap::new();
         for symbol in &symbols {
+            // Skip symbols that have no type (this seems to apply to symbols that just
+            // refer to values for other symbols)
+            if unsafe { (**symbol).symbol_type } == SymbolType::Unknown {
+                continue;
+            }
+
             let name = unsafe {
                 (**symbol)
                     .name
                     .as_ref()
                     .map(|obj| String::from_utf8_lossy(CStr::from_ptr(obj).to_bytes()).into_owned())
             };
+
             if let Some(name) = name {
                 name_to_symbol.insert(name, *symbol);
             }

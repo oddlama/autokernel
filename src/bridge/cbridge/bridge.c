@@ -11,6 +11,7 @@
 bool autokernel_debug = true;
 extern struct symbol symbol_yes, symbol_no, symbol_mod;
 size_t n_symbols = 0;
+size_t n_unknown_symbols = 0;
 char** autokernel_env = NULL;
 
 #define DEBUG(...) do { if (autokernel_debug) { printf("[bridge] " __VA_ARGS__); } } while(0)
@@ -91,8 +92,14 @@ void init(char const* const* env) {
 
 	// Pre-count symbols: Three static symbols plus all parsed symbols
 	n_symbols = 3;
-	for_all_symbols(i, sym) { ++n_symbols; }
-	DEBUG("Found %ld symbols\n", n_symbols);
+	n_unknown_symbols = 0;
+	for_all_symbols(i, sym) {
+		++n_symbols;
+		if (sym->type == S_UNKNOWN) {
+			++n_unknown_symbols;
+		}
+	}
+	DEBUG("Found %ld symbols (+%ld unknown symbols)\n", n_symbols - n_unknown_symbols, n_unknown_symbols);
 }
 
 /**

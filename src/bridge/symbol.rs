@@ -5,15 +5,6 @@ use anyhow::{ensure, Result};
 use std::borrow::Cow;
 use std::ffi::{CStr, CString};
 
-#[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
-#[repr(u8)]
-#[allow(dead_code)]
-pub enum Tristate {
-    No,
-    Mod,
-    Yes,
-}
-
 impl From<bool> for Tristate {
     fn from(value: bool) -> Self {
         if value {
@@ -24,31 +15,9 @@ impl From<bool> for Tristate {
     }
 }
 
-#[derive(Debug)]
-#[repr(u8)]
-#[allow(dead_code)]
-pub enum SymbolType {
-    Unknown,
-    Boolean,
-    Tristate,
-    Int,
-    Hex,
-    String,
-}
-
 pub struct Symbol<'a> {
     pub(super) c_symbol: *mut CSymbol,
     pub(super) bridge: &'a Bridge,
-}
-
-pub enum SymbolValue {
-    Auto(String),
-    Boolean(bool),
-    Tristate(Tristate),
-    Int(i64),
-    Hex(i64),
-    String(String),
-    Choice(String),
 }
 
 impl<'a> Symbol<'a> {

@@ -3,10 +3,9 @@ use crate::bridge::Bridge;
 
 use std::fs;
 use std::path::Path;
-use std::result::Result::Ok as StdOk;
 
 use anyhow::{Ok, Result};
-use rlua::{self, Lua, Table};
+use rlua::{self, Lua};
 
 pub(super) struct LuaConfig {
     lua: Lua,
@@ -35,13 +34,12 @@ impl Config for LuaConfig {
                 //create the autokernel set function taking in a table (or variadic)
                 let mut define_all_syms = String::new();
                 for name in bridge.name_to_symbol.keys() {
-                    if name.len() > 0
-                        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
-                        && name.chars().next().unwrap().is_ascii_alphabetic()
-                    {
-                        define_all_syms.push_str(&format!("{name} = Symbol:new(nil, \"{name}\")\n"));
-                    } else {
-                        println!("{name} = Symbol:new(nil, \"{name}\")")
+                    let has_uppercase_char = name.chars().any(|c| c.is_ascii_uppercase());
+                    if name.len() > 0 && has_uppercase_char {
+                        define_all_syms.push_str(&format!("CONFIG_{name} = Symbol:new(nil, \"{name}\")\n"));
+                        if !name.chars().next().unwrap().is_ascii_digit() {
+                            define_all_syms.push_str(&format!("{name} = CONFIG_{name}\n"));
+                        }
                     }
                 }
                 lua_ctx

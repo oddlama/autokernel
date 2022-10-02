@@ -1,30 +1,40 @@
-use super::*;
 use libc::{c_char, c_int, c_void};
 
+#[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
+#[repr(u8)]
+#[allow(dead_code)]
+pub enum Tristate {
+    No,
+    Mod,
+    Yes,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[repr(C)]
 #[allow(dead_code)]
 pub enum SymbolType {
-    UNKNOWN,
-    BOOLEAN,
-    TRISTATE,
-    INT,
-    HEX,
-    STRING,
+    Unknown,
+    Boolean,
+    Tristate,
+    Int,
+    Hex,
+    String,
 }
 
+#[derive(Debug)]
 #[repr(C)]
 #[allow(dead_code)]
 enum PropertyType {
-    UNKNOWN,
-    PROMPT,  /* prompt "foo prompt" or "BAZ Value" */
-    COMMENT, /* text associated with a comment */
-    MENU,    /* prompt associated with a menu or menuconfig symbol */
-    DEFAULT, /* default y */
-    CHOICE,  /* choice value */
-    SELECT,  /* select BAR */
-    IMPLY,   /* imply BAR */
-    RANGE,   /* range 7..100 (for a symbol) */
-    SYMBOL,  /* where a symbol is defined */
+    Unknown,
+    Prompt,  /* prompt "foo prompt" or "BAZ Value" */
+    Comment, /* text associated with a comment */
+    Menu,    /* prompt associated with a menu or menuconfig symbol */
+    Default, /* default y */
+    Choice,  /* choice value */
+    Select,  /* select BAR */
+    Imply,   /* imply BAR */
+    Range,   /* range 7..100 (for a symbol) */
+    Symbol,  /* where a symbol is defined */
 }
 
 #[repr(C)]
@@ -41,9 +51,19 @@ struct CProperty {
 }
 
 #[repr(C)]
-pub struct SymbolValue {
+pub struct CSymbolValue {
     value: *mut SymbolType,
     pub tri: Tristate,
+}
+
+pub enum SymbolValue {
+    Auto(String),
+    Boolean(bool),
+    Tristate(Tristate),
+    Int(i64),
+    Hex(i64),
+    String(String),
+    Choice(String),
 }
 
 #[repr(C)]
@@ -57,8 +77,8 @@ pub struct CSymbol {
     next: *const c_void, // Not needed
     pub name: *const c_char,
     pub symbol_type: SymbolType,
-    pub current_value: SymbolValue,
-    default_values: [SymbolValue; 4],
+    pub current_value: CSymbolValue,
+    default_values: [CSymbolValue; 4],
     pub visible: Tristate,
     pub flags: SymbolFlags,
     // TODO where (which type) is this pointing to?
