@@ -79,6 +79,7 @@ pub struct CSymbolValue {
     pub tri: Tristate,
 }
 
+#[derive(Debug)]
 pub enum SymbolValue {
     Boolean(bool),
     Tristate(Tristate),
