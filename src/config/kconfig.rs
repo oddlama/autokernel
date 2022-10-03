@@ -1,5 +1,4 @@
 use bridge::Bridge;
-use bridge::SymbolValue;
 use std::path::Path;
 use std::str::Lines;
 
@@ -51,7 +50,7 @@ impl Config for KConfig {
             bridge
                 .symbol(k)
                 .with_context(|| format!("could not get symbol {:?}", k))?
-                .set_symbol_value(SymbolValue::Auto(v.clone()))?;
+                .set_symbol_value_auto(&v)?;
         }
         Ok(())
     }

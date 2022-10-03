@@ -1,10 +1,9 @@
 use super::Config;
-use crate::bridge::{Bridge, SymbolValue, Tristate};
+use crate::bridge::{Bridge, SymbolValue};
 
 use std::fs;
 use std::path::Path;
-use std::result::Result::{Err as StdErr, Ok as StdOk};
-use std::str::FromStr;
+use std::result::Result::Ok as StdOk;
 
 use anyhow::{Ok, Result};
 use rlua::{self, Error as LuaError, Lua};
@@ -42,7 +41,7 @@ impl Config for LuaConfig {
                     bridge
                         .symbol(&name)
                         .unwrap()
-                        .set_symbol_value(SymbolValue::Auto(value.clone()))
+                        .set_symbol_value_auto(&value)
                         .map_err(|e| LuaError::RuntimeError(e.to_string()))?;
                     println!("rust: set auto {name} = {value}");
                     StdOk(())
@@ -76,8 +75,7 @@ impl Config for LuaConfig {
                         .symbol(&name)
                         .unwrap()
                         .set_symbol_value(SymbolValue::Tristate(
-                            Tristate::from_str(&value)
-                                .map_err(|e| LuaError::RuntimeError("Could not from str".into()))?,
+                            value.parse().map_err(|e| LuaError::RuntimeError("Could not from str".into()))?,
                         ))
                         .map_err(|e| LuaError::RuntimeError(e.to_string()))?;
                     println!("rust: set tristate {name} = {value}");
