@@ -10,8 +10,8 @@ pub type EnvironMap = HashMap<String, String>;
 pub type FuncInit = extern "C" fn(*const *const c_char) -> ();
 pub type FuncSymbolCount = extern "C" fn() -> size_t;
 pub type FuncGetAllSymbols = extern "C" fn(*mut *mut CSymbol) -> ();
-pub type FuncSymSetTristateValue = extern "C" fn(*mut CSymbol, Tristate) -> c_int;
-pub type FuncSymSetStringValue = extern "C" fn(*mut CSymbol, *const c_char) -> c_int;
+pub type FuncSymSetTristateValue = extern "C" fn(*mut CSymbol, Tristate) -> bool;
+pub type FuncSymSetStringValue = extern "C" fn(*mut CSymbol, *const c_char) -> bool;
 pub type FuncSymCalcValue = extern "C" fn(*mut CSymbol) -> c_void;
 pub type FuncConfWrite = extern "C" fn(*const c_char) -> c_int;
 
