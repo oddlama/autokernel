@@ -1,3 +1,26 @@
+--###############################################################
+-- Tristate
+
+Tristate = { }
+
+function Tristate:new(value)
+	o = {}
+	setmetatable(o, self)
+	self.__index = self
+	o.value = value
+	return o
+end
+
+y = Tristate:new("y")
+m = Tristate:new("m")
+n = Tristate:new("n")
+yes = y
+mod = m
+no = n
+
+--###############################################################
+-- Symbol
+
 Symbol = { }
 
 function Symbol:new(o, name)
@@ -14,9 +37,19 @@ function Symbol:call(value)
 end
 
 function Symbol:set(value)
-	if type(value) == "string" then
+	if getmetatable(value) == Tristate then
+		print("set tristate", self.name, value.value)
+		autokernel_symbol_set_tristate(self.name, value.value)
+	elseif type(value) == "string" then
 		print("set string", self.name, value)
+		autokernel_symbol_set_auto(self.name, value)
+	elseif type(value) == "number" then
+		print("set number", self.name, value)
+		autokernel_symbol_set_number(self.name, value)
+	elseif type(value) == "boolean" then
+		print("set bool", self.name, value)
+		autokernel_symbol_set_bool(self.name, value)
 	else
-		print("set v ", type(value), self.name, value)
+		error ("Unsupported value type '" .. type(value) .. "'")
 	end
 end

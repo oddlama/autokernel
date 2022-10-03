@@ -7,7 +7,6 @@ use std::process::{Command, Stdio};
 use log::info;
 use log::error;
 use anyhow::Context;
-use anyhow::bail;
 
 const TMP_TEST_DIR: &str = "autokernel-test";
 const TEST_KERNEL: &str = "linux-5.19.1";

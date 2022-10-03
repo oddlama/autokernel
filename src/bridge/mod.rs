@@ -135,7 +135,7 @@ fn prepare_bridge(kernel_dir: &PathBuf) -> Result<(PathBuf, EnvironMap)> {
     // This interceptor script is used to run autokernel's bridge with the
     // correct environment variables, which are set by the Makefile.
     //
-    // We do this by replacing the shell used internally by the Makefile
+    // We do this by replacing the shell (bash) used internally by the Makefile
     // with our interceptor script. This script will examine all commands
     // run by the Makefile.
     // If it detects that the kernel's "conf" tool is being run by the Makefile

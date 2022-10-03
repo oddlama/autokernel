@@ -1,9 +1,13 @@
 // -- todo always test all three "y" ("y") and .set("y") using rust
+// BOOLEAN_SYMBOL(true)
+// BOOLEAN_SYMBOL(false)
 // BOOLEAN_SYMBOL "y"
 // BOOLEAN_SYMBOL "n"
 // BOOLEAN_SYMBOL(yes)
 // BOOLEAN_SYMBOL(no)
 //
+// TRISTATE_SYMBOL(true)
+// TRISTATE_SYMBOL(false)
 // TRISTATE_SYMBOL "y"
 // TRISTATE_SYMBOL "m"
 // TRISTATE_SYMBOL "n"
@@ -42,9 +46,6 @@
 // STRING_SYMBOL "n"
 // STRING_SYMBOL "some_string"
 //
-// CHOICE_SYMBOL "SOME_CHOICE"
-// CHOICE_SYMBOL "CONFIG_SOME_CHOICE"
-//
 // INT_SYMBOL "1"
 // INT_SYMBOL "0"
 // INT_SYMBOL 1
@@ -75,11 +76,8 @@
 // TRISTATE_SYMBOL(0)
 // TRISTATE_SYMBOL(1)
 //
-// CHOICE_SYMBOL ""
-// CHOICE_SYMBOL "not_a_choice"
-// CHOICE_SYMBOL(NOT_A_CHOICE)
-// CHOICE_SYMBOL(1)
-//
+// INT_SYMBOL(true)
+// INT_SYMBOL(false)
 // INT_SYMBOL "0x0"
 // INT_SYMBOL "0x1234"
 // INT_SYMBOL ""
@@ -88,6 +86,8 @@
 // INT_SYMBOL "1-1"
 // INT_SYMBOL "test"
 //
+// HEX_SYMBOL(true)
+// HEX_SYMBOL(false)
 // HEX_SYMBOL "0"
 // HEX_SYMBOL "1234"
 // HEX_SYMBOL ""

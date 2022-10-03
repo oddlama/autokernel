@@ -1,3 +1,4 @@
+use std::str::FromStr;
 use libc::{c_char, c_int, c_void};
 
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
@@ -7,6 +8,28 @@ pub enum Tristate {
     No,
     Mod,
     Yes,
+}
+
+impl From<bool> for Tristate {
+    fn from(value: bool) -> Self {
+        if value {
+            Tristate::Yes
+        } else {
+            Tristate::No
+        }
+    }
+}
+
+impl FromStr for Tristate {
+    type Err = ();
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "n" => Ok(Tristate::No),
+            "m" => Ok(Tristate::Mod),
+            "y" => Ok(Tristate::Yes),
+            _ => Err(()),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -60,10 +83,10 @@ pub enum SymbolValue {
     Auto(String),
     Boolean(bool),
     Tristate(Tristate),
-    Int(i64),
-    Hex(i64),
+    Int(u64),
+    Hex(u64),
+    Number(u64),
     String(String),
-    Choice(String),
 }
 
 #[repr(C)]
