@@ -75,9 +75,7 @@ impl Config for LuaConfig {
                         .symbol(&name)
                         .unwrap()
                         .set_symbol_value(SymbolValue::Tristate(
-                            value
-                                .parse()
-                                .map_err(|e| LuaError::RuntimeError("Could not from str".into()))?,
+                            value.parse().map_err(|_| LuaError::RuntimeError("Could not from str".into()))?,
                         ))
                         .map_err(|e| LuaError::RuntimeError(e.to_string()))?;
                     println!("rust: set tristate {name} = {value}");

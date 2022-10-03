@@ -83,5 +83,17 @@ fn build_kernel(args: &Args, config: &mut dyn Config, bridge: &Bridge, action: &
     let output = args.kernel_dir.join(".config");
     bridge.write_config(output)?;
 
+    // make
+
+    // if config.initramfs {
+    //   initramfs build
+    //   initramfs integrate
+    //   make
+    // }
+
+    // if action.install {
+    //    // make modules_install
+    // }
+
     Ok(())
 }

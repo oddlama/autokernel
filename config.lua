@@ -1,4 +1,6 @@
 --load_kconfig("/usr/src/linux/.config", true)
+--load_kconfig("arch/$ARCH/defconfig")
+--load_kconfig("/usr/src/linux/linux-" .. getenv("LINUX_VERSION") .. "-gentoo-dist/.config")
 
 CMDLINE_BOOL(true)
 CMDLINE_BOOL(false)
@@ -26,7 +28,7 @@ DEFAULT_HOSTNAME "some_string"
 CONFIG_CONSOLE_LOGLEVEL_DEFAULT "2"
 CONFIG_CONSOLE_LOGLEVEL_DEFAULT(1)
 
-PHYSICAL_ALIGN "0x400000"
+PHYSICAL_ALIGN "0x200000"
 --PHYSICAL_ALIGN("0xaabbccdd123456")
 --PHYSICAL_ALIGN("0xaabbccdd1234567")
 --PHYSICAL_ALIGN("0xaabbccdd12345678")

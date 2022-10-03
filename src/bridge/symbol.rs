@@ -67,26 +67,76 @@ impl<'a> Symbol<'a> {
             "TODO: Cannot assign choice symbols directly. Assign y to a choice value instead."
         );
 
+        let set_tristate = |value: Tristate| -> Result<bool> {
+            let rev_dep_tri = unsafe { (*self.c_symbol).reverse_dependencies.tri };
+            ensure!(
+                self.visible() > rev_dep_tri,
+                "TODO: symbol visibility to low, cannot be assigned, probably deps not satisfied"
+            );
+            ensure!(
+                value <= self.visible(),
+                "TODO: symbol cannot be assigned above visibility"
+            );
+            ensure!(
+                value >= rev_dep_tri,
+                "TODO: symbol cannot be assigned below required value (inferred by reverse dependencies)"
+            );
+            ensure!(
+                !(value == Tristate::Mod
+                    && self.bridge.symbol("MODULES").unwrap().get_tristate_value() == Tristate::No),
+                "TODO: symbol cannot be set to Mod because MODULES is not set"
+            );
+            Ok((self.bridge.vtable.c_sym_set_tristate_value)(self.c_symbol, value))
+        };
+
+        macro_rules! check_int_range {
+            ($value: expr, $format: literal) => {
+                let min = (self.bridge.vtable.c_sym_int_get_min)(self.c_symbol);
+                let max = (self.bridge.vtable.c_sym_int_get_max)(self.c_symbol);
+                ensure!(
+                    $value >= min,
+                    concat!(
+                        "TODO: cannot set {}, desired value {",
+                        $format,
+                        "} must be >= {",
+                        $format,
+                        "}"
+                    ),
+                    self.name().unwrap(),
+                    $value,
+                    min
+                );
+                ensure!(
+                    $value <= max,
+                    concat!(
+                        "TODO: cannot set {}, desired value {",
+                        $format,
+                        "} must be <= {",
+                        $format,
+                        "}"
+                    ),
+                    self.name().unwrap(),
+                    $value,
+                    max
+                );
+            };
+        }
+
         let ret = match (self.symbol_type(), value) {
-            (SymbolType::Boolean | SymbolType::Tristate, SymbolValue::Boolean(value)) => {
-                (self.bridge.vtable.c_sym_set_tristate_value)(self.c_symbol, value.into())
-            }
-            (SymbolType::Boolean, SymbolValue::Tristate(value)) if value != Tristate::Mod => {
-                (self.bridge.vtable.c_sym_set_tristate_value)(self.c_symbol, value)
-            }
-            (SymbolType::Tristate, SymbolValue::Tristate(value)) => {
-                (self.bridge.vtable.c_sym_set_tristate_value)(self.c_symbol, value)
-            }
+            (SymbolType::Boolean | SymbolType::Tristate, SymbolValue::Boolean(value)) => set_tristate(value.into())?,
+            (SymbolType::Boolean, SymbolValue::Tristate(value)) if value != Tristate::Mod => set_tristate(value)?,
+            (SymbolType::Tristate, SymbolValue::Tristate(value)) => set_tristate(value)?,
             (SymbolType::Int, SymbolValue::Int(value)) => {
+                check_int_range!(value, "");
                 let cstr = CString::new(value.to_string())?;
                 (self.bridge.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr())
             }
             (SymbolType::Hex, SymbolValue::Hex(value)) => {
-                let cstr = CString::new(format!("0x{:x}", value))?;
+                check_int_range!(value, ":#x");
+                let cstr = CString::new(format!("{:#x}", value))?;
                 (self.bridge.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr())
             }
             (SymbolType::String, SymbolValue::String(value)) => {
-                ensure!(self.symbol_type() == SymbolType::String, "TODO not string");
                 let cstr = CString::new(value)?;
                 (self.bridge.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr())
             }
@@ -102,7 +152,8 @@ impl<'a> Symbol<'a> {
 
         // TODO check if change was successful
         // TODO only recalculate the current symbol except when this was a choice?
-        // not sure, check C code.
+        // not sure, check C code. Probably we need to go through all deps and recalculate those
+        //self.recalculate();
         self.bridge.recalculate_all_symbols();
         Ok(())
     }
@@ -117,5 +168,13 @@ impl<'a> Symbol<'a> {
 
     pub fn is_choice(&self) -> bool {
         unsafe { &*self.c_symbol }.flags.intersects(SymbolFlags::CHOICE)
+    }
+
+    pub fn visible(&self) -> Tristate {
+        unsafe { &*self.c_symbol }.visible
+    }
+
+    pub fn get_tristate_value(&self) -> Tristate {
+        unsafe { &*self.c_symbol }.current_value.tri
     }
 }

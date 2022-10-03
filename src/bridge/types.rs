@@ -1,7 +1,7 @@
 use std::str::FromStr;
 use libc::{c_char, c_int, c_void};
 
-#[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Clone, Copy)]
 #[repr(u8)]
 #[allow(dead_code)]
 pub enum Tristate {
@@ -90,9 +90,9 @@ pub enum SymbolValue {
 }
 
 #[repr(C)]
-struct CExprValue {
+pub struct CExprValue {
     expression: *mut c_void,
-    tri: Tristate,
+    pub tri: Tristate,
 }
 
 #[repr(C)]
@@ -104,10 +104,9 @@ pub struct CSymbol {
     default_values: [CSymbolValue; 4],
     pub visible: Tristate,
     pub flags: SymbolFlags,
-    // TODO where (which type) is this pointing to?
-    properties: *mut CProperty,
+    property: *mut CProperty,
     direct_dependencies: CExprValue,
-    reverse_dependencies: CExprValue,
+    pub reverse_dependencies: CExprValue,
     implied: CExprValue,
 }
 

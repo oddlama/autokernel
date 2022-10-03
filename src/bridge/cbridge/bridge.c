@@ -124,3 +124,45 @@ void get_all_symbols(struct symbol** out) {
 		*(next++) = sym;
 	}
 }
+
+/**
+ * Returns the minimum value for an int/hex symbol
+ */
+uint64_t sym_int_get_min(struct symbol* sym) {
+	struct property* prop;
+	switch (sym->type) {
+		case S_INT:
+			prop = sym_get_range_prop(sym);
+			if (!prop)
+				return 0;
+			return strtoll(prop->expr->left.sym->curr.val, NULL, 10);
+		case S_HEX:
+			prop = sym_get_range_prop(sym);
+			if (!prop)
+				return 0;
+			return strtoll(prop->expr->left.sym->curr.val, NULL, 16);
+		default:
+			return 0;
+	}
+}
+
+/**
+ * Returns the maximum value for an int/hex symbol
+ */
+uint64_t sym_int_get_max(struct symbol* sym) {
+	struct property* prop;
+	switch (sym->type) {
+		case S_INT:
+			prop = sym_get_range_prop(sym);
+			if (!prop)
+				return 0;
+			return strtoll(prop->expr->right.sym->curr.val, NULL, 10);
+		case S_HEX:
+			prop = sym_get_range_prop(sym);
+			if (!prop)
+				return 0;
+			return strtoll(prop->expr->right.sym->curr.val, NULL, 16);
+		default:
+			return 0;
+	}
+}
