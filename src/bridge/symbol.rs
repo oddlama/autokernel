@@ -32,7 +32,7 @@ impl<'a> Symbol<'a> {
             SymbolType::Unknown => bail!(format!("TODO MESSAGE Cannot set symbol of unknown type")),
             SymbolType::Boolean => {
                 // Allowed "y" "n"
-                ensure!(matches!(value, "y" | "n"));
+                ensure!(matches!(value, "y" | "n"), "TODO: only y or n");
                 self.set_symbol_value(SymbolValue::Boolean(
                     value.parse::<Tristate>().unwrap() == Tristate::Yes,
                 ))
@@ -85,19 +85,13 @@ impl<'a> Symbol<'a> {
                 let cstr = CString::new(format!("0x{:x}", value))?;
                 (self.bridge.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr())
             }
-            (SymbolType::Int, SymbolValue::Number(value)) => {
-                self.set_symbol_value(SymbolValue::Int(value))?;
-                true
-            }
-            (SymbolType::Hex, SymbolValue::Number(value)) => {
-                self.set_symbol_value(SymbolValue::Hex(value))?;
-                true
-            }
             (SymbolType::String, SymbolValue::String(value)) => {
                 ensure!(self.symbol_type() == SymbolType::String, "TODO not string");
                 let cstr = CString::new(value)?;
                 (self.bridge.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr())
             }
+            (SymbolType::Int, SymbolValue::Number(value)) => return self.set_symbol_value(SymbolValue::Int(value)),
+            (SymbolType::Hex, SymbolValue::Number(value)) => return self.set_symbol_value(SymbolValue::Hex(value)),
             (st, v) => bail!(format!(
                 "TODO: Cannot assign {v:?} to symbol {} ({st:?})",
                 self.name().unwrap()
