@@ -1,5 +1,5 @@
 use super::Config;
-use crate::bridge::{Bridge, SymbolValue};
+use crate::{bridge::{Bridge, SymbolValue}, config};
 
 use std::fs;
 use std::path::Path;
@@ -75,7 +75,9 @@ impl Config for LuaConfig {
                         .symbol(&name)
                         .unwrap()
                         .set_symbol_value(SymbolValue::Tristate(
-                            value.parse().map_err(|e| LuaError::RuntimeError("Could not from str".into()))?,
+                            value
+                                .parse()
+                                .map_err(|e| LuaError::RuntimeError("Could not from str".into()))?,
                         ))
                         .map_err(|e| LuaError::RuntimeError(e.to_string()))?;
                     println!("rust: set tristate {name} = {value}");
@@ -85,6 +87,20 @@ impl Config for LuaConfig {
                 globals.set("autokernel_symbol_set_bool", symbol_set_bool)?;
                 globals.set("autokernel_symbol_set_number", symbol_set_number)?;
                 globals.set("autokernel_symbol_set_tristate", symbol_set_tristate)?;
+
+                let load_kconfig = scope.create_function(|_, (path, nocheck): (String, bool)| {
+                    if nocheck {
+                        return bridge.read_config_unchecked(path)
+                        .map_err(|e| LuaError::RuntimeError(e.to_string()));
+                    }
+                    println!("rust: loading and applying config {path}");
+                    let config = config::KConfig::new(path)
+                        .map_err(|e| LuaError::RuntimeError(e.to_string()))?;
+                    config.apply_kernel_config(bridge)
+                        .map_err(|e| LuaError::RuntimeError(e.to_string()))
+                })?;
+
+                globals.set("load_kconfig", load_kconfig)?;
 
                 //create the autokernel set function taking in a table (or variadic)
                 let mut define_all_syms = String::new();

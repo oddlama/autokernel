@@ -1,3 +1,5 @@
+--load_kconfig("/usr/src/linux/.config", true)
+
 CMDLINE_BOOL(true)
 CMDLINE_BOOL(false)
 CMDLINE_BOOL "y"

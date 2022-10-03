@@ -14,6 +14,7 @@ pub type FuncSymSetTristateValue = extern "C" fn(*mut CSymbol, Tristate) -> bool
 pub type FuncSymSetStringValue = extern "C" fn(*mut CSymbol, *const c_char) -> bool;
 pub type FuncSymCalcValue = extern "C" fn(*mut CSymbol) -> c_void;
 pub type FuncConfWrite = extern "C" fn(*const c_char) -> c_int;
+pub type FuncConfReadUnchecked = extern "C" fn(*const c_char) -> c_int;
 
 pub struct BridgeVTable {
     #[allow(dead_code)]
@@ -25,6 +26,7 @@ pub struct BridgeVTable {
     pub c_sym_set_string_value: RawSymbol<FuncSymSetStringValue>,
     pub c_sym_calc_value: RawSymbol<FuncSymCalcValue>,
     pub c_conf_write: RawSymbol<FuncConfWrite>,
+    pub c_conf_read_unchecked: RawSymbol<FuncConfReadUnchecked>,
 }
 
 impl BridgeVTable {
@@ -43,6 +45,7 @@ impl BridgeVTable {
         let c_sym_set_string_value = load_symbol!(FuncSymSetStringValue, b"sym_set_string_value");
         let c_sym_calc_value = load_symbol!(FuncSymCalcValue, b"sym_calc_value");
         let c_conf_write = load_symbol!(FuncConfWrite, b"conf_write");
+        let c_conf_read_unchecked = load_symbol!(FuncConfReadUnchecked, b"conf_read");
 
         Ok(BridgeVTable {
             library,
@@ -53,6 +56,7 @@ impl BridgeVTable {
             c_sym_set_string_value,
             c_sym_calc_value,
             c_conf_write,
+            c_conf_read_unchecked,
         })
     }
 

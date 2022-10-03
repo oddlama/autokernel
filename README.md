@@ -34,3 +34,7 @@ User story 2: "I know what I want in which situation but currently have to track
 - [ ] distro comparisons
 - [ ] current hardware sanity checks
 - [ ] lua / wren / python scripts to manipulate symbols
+
+## Principles
+
+- rather keep the codebase simple than adding convenience features
