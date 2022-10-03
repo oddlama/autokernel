@@ -1,12 +1,13 @@
 use super::Config;
-use crate::bridge::{Bridge, SymbolValue};
+use crate::bridge::{Bridge, SymbolValue, Tristate};
 
 use std::fs;
+use std::str::FromStr;
 use std::path::Path;
 use std::result::Result::{Err as StdErr, Ok as StdOk};
 
 use anyhow::{Ok, Result};
-use rlua::{self, Lua};
+use rlua::{self, Lua, Error as LuaError};
 
 pub struct LuaConfig {
     lua: Lua,
@@ -34,30 +35,43 @@ impl LuaConfig {
 impl Config for LuaConfig {
     fn apply_kernel_config(&self, bridge: &Bridge) -> Result<()> {
         self.lua.context(|lua_ctx| {
+            lua_ctx.scope(|scope| {
             let globals = lua_ctx.globals();
             lua_ctx.load(include_bytes!("api.lua")).set_name("api.lua")?.exec()?;
-            let symbol_set_auto = lua_ctx.create_function(|_, (name, value): (String, String)| {
-                // TODO convert result???? bridge
-                // TODO convert result????     .symbol(&name)
-                // TODO convert result????     .unwrap()
-                // TODO convert result????     .set_symbol_value(SymbolValue::Auto(value))
-                // TODO convert result????     .unwrap();
+            let symbol_set_auto = scope.create_function(|_, (name, value): (String, String)| {
+                bridge
+                    .symbol(&name)
+                    .unwrap()
+                    .set_symbol_value(SymbolValue::Auto(value.clone())).map_err(|e|LuaError::RuntimeError(e.to_string()))?;
                 println!("rust: set auto {name} = {value}");
                 StdOk(())
             })?;
-            let symbol_set_bool = lua_ctx.create_function(|_, (name, value): (String, bool)| {
+            let symbol_set_bool = scope.create_function(|_, (name, value): (String, bool)| {
+                bridge
+                    .symbol(&name)
+                    .unwrap()
+                    .set_symbol_value(SymbolValue::Boolean(value.clone())).map_err(|e|LuaError::RuntimeError(e.to_string()))?;
                 println!("rust: set bool {name} = {value}");
                 StdOk(())
             })?;
-            let symbol_set_number = lua_ctx.create_function(|_, (name, value): (String, i64)| {
+            let symbol_set_number = scope.create_function(|_, (name, value): (String, u64)| {
                 if value < 0 {
                     // TODO
                     println!("TODO result Please pass values >= 2*63 in string syntax. lua doesn't support this.")
                 }
+                bridge
+                    .symbol(&name)
+                    .unwrap()
+                    .set_symbol_value(SymbolValue::Number(value.clone())).map_err(|e|LuaError::RuntimeError(e.to_string()))?;
                 println!("rust: set number {name} = {:x} -> {:x}", value, value as u64);
                 StdOk(())
             })?;
-            let symbol_set_tristate = lua_ctx.create_function(|_, (name, value): (String, String)| {
+            let symbol_set_tristate = scope.create_function(|_, (name, value): (String, String)| {
+                bridge
+                    .symbol(&name)
+                    .unwrap()
+                    .set_symbol_value(SymbolValue::Tristate(
+                            Tristate::from_str(&value).map_err(|e|LuaError::RuntimeError("Could not from str".into()))?)).map_err(|e|LuaError::RuntimeError(e.to_string()))?;
                 println!("rust: set tristate {name} = {value}");
                 StdOk(())
             })?;
@@ -84,7 +98,7 @@ impl Config for LuaConfig {
 
             lua_ctx.load(&self.code).set_name(&self.filename)?.exec()?;
             Ok(())
-        })?;
+            })})?;
 
         Ok(())
     }

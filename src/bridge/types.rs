@@ -1,4 +1,5 @@
 use std::str::FromStr;
+use anyhow::bail;
 use libc::{c_char, c_int, c_void};
 
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
@@ -19,6 +20,18 @@ impl From<bool> for Tristate {
         }
     }
 }
+
+//impl TryFrom<&str> for Tristate {
+//    type Error = anyhow::Error;
+//    fn try_from(value: &str) -> Result<Self, Self::Error> {
+//        match value {
+//            "y" => Ok(Tristate::Yes),
+//            "n" => Ok(Tristate::No),
+//            "m" => Ok(Tristate::Mod),
+//     _ => Err(anyhow::anyhow!(format!("{} is not a valid tristate", value)))
+//        }
+//    }
+//}
 
 impl FromStr for Tristate {
     type Err = ();
