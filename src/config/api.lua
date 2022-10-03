@@ -83,7 +83,7 @@ end
 
 function Symbol:set(value)
 	if getmetatable(value) == Tristate then
-		ak.symbol_set_tristate(self.name, value.value)
+		ak.symbol_set_tristate(self.name, value.name)
 	elseif type(value) == "string" then
 		ak.symbol_set_auto(self.name, value)
 	elseif type(value) == "number" then
