@@ -1,5 +1,8 @@
 use super::Config;
-use crate::{bridge::{Bridge, SymbolValue}, config};
+use crate::{
+    bridge::{Bridge, SymbolValue},
+    config,
+};
 
 use std::fs;
 use std::path::Path;
@@ -75,33 +78,40 @@ impl Config for LuaConfig {
                         .symbol(&name)
                         .unwrap()
                         .set_symbol_value(SymbolValue::Tristate(
-                            value.parse().map_err(|_| LuaError::RuntimeError("Could not from str".into()))?,
+                            value
+                                .parse()
+                                .map_err(|_| LuaError::RuntimeError("Could not from str".into()))?,
                         ))
                         .map_err(|e| LuaError::RuntimeError(e.to_string()))?;
                     println!("rust: set tristate {name} = {value}");
                     StdOk(())
                 })?;
-                let symbol_get_string = scope.create_function(|_, name: String| {
-                    StdOk(bridge
-                        .symbol(&name)
-                        .unwrap()
-                        .get_string_value())
+                let symbol_get_string =
+                    scope.create_function(|_, name: String| StdOk(bridge.symbol(&name).unwrap().get_string_value()))?;
+                let symbol_get_type = scope.create_function(|_, name: String| {
+                    StdOk(format!("{:?}", bridge.symbol(&name).unwrap().symbol_type()))
                 })?;
-                globals.set("autokernel_symbol_set_auto", symbol_set_auto)?;
-                globals.set("autokernel_symbol_set_bool", symbol_set_bool)?;
-                globals.set("autokernel_symbol_set_number", symbol_set_number)?;
-                globals.set("autokernel_symbol_set_tristate", symbol_set_tristate)?;
-                globals.set("autokernel_symbol_get_string", symbol_get_string)?;
+
+                let ak = lua_ctx.create_table()?;
+                ak.set("kernel_version", bridge.get_env("KERNELVERSION"))?;
+                ak.set("symbol_set_auto", symbol_set_auto)?;
+                ak.set("symbol_set_bool", symbol_set_bool)?;
+                ak.set("symbol_set_number", symbol_set_number)?;
+                ak.set("symbol_set_tristate", symbol_set_tristate)?;
+                ak.set("symbol_get_string", symbol_get_string)?;
+                ak.set("symbol_get_type", symbol_get_type)?;
+                globals.set("ak", ak)?;
 
                 let load_kconfig = scope.create_function(|_, (path, nocheck): (String, bool)| {
                     if nocheck {
-                        return bridge.read_config_unchecked(path)
-                        .map_err(|e| LuaError::RuntimeError(e.to_string()));
+                        return bridge
+                            .read_config_unchecked(path)
+                            .map_err(|e| LuaError::RuntimeError(e.to_string()));
                     }
                     println!("rust: loading and applying config {path}");
-                    let config = config::KConfig::new(path)
-                        .map_err(|e| LuaError::RuntimeError(e.to_string()))?;
-                    config.apply_kernel_config(bridge)
+                    let config = config::KConfig::new(path).map_err(|e| LuaError::RuntimeError(e.to_string()))?;
+                    config
+                        .apply_kernel_config(bridge)
                         .map_err(|e| LuaError::RuntimeError(e.to_string()))
                 })?;
 

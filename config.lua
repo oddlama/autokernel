@@ -1,8 +1,29 @@
 --load_kconfig("/usr/src/linux/.config", true)
 --load_kconfig("arch/$ARCH/defconfig")
---load_kconfig("/usr/src/linux/linux-" .. getenv("LINUX_VERSION") .. "-gentoo-dist/.config")
+--load_kconfig("/usr/src/linux/linux-" .. ak.kernel_version .. "-gentoo-dist/.config")
 
-CMDLINE_BOOL(true)
+-- bools are not allowed on purpose, because CMDLINE_BOOL == true cannot be overwritten
+
+CMDLINE_BOOL "y"
+print(ak.kernel_version)
+print(y < y)
+print(y < m)
+print(y < n)
+print(m < y)
+print(m < m)
+print(m < n)
+print(n < y)
+print(n < m)
+print(n < n)
+print(CMDLINE_BOOL() < y)
+print(CMDLINE_BOOL() < m)
+print(CMDLINE_BOOL() < n)
+print(CMDLINE_BOOL:value())
+print(CONFIG_MODULES:value())
+print(CONFIG_CRYPTO:value())
+print(DEFAULT_HOSTNAME:value())
+print(CONSOLE_LOGLEVEL_DEFAULT:value())
+print(PHYSICAL_ALIGN:str_value())
 --------------CMDLINE_BOOL(false)
 --------------CMDLINE_BOOL "y"
 --------------CMDLINE_BOOL "n"
@@ -25,10 +46,11 @@ CMDLINE_BOOL(true)
 --------------DEFAULT_HOSTNAME "n"
 --------------DEFAULT_HOSTNAME "some_string"
 --------------
---------------CONFIG_CONSOLE_LOGLEVEL_DEFAULT "2"
---------------CONFIG_CONSOLE_LOGLEVEL_DEFAULT(1)
+--------------CONSOLE_LOGLEVEL_DEFAULT "2"
+--------------CONSOLE_LOGLEVEL_DEFAULT(1)
 --------------
 --------------PHYSICAL_ALIGN "0x200000"
+
 --PHYSICAL_ALIGN("0xaabbccdd123456")
 --PHYSICAL_ALIGN("0xaabbccdd1234567")
 --PHYSICAL_ALIGN("0xaabbccdd12345678")
