@@ -12,6 +12,7 @@ pub type FuncSymbolCount = extern "C" fn() -> size_t;
 pub type FuncGetAllSymbols = extern "C" fn(*mut *mut CSymbol) -> ();
 pub type FuncSymSetTristateValue = extern "C" fn(*mut CSymbol, Tristate) -> bool;
 pub type FuncSymSetStringValue = extern "C" fn(*mut CSymbol, *const c_char) -> bool;
+pub type FuncSymGetStringValue = extern "C" fn(*mut CSymbol) -> *const c_char;
 pub type FuncSymCalcValue = extern "C" fn(*mut CSymbol) -> c_void;
 pub type FuncSymIntGetMin = extern "C" fn(*mut CSymbol) -> u64;
 pub type FuncSymIntGetMax = extern "C" fn(*mut CSymbol) -> u64;
@@ -26,6 +27,7 @@ pub struct BridgeVTable {
     pub c_get_all_symbols: RawSymbol<FuncGetAllSymbols>,
     pub c_sym_set_tristate_value: RawSymbol<FuncSymSetTristateValue>,
     pub c_sym_set_string_value: RawSymbol<FuncSymSetStringValue>,
+    pub c_sym_get_string_value: RawSymbol<FuncSymGetStringValue>,
     pub c_sym_calc_value: RawSymbol<FuncSymCalcValue>,
     pub c_sym_int_get_min: RawSymbol<FuncSymIntGetMin>,
     pub c_sym_int_get_max: RawSymbol<FuncSymIntGetMax>,
@@ -47,6 +49,7 @@ impl BridgeVTable {
         let c_get_all_symbols = load_symbol!(FuncGetAllSymbols, b"get_all_symbols");
         let c_sym_set_tristate_value = load_symbol!(FuncSymSetTristateValue, b"sym_set_tristate_value");
         let c_sym_set_string_value = load_symbol!(FuncSymSetStringValue, b"sym_set_string_value");
+        let c_sym_get_string_value = load_symbol!(FuncSymGetStringValue, b"sym_get_string_value");
         let c_sym_calc_value = load_symbol!(FuncSymCalcValue, b"sym_calc_value");
         let c_sym_int_get_min = load_symbol!(FuncSymIntGetMin, b"sym_int_get_min");
         let c_sym_int_get_max = load_symbol!(FuncSymIntGetMin, b"sym_int_get_max");
@@ -60,6 +63,7 @@ impl BridgeVTable {
             c_get_all_symbols,
             c_sym_set_tristate_value,
             c_sym_set_string_value,
+            c_sym_get_string_value,
             c_sym_calc_value,
             c_sym_int_get_min,
             c_sym_int_get_max,

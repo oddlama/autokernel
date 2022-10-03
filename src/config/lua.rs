@@ -81,10 +81,17 @@ impl Config for LuaConfig {
                     println!("rust: set tristate {name} = {value}");
                     StdOk(())
                 })?;
+                let symbol_get_string = scope.create_function(|_, name: String| {
+                    StdOk(bridge
+                        .symbol(&name)
+                        .unwrap()
+                        .get_string_value())
+                })?;
                 globals.set("autokernel_symbol_set_auto", symbol_set_auto)?;
                 globals.set("autokernel_symbol_set_bool", symbol_set_bool)?;
                 globals.set("autokernel_symbol_set_number", symbol_set_number)?;
                 globals.set("autokernel_symbol_set_tristate", symbol_set_tristate)?;
+                globals.set("autokernel_symbol_get_string", symbol_get_string)?;
 
                 let load_kconfig = scope.create_function(|_, (path, nocheck): (String, bool)| {
                     if nocheck {

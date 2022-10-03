@@ -150,7 +150,6 @@ impl<'a> Symbol<'a> {
 
         ensure!(ret, format!("Could not set symbol {:?}", self.name()));
 
-        // TODO check if change was successful
         // TODO only recalculate the current symbol except when this was a choice?
         // not sure, check C code. Probably we need to go through all deps and recalculate those
         //self.recalculate();
@@ -176,5 +175,12 @@ impl<'a> Symbol<'a> {
 
     pub fn get_tristate_value(&self) -> Tristate {
         unsafe { &*self.c_symbol }.current_value.tri
+    }
+
+    pub fn get_string_value(&self) -> String {
+        return unsafe { CStr::from_ptr((self.bridge.vtable.c_sym_get_string_value)(self.c_symbol)) }
+            .to_str()
+            .unwrap()
+            .to_owned();
     }
 }
