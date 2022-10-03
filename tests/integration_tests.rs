@@ -3,13 +3,20 @@ use rlua::Lua;
 use log::info;
 
 mod setup_teardown;
-use setup_teardown::{setup, teardown};
+use setup_teardown::{setup, teardown, teardown_full};
 use serial_test::serial;
+
+#[test]
+#[serial(K)]
+fn integration_setup() {
+    teardown_full();
+    setup();
+}
 
 // TODO use test_env_logger
 // TODO only download kernel once, then run many tests on it
 #[test]
-#[serial]
+#[serial(K)]
 fn integration_test_symbols() {
     let bridge = setup();
 
@@ -34,7 +41,7 @@ fn test_symbol_tristate(bridge: &Bridge) {
 }
 
 #[test]
-#[serial]
+#[serial(K)]
 fn integration_test_kconfig() {
     let bridge = setup();
     info!("testing kconfig");
@@ -45,7 +52,7 @@ fn integration_test_kconfig() {
 
 
 #[test]
-#[serial]
+#[serial(K)]
 fn integration_test_luaconfig() {
     let bridge = setup();
     info!("testing LuaConfig");

@@ -1,4 +1,5 @@
 use autokernel::bridge::Bridge;
+use libc::TIMER_ABSTIME;
 
 use std::env;
 use std::fs;
@@ -19,7 +20,6 @@ fn cache_kernel(kdir: &PathBuf) -> String{
         info!("kernel tar already in cache");
         return kernel_tar;
     }
-    panic!("{:?}", kdir.join(&kernel_tar));
 
     println!("downloading kernel {} ...", TEST_KERNEL);
     Command::new("wget")
@@ -38,16 +38,21 @@ fn init_logger() {
 fn setup_kernel(kdir: &PathBuf) -> PathBuf {
     let kernel_tar = cache_kernel(kdir);
 
-    // remove kernel tar and folder if they already exists
-    info!("cleaning previous test if exists");
-    if kdir.join(TEST_KERNEL).exists() {
-        Command::new("rm")
-            .arg("-r")
-            .arg(&TEST_KERNEL)
-            .current_dir(&kdir)
-            .status()
-            .unwrap();
+    let res = kdir.join(TEST_KERNEL);
+    if res.exists() {
+        return res ;
     }
+
+    // remove kernel tar and folder if they already exists
+    //info!("cleaning previous test if exists");
+    //if kdir.join(TEST_KERNEL).exists() {
+    //    Command::new("rm")
+    //        .arg("-r")
+    //        .arg(&TEST_KERNEL)
+    //        .current_dir(&kdir)
+    //        .status()
+    //        .unwrap();
+    //}
 
 
     info!("extracting kernel {} ...", TEST_KERNEL);
@@ -58,15 +63,13 @@ fn setup_kernel(kdir: &PathBuf) -> PathBuf {
         .stdout(Stdio::null())
         .status()
         .unwrap();
-    kdir.join(TEST_KERNEL)
+    res
 }
 
 pub fn setup() -> Bridge {
     init_logger();
-    error!("{:?}", env::temp_dir());
     let kdir = env::temp_dir().join(&TMP_TEST_DIR);
     info!("creating {} directory", &kdir.display());
-    println!("creating {} directory", &kdir.display());
     fs::create_dir_all(&kdir).unwrap();
     let kdir = kdir.canonicalize().context(format!("tmp {:?}, folder {:?}", env::temp_dir(), TMP_TEST_DIR)).unwrap();
     let kdir = setup_kernel(&kdir);
@@ -74,8 +77,10 @@ pub fn setup() -> Bridge {
 }
 
 pub fn teardown() {
-    let kdir = env::temp_dir().join(&TMP_TEST_DIR).join(TEST_KERNEL);
-    // remove kernel tar and folder if they already exists
-    println!("cleaning up (leaving tar)");
-    Command::new("rm").arg("-r").arg(&kdir).status().expect("cleanup failed");
+    // TODO nothing to do for now
+    return;
+}
+
+pub fn teardown_full() {
+    fs::remove_dir_all(env::temp_dir().join(TMP_TEST_DIR).join(TEST_KERNEL)).expect("could not remove tmp dir");
 }
