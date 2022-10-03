@@ -39,7 +39,7 @@ impl<'a> Symbol<'a> {
                     SymbolType::Boolean => {
                         // Allowed "y" "n"
                         ensure!(matches!(value.as_str(), "y" | "n"));
-                        self.set_symbol_value(SymbolValue::Tristate(value.parse::<Tristate>().unwrap()))?
+                        self.set_symbol_value(SymbolValue::Boolean(value.parse::<Tristate>().unwrap() == Tristate::Yes))?
                     }
                     SymbolType::Tristate => {
                         // Allowed "y" "m" "n"
@@ -47,7 +47,7 @@ impl<'a> Symbol<'a> {
                     }
                     SymbolType::Int => {
                         // Allowed: Any u64 integer
-                        let value = value.parse::<u64>().expect("TODO MESSAGE:");
+                        let value = value.parse::<u64>().expect("TODO MESSAGE not parsable int:");
                         self.set_symbol_value(SymbolValue::Int(value))?
                     }
                     SymbolType::Hex => {
@@ -60,28 +60,28 @@ impl<'a> Symbol<'a> {
                 }
             }
             SymbolValue::Boolean(value) => {
-                ensure!(self.symbol_type() == SymbolType::Boolean, "TODO");
-                ensure!(!self.is_const(), "TODO");
+                ensure!(self.symbol_type() == SymbolType::Boolean, "TODO no boolean");
+                ensure!(!self.is_const(), "TODO const");
                 let ret = (self.bridge.vtable.c_sym_set_tristate_value)(self.c_symbol, value.into());
                 ensure!(ret == 1, format!("TODO Could not set symbol {:?}", self.name()))
             }
             SymbolValue::Tristate(value) => {
-                ensure!(self.symbol_type() == SymbolType::Tristate, "TODO");
-                ensure!(!self.is_const(), "TODO");
+                ensure!(self.symbol_type() == SymbolType::Tristate || self.symbol_type() == SymbolType::Boolean, format!("TODO, not tristate, but {:?}", self.symbol_type()));
+                ensure!(!self.is_const(), "TODO, const");
                 // TODO if this is a choice, -> error
                 let ret = (self.bridge.vtable.c_sym_set_tristate_value)(self.c_symbol, value);
                 ensure!(ret == 1, format!("TODO Could not set symbol {:?}", self.name()))
             }
             SymbolValue::Int(value) => {
-                ensure!(self.symbol_type() == SymbolType::Int, "TODO");
-                ensure!(!self.is_const(), "TODO");
+                ensure!(self.symbol_type() == SymbolType::Int, "TODO not int");
+                ensure!(!self.is_const(), "TODO, const");
                 let cstr = CString::new(value.to_string())?;
                 let ret = (self.bridge.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr());
                 ensure!(ret == 1, format!("TODO Could not set symbol {:?}", self.name()))
             }
             SymbolValue::Hex(value) => {
-                ensure!(self.symbol_type() == SymbolType::Hex, "TODO");
-                ensure!(!self.is_const(), "TODO");
+                ensure!(self.symbol_type() == SymbolType::Hex, "TODO not hex");
+                ensure!(!self.is_const(), "TODO const");
                 let cstr = CString::new(format!("0x{:x}", value))?;
                 let ret = (self.bridge.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr());
                 ensure!(ret == 1, format!("TODO Could not set symbol {:?}", self.name()))
@@ -89,12 +89,12 @@ impl<'a> Symbol<'a> {
             SymbolValue::Number(value) => match self.symbol_type() {
                 SymbolType::Int => self.set_symbol_value(SymbolValue::Int(value))?,
                 SymbolType::Hex => self.set_symbol_value(SymbolValue::Hex(value))?,
-                _ => bail!("TODO message"),
+                _ => bail!("TODO message for not parsing number"),
             },
             SymbolValue::String(value) => {
-                ensure!(self.symbol_type() == SymbolType::String, "TODO");
-                ensure!(!self.is_const(), "TODO");
-                ensure!(!self.is_choice(), "TODO");
+                ensure!(self.symbol_type() == SymbolType::String, "TODO not string");
+                ensure!(!self.is_const(), "TODO const s");
+                ensure!(!self.is_choice(), "TODO choice s");
                 let cstr = CString::new(value)?;
                 let ret = (self.bridge.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr());
                 ensure!(ret == 1, format!("Could not set symbol {:?}", self.name()))
