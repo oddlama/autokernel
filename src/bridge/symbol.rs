@@ -1,6 +1,6 @@
 use super::types::*;
 use super::Bridge;
-use anyhow::{bail, ensure, Result};
+use anyhow::{anyhow, bail, ensure, Result};
 use std::borrow::Cow;
 use std::ffi::{CStr, CString};
 
@@ -175,6 +175,12 @@ impl<'a> Symbol<'a> {
 
     pub fn get_tristate_value(&self) -> Tristate {
         unsafe { &*self.c_symbol }.current_value.tri
+    }
+
+    pub fn direct_dependencies(&self) -> Result<Option<Expr>> {
+        unsafe { &(*self.c_symbol).direct_dependencies }
+            .expr()
+            .map_err(|_| anyhow!("Failed to parse C kernel expression"))
     }
 
     pub fn get_string_value(&self) -> String {

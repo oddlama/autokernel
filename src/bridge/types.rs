@@ -1,5 +1,8 @@
-use std::str::FromStr;
 use libc::{c_char, c_int, c_void};
+use std::ffi::CStr;
+use std::borrow::Cow;
+use std::fmt;
+use std::str::FromStr;
 
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Clone, Copy)]
 #[repr(u8)]
@@ -89,10 +92,143 @@ pub enum SymbolValue {
     String(String),
 }
 
+#[derive(Debug)]
+pub enum Expr {
+    None,
+    Or(Box<Expr>, Box<Expr>),
+    And(Box<Expr>, Box<Expr>),
+    Not(Box<Expr>),
+    Eq(*mut CSymbol, *mut CSymbol),
+    Neq(*mut CSymbol, *mut CSymbol),
+    Lth(*mut CSymbol, *mut CSymbol),
+    Leq(*mut CSymbol, *mut CSymbol),
+    Gth(*mut CSymbol, *mut CSymbol),
+    Geq(*mut CSymbol, *mut CSymbol),
+    List(Vec<Expr>),
+    Symbol(*mut CSymbol),
+    Range(u64, u64),
+    Const(SymbolValue),
+}
+
+impl fmt::Display for Expr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let symstr = |symbol: *mut CSymbol| {
+            if symbol.is_null() {
+                None
+            } else {
+                unsafe {
+                    (*symbol)
+                        .name
+                        .as_ref()
+                        .map(|obj| String::from_utf8_lossy(CStr::from_ptr(obj).to_bytes()))
+                }
+            }.unwrap_or(Cow::from("<choice>"))
+        };
+
+        match self {
+            Expr::None => write!(f, "__None__"),
+            Expr::Or(l, r) => write!(f, "({l} || {r})"),
+            Expr::And(l, r) => write!(f, "({l} && {r})"),
+            Expr::Not(e) => write!(f, "!{e}"),
+            Expr::Eq(l, r) => write!(f, "{} == {}", symstr(*l), symstr(*r)),
+            Expr::Neq(l, r) => write!(f, "{} != {}", symstr(*l), symstr(*r)),
+            Expr::Lth(l, r) => write!(f, "{} < {}", symstr(*l), symstr(*r)),
+            Expr::Leq(l, r) => write!(f, "{} <= {}", symstr(*l), symstr(*r)),
+            Expr::Gth(l, r) => write!(f, "{} > {}", symstr(*l), symstr(*r)),
+            Expr::Geq(l, r) => write!(f, "{} >= {}", symstr(*l), symstr(*r)),
+            Expr::List(e) => todo!(),
+            Expr::Symbol(e) => write!(f, "{}", symstr(*e)),
+            Expr::Range(l, r) => write!(f, "[{l}, {r}]"),
+            Expr::Const(e) => todo!(),
+        }
+    }
+}
+
+fn convert_expression(expression: *mut CExpr) -> Result<Option<Expr>, ()> {
+    println!("{:?}", unsafe { (*expression).expr_type });
+    macro_rules! expr {
+        ($which: ident) => {
+            if expression.is_null() {
+                Box::new(Expr::None)
+            } else {
+                Box::new(convert_expression(unsafe { (*expression).$which.expression })?.unwrap())
+            }
+        };
+    }
+
+    macro_rules! sym {
+        ($which: ident) => {
+            if expression.is_null() {
+                std::ptr::null::<CSymbol>() as *mut CSymbol
+            } else {
+                unsafe { (*expression).$which.symbol }
+            }
+        };
+    }
+
+    if expression.is_null() {
+        return Ok(None);
+    }
+
+    Ok(Some(match unsafe { (*expression).expr_type } {
+        CExprType::None => return Err(()),
+        CExprType::Or => Expr::Or(expr!(left), expr!(right)),
+        CExprType::And => Expr::And(expr!(left), expr!(right)),
+        CExprType::Not => Expr::Not(expr!(left)),
+        CExprType::Equal => Expr::Eq(sym!(left), sym!(right)),
+        CExprType::Unequal => Expr::Neq(sym!(left), sym!(right)),
+        CExprType::Lth => Expr::Lth(sym!(left), sym!(right)),
+        CExprType::Leq => Expr::Leq(sym!(left), sym!(right)),
+        CExprType::Gth => Expr::Gth(sym!(left), sym!(right)),
+        CExprType::Geq => Expr::Geq(sym!(left), sym!(right)),
+        CExprType::List => todo!(),
+        CExprType::Symbol => Expr::Symbol(sym!(left)),
+        CExprType::Range => todo!(),
+    }))
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(C)]
+#[allow(dead_code)]
+pub enum CExprType {
+    None,
+    Or,
+    And,
+    Not,
+    Equal,
+    Unequal,
+    Lth,
+    Leq,
+    Gth,
+    Geq,
+    List,
+    Symbol,
+    Range,
+}
+
+#[repr(C)]
+pub union CExprData {
+    expression: *mut CExpr,
+    symbol: *mut CSymbol,
+}
+
+#[repr(C)]
+struct CExpr {
+    expr_type: CExprType,
+    left: CExprData,
+    right: CExprData,
+}
+
 #[repr(C)]
 pub struct CExprValue {
-    expression: *mut c_void,
+    expression: *mut CExpr,
     pub tri: Tristate,
+}
+
+impl CExprValue {
+    pub fn expr(&self) -> Result<Option<Expr>, ()> {
+        convert_expression(self.expression)
+    }
 }
 
 #[repr(C)]
@@ -105,9 +241,9 @@ pub struct CSymbol {
     pub visible: Tristate,
     pub flags: SymbolFlags,
     property: *mut CProperty,
-    direct_dependencies: CExprValue,
-    pub reverse_dependencies: CExprValue,
-    implied: CExprValue,
+    pub(super) direct_dependencies: CExprValue,
+    pub(super) reverse_dependencies: CExprValue,
+    pub(super) implied: CExprValue,
 }
 
 use bitflags::bitflags;

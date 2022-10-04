@@ -57,7 +57,7 @@ fn valid_symbol(symbol: &Symbol) -> bool {
 }
 
 fn dump_symbol(symbol: &Symbol) {
-    println!("{} {:?} {:?}", symbol.name().unwrap(), symbol.symbol_type(), symbol.visible());
+    println!("{} {:?} {:?} {}", symbol.name().unwrap(), symbol.symbol_type(), symbol.visible(), symbol.direct_dependencies().unwrap().expect("Missing"));
 }
 
 fn analyze_defaults(args: &Args, bridge: &Bridge, action: &ActionAnalyzeDefaults) -> Result<()> {
