@@ -117,7 +117,6 @@ impl Config for LuaConfig {
 
                 globals.set("load_kconfig", load_kconfig)?;
 
-                //create the autokernel set function taking in a table (or variadic)
                 let mut define_all_syms = String::new();
                 for name in bridge.name_to_symbol.keys() {
                     let has_uppercase_char = name.chars().any(|c| c.is_ascii_uppercase());

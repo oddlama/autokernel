@@ -78,7 +78,7 @@ impl Bridge {
         })
     }
 
-    fn wrap_symbol(&self, symbol: *mut CSymbol) -> Symbol {
+    pub fn wrap_symbol(&self, symbol: *mut CSymbol) -> Symbol {
         Symbol {
             c_symbol: symbol,
             bridge: self,
