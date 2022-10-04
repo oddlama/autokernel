@@ -139,13 +139,12 @@ impl fmt::Display for Expr {
             Expr::List(e) => todo!(),
             Expr::Symbol(e) => write!(f, "{}", symstr(*e)),
             Expr::Range(l, r) => write!(f, "[{l}, {r}]"),
-            Expr::Const(e) => todo!(),
+            Expr::Const(e) => write!(f, "Const({:?})", e),
         }
     }
 }
 
 fn convert_expression(expression: *mut CExpr) -> Result<Option<Expr>, ()> {
-    println!("{:?}", unsafe { (*expression).expr_type });
     macro_rules! expr {
         ($which: ident) => {
             if expression.is_null() {

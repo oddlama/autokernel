@@ -1,4 +1,4 @@
-use autokernel::bridge::{Bridge, Symbol};
+use autokernel::bridge::{Bridge, Symbol, Expr};
 
 use std::path::PathBuf;
 
@@ -57,17 +57,17 @@ fn valid_symbol(symbol: &Symbol) -> bool {
 }
 
 fn dump_symbol(symbol: &Symbol) {
-    println!("{} {:?} {:?} {}", symbol.name().unwrap(), symbol.symbol_type(), symbol.visible(), symbol.direct_dependencies().unwrap().expect("Missing"));
+    println!("{} {:?} {:?} {}", symbol.name().unwrap(), symbol.symbol_type(), symbol.visible(), symbol.direct_dependencies().unwrap().unwrap_or(Expr::None));
 }
 
 fn analyze_defaults(args: &Args, bridge: &Bridge, action: &ActionAnalyzeDefaults) -> Result<()> {
     println!("Analyzing {:?} defaults...", args.kernel_dir);
-    dump_symbol(&bridge.symbol("RTLWIFI_USB").unwrap());
-    //for symbol in &bridge.symbols {
-    //    let symbol = bridge.wrap_symbol(*symbol);
-    //    if valid_symbol(&symbol) {
-    //        dump_symbol(&symbol);
-    //    }
-    //}
+    //dump_symbol(&bridge.symbol("RTLWIFI_USB").unwrap());
+    for symbol in &bridge.symbols {
+        let symbol = bridge.wrap_symbol(*symbol);
+        if valid_symbol(&symbol) {
+            dump_symbol(&symbol);
+        }
+    }
     Ok(())
 }
