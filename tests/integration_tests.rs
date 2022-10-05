@@ -3,6 +3,7 @@ use autokernel::{
     config::{Config, KConfig, LuaConfig},
 };
 use log::info;
+use anyhow::Result;
 
 mod setup_teardown;
 use serial_test::serial;
@@ -59,7 +60,13 @@ fn integration_test_luaconfig() {
     info!("testing LuaConfig");
     macro_rules! lua_test {
         ($name:literal, $code:expr) => {
-            test_config(&bridge, &LuaConfig::from_raw($name.into(), $code.into()))
+            test_config(&bridge, &LuaConfig::from_raw($name.into(), $code.into())).unwrap()
+        };
+    }
+
+    macro_rules! lua_bad_test {
+        ($name:literal, $code:expr) => {
+            assert!(test_config(&bridge, &LuaConfig::from_raw($name.into(), $code.into())).is_err(), $name)
         };
     }
 
@@ -77,13 +84,18 @@ fn integration_test_luaconfig() {
         CONFIG_CRYPTO(yes)
         CONFIG_CRYPTO(mod)
         CONFIG_CRYPTO(no)
+        CONFIG_CRYPTO(y)
+        CONFIG_CRYPTO(m)
+        CONFIG_CRYPTO(n)
     "#
     );
-
     lua_test!("test_full_config", include_str!("good.lua"));
+
+    lua_bad_test!("bad_literal", "CONFIG_CRYPTO y");
     teardown();
 }
 
-fn test_config(bridge: &Bridge, config: &impl Config) {
-    config.apply_kernel_config(&bridge).unwrap();
+fn test_config(bridge: &Bridge, config: &impl Config) -> Result<()> {
+    config.apply_kernel_config(&bridge)?;
+    Ok(())
 }
