@@ -94,7 +94,6 @@ pub enum SymbolValue {
 
 #[derive(Debug)]
 pub enum Expr {
-    None,
     Or(Box<Expr>, Box<Expr>),
     And(Box<Expr>, Box<Expr>),
     Not(Box<Expr>),
@@ -126,7 +125,6 @@ impl fmt::Display for Expr {
         };
 
         match self {
-            Expr::None => write!(f, "__None__"),
             Expr::Or(l, r) => write!(f, "({l} || {r})"),
             Expr::And(l, r) => write!(f, "({l} && {r})"),
             Expr::Not(e) => write!(f, "!{e}"),
@@ -148,7 +146,7 @@ fn convert_expression(expression: *mut CExpr) -> Result<Option<Expr>, ()> {
     macro_rules! expr {
         ($which: ident) => {
             if expression.is_null() {
-                Box::new(Expr::None)
+                return Err(())
             } else {
                 Box::new(convert_expression(unsafe { (*expression).$which.expression })?.unwrap())
             }
@@ -158,7 +156,7 @@ fn convert_expression(expression: *mut CExpr) -> Result<Option<Expr>, ()> {
     macro_rules! sym {
         ($which: ident) => {
             if expression.is_null() {
-                std::ptr::null::<CSymbol>() as *mut CSymbol
+                return Err(())
             } else {
                 unsafe { (*expression).$which.symbol }
             }

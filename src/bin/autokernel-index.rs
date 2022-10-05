@@ -1,4 +1,4 @@
-use autokernel::bridge::{Bridge, Expr, Symbol};
+use autokernel::bridge::{Bridge, Expr, Symbol, SymbolValue, Tristate};
 
 use std::path::PathBuf;
 
@@ -61,9 +61,9 @@ fn dump_symbol(symbol: &Symbol) {
         symbol.name().unwrap(),
         symbol.symbol_type(),
         symbol.visible(),
-        symbol.direct_dependencies().unwrap().unwrap_or(Expr::None),
-        symbol.reverse_dependencies().unwrap().unwrap_or(Expr::None),
-        symbol.implied().unwrap().unwrap_or(Expr::None)
+        symbol.direct_dependencies().unwrap().unwrap_or(Expr::Const(SymbolValue::Tristate(Tristate::Yes))),
+        symbol.reverse_dependencies().unwrap().unwrap_or(Expr::Const(SymbolValue::Tristate(Tristate::Yes))),
+        symbol.implied().unwrap().unwrap_or(Expr::Const(SymbolValue::Tristate(Tristate::Yes)))
     );
 }
 

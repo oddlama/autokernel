@@ -3,6 +3,7 @@ use super::Bridge;
 use anyhow::{anyhow, bail, ensure, Result};
 use std::borrow::Cow;
 use std::ffi::{CStr, CString};
+use std::fmt;
 
 pub struct Symbol<'a> {
     pub(super) c_symbol: *mut CSymbol,
@@ -69,6 +70,9 @@ impl<'a> Symbol<'a> {
 
         let set_tristate = |value: Tristate| -> Result<bool> {
             let rev_dep_tri = unsafe { (*self.c_symbol).reverse_dependencies.tri };
+            println!("DIR {}", self.direct_dependencies().map_err(|_| anyhow!(""))?.unwrap_or(Expr::Const(SymbolValue::Tristate(Tristate::Yes))));
+            println!("REV {}", self.reverse_dependencies().map_err(|_| anyhow!(""))?.unwrap_or(Expr::Const(SymbolValue::Tristate(Tristate::Yes))));
+            println!("IMP {}", self.implied().map_err(|_| anyhow!(""))?.unwrap_or(Expr::Const(SymbolValue::Tristate(Tristate::Yes))));
             ensure!(
                 self.visible() > rev_dep_tri,
                 "TODO: symbol visibility to low, cannot be assigned, probably deps not satisfied"
@@ -154,6 +158,7 @@ impl<'a> Symbol<'a> {
         // not sure, check C code. Probably we need to go through all deps and recalculate those
         //self.recalculate();
         self.bridge.recalculate_all_symbols();
+
         Ok(())
     }
 
