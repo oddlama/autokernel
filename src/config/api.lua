@@ -50,37 +50,44 @@ function Symbol:new(o, name)
 	return o
 end
 
-function Symbol:__call(value)
-	if value == nil then
-		return self:value()
-	else
-		self:set(value)
-	end
-end
-
+function Symbol:__name() return self.name end
 function Symbol:__tostring()
 	return "Symbol{name=" .. self.name .. ", value=" .. self:value() .. "}"
 end
 
-function Symbol:__name() return self.name end
 function Symbol:type() return ak.symbol_get_type(self.name) end
 function Symbol:str_value() return ak.symbol_get_string(self.name) end
 
-function Symbol:value()
-	local type = self:type()
-	local str_value = self:str_value()
-
-	if type == "Boolean" or type == "Tristate" then
-		return tristate_from_str(str_value)
-	elseif type == "Int" or type == "Hex" then
-		return tonumber(str_value)
-	elseif type == "String" then
-		return str_value
+function Symbol:is(value)
+	local stype = self:type()
+	if getmetatable(value) == Tristate and (stype == "Boolean" or stype == "Tristate") then
+		return value == self:value()
+	elseif type(value) == "string" and stype == "String" then
+		return value == self:value()
+	elseif type(value) == "number" and (stype == "Int" or stype == "Hex") then
+		return value == self:value()
 	else
-		error ("Unsupported value type '" .. type .. "'")
+		error ("Cannot compare symbol of type " .. stype .. " to value of type " .. type(value))
 	end
 end
 
+function Symbol:v(value) return self:value() end
+function Symbol:value()
+	local stype = self:type()
+	local str_value = self:str_value()
+
+	if stype == "Boolean" or stype == "Tristate" then
+		return tristate_from_str(str_value)
+	elseif stype == "Int" or stype == "Hex" then
+		return tonumber(str_value)
+	elseif stype == "String" then
+		return str_value
+	else
+		error ("Unsupported value type '" .. stype .. "'")
+	end
+end
+
+function Symbol:__call(value) self:set(value) end
 function Symbol:set(value)
 	if getmetatable(value) == Tristate then
 		ak.symbol_set_tristate(self.name, value.name)
