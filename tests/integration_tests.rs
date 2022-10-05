@@ -1,10 +1,12 @@
-use autokernel::{bridge::{SymbolValue, Tristate, Bridge}, config::{Config, LuaConfig, KConfig}};
-use rlua::Lua;
+use autokernel::{
+    bridge::{Bridge, SymbolValue, Tristate},
+    config::{Config, KConfig, LuaConfig},
+};
 use log::info;
 
 mod setup_teardown;
-use setup_teardown::{setup, teardown, teardown_full};
 use serial_test::serial;
+use setup_teardown::{setup, teardown, teardown_full};
 
 #[test]
 #[serial(K)]
@@ -46,24 +48,42 @@ fn integration_test_kconfig() {
     let bridge = setup();
     info!("testing kconfig");
     let config = KConfig::from_lines(include_str!("good.kconfig").lines()).unwrap();
-    test_config(&config);
+    test_config(&bridge, &config);
     teardown();
 }
-
 
 #[test]
 #[serial(K)]
 fn integration_test_luaconfig() {
     let bridge = setup();
     info!("testing LuaConfig");
-    let config = LuaConfig::from_raw(
-        "good.lua".into(),
-        include_str!("good.lua").into(),
+    macro_rules! lua_test {
+        ($name:literal, $code:expr) => {
+            test_config(&bridge, &LuaConfig::from_raw($name.into(), $code.into()))
+        };
+    }
+
+    bridge
+        .symbol("MODULES")
+        .expect("this should have worked for test")
+        .set_symbol_value(SymbolValue::Tristate(Tristate::Yes))
+        .expect("this was for setting up the test");
+    lua_test!(
+        "assign syntax",
+        r#"
+        CONFIG_CRYPTO "y"
+        CONFIG_CRYPTO "m"
+        CONFIG_CRYPTO "n"
+        CONFIG_CRYPTO(yes)
+        CONFIG_CRYPTO(mod)
+        CONFIG_CRYPTO(no)
+    "#
     );
+
+    lua_test!("test_full_config", include_str!("good.lua"));
     teardown();
 }
 
-fn test_config(config: &impl Config) {
-    //todo
-
+fn test_config(bridge: &Bridge, config: &impl Config) {
+    config.apply_kernel_config(&bridge).unwrap();
 }
