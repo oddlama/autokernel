@@ -38,3 +38,4 @@ User story 2: "I know what I want in which situation but currently have to track
 ## Principles
 
 - rather keep the codebase simple than adding convenience features
+- unambiguosity is key, rather write more verbose configs, than have an unbootable kernel because of a typo (relevant for e.g. the lua API and == vs is(), where only is() is typesafe
