@@ -183,6 +183,18 @@ impl<'a> Symbol<'a> {
             .map_err(|_| anyhow!("Failed to parse C kernel expression"))
     }
 
+    pub fn reverse_dependencies(&self) -> Result<Option<Expr>> {
+        unsafe { &(*self.c_symbol).reverse_dependencies }
+            .expr()
+            .map_err(|_| anyhow!("Failed to parse C kernel expression"))
+    }
+
+    pub fn implied(&self) -> Result<Option<Expr>> {
+        unsafe { &(*self.c_symbol).implied }
+            .expr()
+            .map_err(|_| anyhow!("Failed to parse C kernel expression"))
+    }
+
     pub fn get_string_value(&self) -> String {
         return unsafe { CStr::from_ptr((self.bridge.vtable.c_sym_get_string_value)(self.c_symbol)) }
             .to_str()

@@ -1,4 +1,4 @@
-use autokernel::bridge::{Bridge, Symbol, Expr};
+use autokernel::bridge::{Bridge, Expr, Symbol};
 
 use std::path::PathBuf;
 
@@ -28,8 +28,7 @@ struct ActionAnalyzeConfig {
 }
 
 #[derive(Debug, clap::Args)]
-struct ActionAnalyzeDefaults {
-}
+struct ActionAnalyzeDefaults {}
 
 #[derive(Debug, clap::Subcommand)]
 enum Action {
@@ -57,17 +56,26 @@ fn valid_symbol(symbol: &Symbol) -> bool {
 }
 
 fn dump_symbol(symbol: &Symbol) {
-    println!("{} {:?} {:?} {}", symbol.name().unwrap(), symbol.symbol_type(), symbol.visible(), symbol.direct_dependencies().unwrap().unwrap_or(Expr::None));
+    println!(
+        "{} {:?} {:?}\n  DIRECT: {}\n  REVERSE: {}\n  IMPLIED: {}",
+        symbol.name().unwrap(),
+        symbol.symbol_type(),
+        symbol.visible(),
+        symbol.direct_dependencies().unwrap().unwrap_or(Expr::None),
+        symbol.reverse_dependencies().unwrap().unwrap_or(Expr::None),
+        symbol.implied().unwrap().unwrap_or(Expr::None)
+    );
 }
 
 fn analyze_defaults(args: &Args, bridge: &Bridge, action: &ActionAnalyzeDefaults) -> Result<()> {
     println!("Analyzing {:?} defaults...", args.kernel_dir);
     //dump_symbol(&bridge.symbol("RTLWIFI_USB").unwrap());
-    for symbol in &bridge.symbols {
-        let symbol = bridge.wrap_symbol(*symbol);
-        if valid_symbol(&symbol) {
-            dump_symbol(&symbol);
-        }
-    }
+    dump_symbol(&bridge.symbol("REGMAP_I2C").unwrap());
+    //for symbol in &bridge.symbols {
+    //    let symbol = bridge.wrap_symbol(*symbol);
+    //    if valid_symbol(&symbol) {
+    //        dump_symbol(&symbol);
+    //    }
+    //}
     Ok(())
 }
