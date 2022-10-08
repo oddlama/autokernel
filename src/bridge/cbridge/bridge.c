@@ -166,3 +166,31 @@ uint64_t sym_int_get_max(struct symbol* sym) {
 			return 0;
 	}
 }
+
+/**
+ * Returns a list of all choice value symbols assiocated with a choice.
+ * If out == nullptr this just returns the number of associated symbols.
+ */
+size_t get_choice_symbols(struct symbol* sym, struct symbol** out) {
+	struct property* prop;
+	struct symbol* choice_sym;
+	struct expr* e;
+	size_t i = 0;
+
+	if (!sym_is_choice(sym)) {
+		return 0;
+	}
+
+	prop = sym_get_choice_prop(sym);
+	if (out) {
+		expr_list_for_each_sym(prop->expr, e, choice_sym) {
+			out[i++] = choice_sym;
+		}
+	} else {
+		expr_list_for_each_sym(prop->expr, e, choice_sym) {
+			++i;
+		}
+	}
+
+	return i;
+}

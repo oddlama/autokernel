@@ -1,9 +1,11 @@
+use super::expr::Terminal;
+use super::Expr;
 use std::borrow::Cow;
 use std::ffi::CStr;
 use std::fmt;
+use std::fmt::Debug;
 use std::str::FromStr;
 
-use boolean_expression::Expr as BExpr;
 use libc::{c_char, c_int, c_void};
 
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Clone, Copy)]
@@ -33,6 +35,16 @@ impl FromStr for Tristate {
             "m" => Ok(Tristate::Mod),
             "y" => Ok(Tristate::Yes),
             _ => Err(()),
+        }
+    }
+}
+
+impl fmt::Display for Tristate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Tristate::No => write!(f, "n"),
+            Tristate::Mod => write!(f, "m"),
+            Tristate::Yes => write!(f, "y"),
         }
     }
 }
@@ -94,83 +106,6 @@ pub enum SymbolValue {
     String(String),
 }
 
-#[derive(Debug)]
-pub enum Expr {
-    Or(Box<Expr>, Box<Expr>),
-    And(Box<Expr>, Box<Expr>),
-    Not(Box<Expr>),
-    Const(bool),
-    Terminal(fn() -> bool),
-}
-
-impl fmt::Display for Expr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let symstr = |symbol: *mut CSymbol| {
-            if symbol.is_null() {
-                None
-            } else {
-                unsafe {
-                    (*symbol)
-                        .name
-                        .as_ref()
-                        .map(|obj| String::from_utf8_lossy(CStr::from_ptr(obj).to_bytes()))
-                }
-            }
-            .unwrap_or(Cow::from("<choice>"))
-        };
-
-        match self {
-            Expr::Or(l, r) => write!(f, "({l} || {r})"),
-            Expr::And(l, r) => write!(f, "({l} && {r})"),
-            Expr::Not(e) => write!(f, "!{e}"),
-            Expr::Const(e) => write!(f, "Const({:?})", e),
-            Expr::Terminal(e) => write!(f, "Terminal({:?})", e),
-        }
-    }
-}
-
-fn convert_expression(expression: *mut CExpr) -> Result<Option<Expr>, ()> {
-    macro_rules! expr {
-        ($which: ident) => {
-            if expression.is_null() {
-                return Err(());
-            } else {
-                Box::new(convert_expression(unsafe { (*expression).$which.expression })?.unwrap())
-            }
-        };
-    }
-
-    macro_rules! sym {
-        ($which: ident) => {
-            if expression.is_null() {
-                return Err(());
-            } else {
-                unsafe { (*expression).$which.symbol }
-            }
-        };
-    }
-
-    if expression.is_null() {
-        return Ok(None);
-    }
-
-    Ok(Some(match unsafe { (*expression).expr_type } {
-        CExprType::None => return Err(()),
-        CExprType::Or => Expr::Or(expr!(left), expr!(right)),
-        CExprType::And => Expr::And(expr!(left), expr!(right)),
-        CExprType::Not => Expr::Not(expr!(left)),
-        CExprType::Equal => Expr::Terminal(|| -> sym!(left) sym!(right)),
-        CExprType::Unequal => Expr::Neq(sym!(left), sym!(right)),
-        CExprType::Lth => Expr::Lth(sym!(left), sym!(right)),
-        CExprType::Leq => Expr::Leq(sym!(left), sym!(right)),
-        CExprType::Gth => Expr::Gth(sym!(left), sym!(right)),
-        CExprType::Geq => Expr::Geq(sym!(left), sym!(right)),
-        CExprType::List => todo!(),
-        CExprType::Symbol => Expr::Symbol(sym!(left)),
-        CExprType::Range => todo!(),
-    }))
-}
-
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[repr(C)]
 #[allow(dead_code)]
@@ -209,6 +144,48 @@ pub struct CExprValue {
     pub tri: Tristate,
 }
 
+fn convert_expression(expression: *mut CExpr) -> Result<Option<Expr>, ()> {
+    macro_rules! expr {
+        ($which: ident) => {
+            if expression.is_null() {
+                return Err(());
+            } else {
+                Box::new(convert_expression(unsafe { (*expression).$which.expression })?.unwrap())
+            }
+        };
+    }
+
+    macro_rules! sym {
+        ($which: ident) => {
+            if expression.is_null() {
+                return Err(());
+            } else {
+                unsafe { (*expression).$which.symbol }
+            }
+        };
+    }
+
+    if expression.is_null() {
+        return Ok(None);
+    }
+
+    Ok(Some(match unsafe { (*expression).expr_type } {
+        CExprType::None => return Err(()),
+        CExprType::Or => Expr::Or(expr!(left), expr!(right)),
+        CExprType::And => Expr::And(expr!(left), expr!(right)),
+        CExprType::Not => Expr::Not(expr!(left)),
+        CExprType::Equal => Expr::Terminal(Terminal::Eq(sym!(left), sym!(right))),
+        CExprType::Unequal => Expr::Terminal(Terminal::Neq(sym!(left), sym!(right))),
+        CExprType::Lth => Expr::Terminal(Terminal::Lth(sym!(left), sym!(right))),
+        CExprType::Leq => Expr::Terminal(Terminal::Leq(sym!(left), sym!(right))),
+        CExprType::Gth => Expr::Terminal(Terminal::Gth(sym!(left), sym!(right))),
+        CExprType::Geq => Expr::Terminal(Terminal::Geq(sym!(left), sym!(right))),
+        CExprType::List => todo!(),
+        CExprType::Symbol => Expr::Terminal(Terminal::Symbol(sym!(left))),
+        CExprType::Range => todo!(),
+    }))
+}
+
 impl CExprValue {
     pub fn expr(&self) -> Result<Option<Expr>, ()> {
         convert_expression(self.expression)
@@ -228,6 +205,20 @@ pub struct CSymbol {
     pub(super) direct_dependencies: CExprValue,
     pub(super) reverse_dependencies: CExprValue,
     pub(super) implied: CExprValue,
+}
+
+impl CSymbol {
+    pub fn name(&self) -> Option<Cow<'_, str>> {
+        unsafe {
+            self.name
+                .as_ref()
+                .map(|obj| String::from_utf8_lossy(CStr::from_ptr(obj).to_bytes()))
+        }
+    }
+
+    pub fn get_tristate_value(&self) -> Tristate {
+        self.current_value.tri
+    }
 }
 
 use bitflags::bitflags;

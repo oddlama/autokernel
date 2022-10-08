@@ -11,6 +11,7 @@ pub type FuncInit = extern "C" fn(*const *const c_char) -> ();
 pub type FuncGetEnv = extern "C" fn(*const c_char) -> *const c_char;
 pub type FuncSymbolCount = extern "C" fn() -> size_t;
 pub type FuncGetAllSymbols = extern "C" fn(*mut *mut CSymbol) -> ();
+pub type FuncGetChoiceSymbols = extern "C" fn(*mut CSymbol, *mut *mut CSymbol) -> size_t;
 pub type FuncSymSetTristateValue = extern "C" fn(*mut CSymbol, Tristate) -> bool;
 pub type FuncSymSetStringValue = extern "C" fn(*mut CSymbol, *const c_char) -> bool;
 pub type FuncSymGetStringValue = extern "C" fn(*mut CSymbol) -> *const c_char;
@@ -27,6 +28,7 @@ pub struct BridgeVTable {
     pub c_get_env: RawSymbol<FuncGetEnv>,
     pub c_symbol_count: RawSymbol<FuncSymbolCount>,
     pub c_get_all_symbols: RawSymbol<FuncGetAllSymbols>,
+    pub c_get_choice_symbols: RawSymbol<FuncGetChoiceSymbols>,
     pub c_sym_set_tristate_value: RawSymbol<FuncSymSetTristateValue>,
     pub c_sym_set_string_value: RawSymbol<FuncSymSetStringValue>,
     pub c_sym_get_string_value: RawSymbol<FuncSymGetStringValue>,
@@ -50,6 +52,7 @@ impl BridgeVTable {
         let c_get_env = load_symbol!(FuncGetEnv, b"autokernel_getenv");
         let c_symbol_count = load_symbol!(FuncSymbolCount, b"symbol_count");
         let c_get_all_symbols = load_symbol!(FuncGetAllSymbols, b"get_all_symbols");
+        let c_get_choice_symbols = load_symbol!(FuncGetChoiceSymbols, b"get_choice_symbols");
         let c_sym_set_tristate_value = load_symbol!(FuncSymSetTristateValue, b"sym_set_tristate_value");
         let c_sym_set_string_value = load_symbol!(FuncSymSetStringValue, b"sym_set_string_value");
         let c_sym_get_string_value = load_symbol!(FuncSymGetStringValue, b"sym_get_string_value");
@@ -65,6 +68,7 @@ impl BridgeVTable {
             c_symbol_count,
             c_get_env,
             c_get_all_symbols,
+            c_get_choice_symbols,
             c_sym_set_tristate_value,
             c_sym_set_string_value,
             c_sym_get_string_value,

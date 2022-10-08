@@ -1,4 +1,4 @@
-use autokernel::bridge::{Bridge, Expr, Symbol, SymbolValue, Tristate};
+use autokernel::bridge::{Bridge, Expr, Symbol};
 
 use std::path::PathBuf;
 
@@ -55,27 +55,28 @@ fn valid_symbol(symbol: &Symbol) -> bool {
     return !symbol.is_const() && symbol.name().is_some();
 }
 
-fn dump_symbol(symbol: &Symbol) {
+fn dump_symbol(bridge: &Bridge, symbol: &Symbol) {
     println!(
-        "{} {:?} {:?}\n  DIRECT: {:?}\n  REVERSE: {:?}\n  IMPLIED: {:?}",
+        "{} {:?} {:?}\n  DIRECT: {}\n  REVERSE: {}\n  IMPLIED: {}",
         symbol.name().unwrap(),
         symbol.symbol_type(),
         symbol.visible(),
-        symbol.direct_dependencies().unwrap().unwrap_or(Expr::Const(SymbolValue::Tristate(Tristate::Yes))).bexpr(),
-        symbol.reverse_dependencies().unwrap().unwrap_or(Expr::Const(SymbolValue::Tristate(Tristate::Yes))),
-        symbol.implied().unwrap().unwrap_or(Expr::Const(SymbolValue::Tristate(Tristate::Yes)))
+        symbol.direct_dependencies().unwrap().unwrap_or(Expr::Const(true)).display(bridge),
+        symbol.reverse_dependencies().unwrap().unwrap_or(Expr::Const(true)).display(bridge),
+        symbol.implied().unwrap().unwrap_or(Expr::Const(true)).display(bridge)
     );
 }
 
 fn analyze_defaults(args: &Args, bridge: &Bridge, action: &ActionAnalyzeDefaults) -> Result<()> {
     println!("Analyzing {:?} defaults...", args.kernel_dir);
-    //dump_symbol(&bridge.symbol("RTLWIFI_USB").unwrap());
-    //dump_symbol(&bridge.symbol("REGMAP_I2C").unwrap());
-    for symbol in &bridge.symbols {
-        let symbol = bridge.wrap_symbol(*symbol);
-        if valid_symbol(&symbol) {
-            dump_symbol(&symbol);
-        }
-    }
+    //dump_symbol(bridge, &bridge.symbol("RTLWIFI_USB").unwrap());
+    //dump_symbol(bridge, &bridge.symbol("REGMAP_I2C").unwrap());
+    dump_symbol(bridge, &bridge.symbol("KERNEL_GZIP").unwrap());
+    //for symbol in &bridge.symbols {
+    //    let symbol = bridge.wrap_symbol(*symbol);
+    //    if valid_symbol(&symbol) {
+    //        dump_symbol(bridge, &symbol);
+    //    }
+    //}
     Ok(())
 }

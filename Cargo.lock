@@ -58,12 +58,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bitflags",
- "boolean_expression",
  "clap",
  "colored",
  "const_format",
  "env_logger",
  "indexmap",
+ "itertools",
  "libc",
  "libloading",
  "log",
@@ -94,16 +94,6 @@ name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
-
-[[package]]
-name = "boolean_expression"
-version = "0.4.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52a13b46d1f5df9cd15e0215e96839bda5eb21a8718ca7e8c9e3ee168cb7e7c0"
-dependencies = [
- "itertools",
- "smallvec",
-]
 
 [[package]]
 name = "bstr"
@@ -350,9 +340,9 @@ dependencies = [
 
 [[package]]
 name = "itertools"
-version = "0.9.0"
+version = "0.10.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "284f18f85651fe11e8a991b2adb42cb078325c996ed026d994719efcfca1d54b"
+checksum = "b0fd2260e829bddf4cb6ea802289de2f86d6a7a690192fbe91b3f46e0f2c8473"
 dependencies = [
  "either",
 ]

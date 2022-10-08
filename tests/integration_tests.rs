@@ -36,11 +36,11 @@ fn test_symbol_tristate(bridge: &Bridge) {
 
     // Getting
     assert_eq!(sym.name().unwrap(), SYMBOL);
-    assert_eq!(*sym.get_value(), Tristate::No);
+    assert_eq!(sym.get_tristate_value(), Tristate::No);
 
     // Setting
     sym.set_symbol_value(SymbolValue::Tristate(Tristate::Yes)).unwrap();
-    assert_eq!(*sym.get_value(), Tristate::Yes);
+    assert_eq!(sym.get_tristate_value(), Tristate::Yes);
 }
 
 #[test]

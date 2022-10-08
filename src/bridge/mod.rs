@@ -12,9 +12,12 @@ mod symbol;
 // dont show abstraction to parent modules
 pub use symbol::*;
 
+mod expr;
+pub use expr::Expr;
+
 mod types;
 use types::*;
-pub use types::{SymbolValue, Tristate, Expr};
+pub use types::{SymbolValue, Tristate};
 
 mod vtable;
 use vtable::*;
@@ -58,14 +61,7 @@ impl Bridge {
                 continue;
             }
 
-            let name = unsafe {
-                (**symbol)
-                    .name
-                    .as_ref()
-                    .map(|obj| String::from_utf8_lossy(CStr::from_ptr(obj).to_bytes()).into_owned())
-            };
-
-            if let Some(name) = name {
+            if let Some(name) = unsafe { (**symbol).name().map(|obj| obj.into_owned()) } {
                 name_to_symbol.insert(name, *symbol);
             }
         }

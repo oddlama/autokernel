@@ -1,8 +1,11 @@
+use super::expr::Expr;
 use super::types::*;
 use super::Bridge;
 use anyhow::{anyhow, bail, ensure, Result};
 use std::borrow::Cow;
 use std::ffi::{CStr, CString};
+use std::fmt;
+use itertools::Itertools;
 
 pub struct Symbol<'a> {
     pub(super) c_symbol: *mut CSymbol,
@@ -11,20 +14,11 @@ pub struct Symbol<'a> {
 
 impl<'a> Symbol<'a> {
     pub fn name(&self) -> Option<Cow<'_, str>> {
-        unsafe {
-            (*self.c_symbol)
-                .name
-                .as_ref()
-                .map(|obj| String::from_utf8_lossy(CStr::from_ptr(obj).to_bytes()))
-        }
+        unsafe { (*self.c_symbol).name() }
     }
 
     pub fn recalculate(&self) {
         (self.bridge.vtable.c_sym_calc_value)(self.c_symbol);
-    }
-
-    pub fn get_value(&self) -> &Tristate {
-        unsafe { &(*self.c_symbol).current_value.tri }
     }
 
     pub fn set_symbol_value_auto(&mut self, value: &str) -> Result<()> {
@@ -69,9 +63,6 @@ impl<'a> Symbol<'a> {
 
         let set_tristate = |value: Tristate| -> Result<bool> {
             let rev_dep_tri = unsafe { (*self.c_symbol).reverse_dependencies.tri };
-            println!("DIR {}", self.direct_dependencies().map_err(|_| anyhow!(""))?.unwrap_or(Expr::Const(SymbolValue::Tristate(Tristate::Yes))));
-            println!("REV {}", self.reverse_dependencies().map_err(|_| anyhow!(""))?.unwrap_or(Expr::Const(SymbolValue::Tristate(Tristate::Yes))));
-            println!("IMP {}", self.implied().map_err(|_| anyhow!(""))?.unwrap_or(Expr::Const(SymbolValue::Tristate(Tristate::Yes))));
             ensure!(
                 self.visible() > rev_dep_tri,
                 "TODO: symbol visibility to low, cannot be assigned, probably deps not satisfied"
@@ -173,12 +164,24 @@ impl<'a> Symbol<'a> {
         unsafe { &*self.c_symbol }.flags.intersects(SymbolFlags::CHOICE)
     }
 
+    pub fn choices(&self) -> Result<Vec<*mut CSymbol>> {
+        ensure!(
+            self.is_choice(),
+            "The symbol must be a choice symbol to call .choices()"
+        );
+        let count = (self.bridge.vtable.c_get_choice_symbols)(self.c_symbol, std::ptr::null_mut() as *mut *mut CSymbol);
+        let mut symbols = Vec::with_capacity(count);
+        (self.bridge.vtable.c_get_choice_symbols)(self.c_symbol, symbols.as_mut_ptr() as *mut *mut CSymbol);
+        unsafe { symbols.set_len(count) };
+        Ok(symbols)
+    }
+
     pub fn visible(&self) -> Tristate {
         unsafe { &*self.c_symbol }.visible
     }
 
     pub fn get_tristate_value(&self) -> Tristate {
-        unsafe { &*self.c_symbol }.current_value.tri
+        unsafe { &*self.c_symbol }.get_tristate_value()
     }
 
     pub fn direct_dependencies(&self) -> Result<Option<Expr>> {
@@ -204,5 +207,24 @@ impl<'a> Symbol<'a> {
             .to_str()
             .unwrap()
             .to_owned();
+    }
+}
+
+impl<'a> fmt::Display for Symbol<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(name) = self.name() {
+            write!(f, "{}={}", name, self.get_tristate_value())
+        } else {
+            if self.is_choice() {
+                let choices = self
+                    .choices()
+                    .unwrap()
+                    .into_iter()
+                    .map(|s| self.bridge.wrap_symbol(s));
+                write!(f, "<choice>[{}]", choices.format(", "))
+            } else {
+                write!(f, "?")
+            }
+        }
     }
 }
