@@ -11,9 +11,7 @@ pub enum Terminal {
     Leq(*mut CSymbol, *mut CSymbol),
     Gth(*mut CSymbol, *mut CSymbol),
     Geq(*mut CSymbol, *mut CSymbol),
-    List(),
     Symbol(*mut CSymbol),
-    Range(*mut CSymbol, *mut CSymbol),
 }
 
 impl Terminal {
@@ -67,9 +65,7 @@ impl<'a> fmt::Display for TerminalDisplay<'a> {
             Terminal::Leq(l, r) => write!(f, "({} <= {})", wrap!(l), wrap!(r)),
             Terminal::Gth(l, r) => write!(f, "({} > {})", wrap!(l), wrap!(r)),
             Terminal::Geq(l, r) => write!(f, "({} >= {})", wrap!(l), wrap!(r)),
-            Terminal::List() => todo!(),
             Terminal::Symbol(e) => write!(f, "{}", wrap!(e)),
-            Terminal::Range(_, _) => todo!(),
         }
     }
 }

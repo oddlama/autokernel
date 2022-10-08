@@ -5,6 +5,7 @@ use anyhow::{anyhow, bail, ensure, Result};
 use std::borrow::Cow;
 use std::ffi::{CStr, CString};
 use std::fmt;
+use colored::{Color, Colorize};
 use itertools::Itertools;
 
 pub struct Symbol<'a> {
@@ -213,7 +214,12 @@ impl<'a> Symbol<'a> {
 impl<'a> fmt::Display for Symbol<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(name) = self.name() {
-            write!(f, "{}={}", name, self.get_tristate_value())
+            let color = match self.get_tristate_value() {
+                Tristate::No => Color::Red,
+                Tristate::Mod => Color::Yellow,
+                Tristate::Yes => Color::Green,
+            };
+            write!(f, "{}={}", name.color(color), self.get_tristate_value())
         } else {
             if self.is_choice() {
                 let choices = self

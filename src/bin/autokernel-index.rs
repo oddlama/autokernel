@@ -69,14 +69,14 @@ fn dump_symbol(bridge: &Bridge, symbol: &Symbol) {
 
 fn analyze_defaults(args: &Args, bridge: &Bridge, action: &ActionAnalyzeDefaults) -> Result<()> {
     println!("Analyzing {:?} defaults...", args.kernel_dir);
-    //dump_symbol(bridge, &bridge.symbol("RTLWIFI_USB").unwrap());
     //dump_symbol(bridge, &bridge.symbol("REGMAP_I2C").unwrap());
-    dump_symbol(bridge, &bridge.symbol("KERNEL_GZIP").unwrap());
-    //for symbol in &bridge.symbols {
-    //    let symbol = bridge.wrap_symbol(*symbol);
-    //    if valid_symbol(&symbol) {
-    //        dump_symbol(bridge, &symbol);
-    //    }
-    //}
+    //dump_symbol(bridge, &bridge.symbol("RTLWIFI_USB").unwrap());
+    //dump_symbol(bridge, &bridge.symbol("KERNEL_GZIP").unwrap());
+    for symbol in &bridge.symbols {
+        let symbol = bridge.wrap_symbol(*symbol);
+        if valid_symbol(&symbol) {
+            dump_symbol(bridge, &symbol);
+        }
+    }
     Ok(())
 }

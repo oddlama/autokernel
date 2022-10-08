@@ -180,9 +180,9 @@ fn convert_expression(expression: *mut CExpr) -> Result<Option<Expr>, ()> {
         CExprType::Leq => Expr::Terminal(Terminal::Leq(sym!(left), sym!(right))),
         CExprType::Gth => Expr::Terminal(Terminal::Gth(sym!(left), sym!(right))),
         CExprType::Geq => Expr::Terminal(Terminal::Geq(sym!(left), sym!(right))),
-        CExprType::List => todo!(),
+        CExprType::List => panic!("List expressions are not supported at this time, as they shouldn't be required. Please report this as a bug if you encounter this message under normal use."),
         CExprType::Symbol => Expr::Terminal(Terminal::Symbol(sym!(left))),
-        CExprType::Range => todo!(),
+        CExprType::Range => panic!("List expressions are not supported at this time, as they shouldn't be required. Please report this as a bug if you encounter this message under normal use."),
     }))
 }
 
