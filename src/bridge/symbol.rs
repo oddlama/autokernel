@@ -3,7 +3,6 @@ use super::Bridge;
 use anyhow::{anyhow, bail, ensure, Result};
 use std::borrow::Cow;
 use std::ffi::{CStr, CString};
-use std::fmt;
 
 pub struct Symbol<'a> {
     pub(super) c_symbol: *mut CSymbol,

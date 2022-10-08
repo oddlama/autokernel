@@ -1,8 +1,10 @@
-use libc::{c_char, c_int, c_void};
-use std::ffi::CStr;
 use std::borrow::Cow;
+use std::ffi::CStr;
 use std::fmt;
 use std::str::FromStr;
+
+use boolean_expression::Expr as BExpr;
+use libc::{c_char, c_int, c_void};
 
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Clone, Copy)]
 #[repr(u8)]
@@ -97,16 +99,8 @@ pub enum Expr {
     Or(Box<Expr>, Box<Expr>),
     And(Box<Expr>, Box<Expr>),
     Not(Box<Expr>),
-    Eq(*mut CSymbol, *mut CSymbol),
-    Neq(*mut CSymbol, *mut CSymbol),
-    Lth(*mut CSymbol, *mut CSymbol),
-    Leq(*mut CSymbol, *mut CSymbol),
-    Gth(*mut CSymbol, *mut CSymbol),
-    Geq(*mut CSymbol, *mut CSymbol),
-    List(Vec<Expr>),
-    Symbol(*mut CSymbol),
-    Range(u64, u64),
-    Const(SymbolValue),
+    Const(bool),
+    Terminal(fn() -> bool),
 }
 
 impl fmt::Display for Expr {
@@ -121,23 +115,16 @@ impl fmt::Display for Expr {
                         .as_ref()
                         .map(|obj| String::from_utf8_lossy(CStr::from_ptr(obj).to_bytes()))
                 }
-            }.unwrap_or(Cow::from("<choice>"))
+            }
+            .unwrap_or(Cow::from("<choice>"))
         };
 
         match self {
             Expr::Or(l, r) => write!(f, "({l} || {r})"),
             Expr::And(l, r) => write!(f, "({l} && {r})"),
             Expr::Not(e) => write!(f, "!{e}"),
-            Expr::Eq(l, r) => write!(f, "{} == {}", symstr(*l), symstr(*r)),
-            Expr::Neq(l, r) => write!(f, "{} != {}", symstr(*l), symstr(*r)),
-            Expr::Lth(l, r) => write!(f, "{} < {}", symstr(*l), symstr(*r)),
-            Expr::Leq(l, r) => write!(f, "{} <= {}", symstr(*l), symstr(*r)),
-            Expr::Gth(l, r) => write!(f, "{} > {}", symstr(*l), symstr(*r)),
-            Expr::Geq(l, r) => write!(f, "{} >= {}", symstr(*l), symstr(*r)),
-            Expr::List(e) => todo!(),
-            Expr::Symbol(e) => write!(f, "{}", symstr(*e)),
-            Expr::Range(l, r) => write!(f, "[{l}, {r}]"),
             Expr::Const(e) => write!(f, "Const({:?})", e),
+            Expr::Terminal(e) => write!(f, "Terminal({:?})", e),
         }
     }
 }
@@ -146,7 +133,7 @@ fn convert_expression(expression: *mut CExpr) -> Result<Option<Expr>, ()> {
     macro_rules! expr {
         ($which: ident) => {
             if expression.is_null() {
-                return Err(())
+                return Err(());
             } else {
                 Box::new(convert_expression(unsafe { (*expression).$which.expression })?.unwrap())
             }
@@ -156,7 +143,7 @@ fn convert_expression(expression: *mut CExpr) -> Result<Option<Expr>, ()> {
     macro_rules! sym {
         ($which: ident) => {
             if expression.is_null() {
-                return Err(())
+                return Err(());
             } else {
                 unsafe { (*expression).$which.symbol }
             }
@@ -172,7 +159,7 @@ fn convert_expression(expression: *mut CExpr) -> Result<Option<Expr>, ()> {
         CExprType::Or => Expr::Or(expr!(left), expr!(right)),
         CExprType::And => Expr::And(expr!(left), expr!(right)),
         CExprType::Not => Expr::Not(expr!(left)),
-        CExprType::Equal => Expr::Eq(sym!(left), sym!(right)),
+        CExprType::Equal => Expr::Terminal(|| -> sym!(left) sym!(right)),
         CExprType::Unequal => Expr::Neq(sym!(left), sym!(right)),
         CExprType::Lth => Expr::Lth(sym!(left), sym!(right)),
         CExprType::Leq => Expr::Leq(sym!(left), sym!(right)),
