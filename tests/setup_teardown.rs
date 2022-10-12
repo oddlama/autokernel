@@ -82,5 +82,7 @@ pub fn teardown() {
 }
 
 pub fn teardown_full() {
-    fs::remove_dir_all(env::temp_dir().join(TMP_TEST_DIR).join(TEST_KERNEL)).expect("could not remove tmp dir");
+    if let Err(e) = fs::remove_dir_all(env::temp_dir().join(TMP_TEST_DIR).join(TEST_KERNEL)) {
+        eprintln!("could not remove tmp dir");
+    }
 }
