@@ -8,6 +8,8 @@ use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
+mod satisfier;
+
 mod symbol;
 // dont show abstraction to parent modules
 pub use symbol::*;
