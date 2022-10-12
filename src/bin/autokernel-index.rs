@@ -57,13 +57,14 @@ fn valid_symbol(symbol: &Symbol) -> bool {
 
 fn dump_symbol(bridge: &Bridge, symbol: &Symbol) {
     println!(
-        "{} {:?} {:?}\n  DIRECT: {}\n  REVERSE: {}\n  IMPLIED: {}",
+        "{} {:?} {:?}\n  DIRECT: {}\n",//  REVERSE: {}\n  IMPLIED: {}",
         symbol.name().unwrap(),
         symbol.symbol_type(),
         symbol.visible(),
+        //symbol.visibility().unwrap().unwrap_or(Expr::Const(true)).display(bridge),
         symbol.direct_dependencies().unwrap().unwrap_or(Expr::Const(true)).display(bridge),
-        symbol.reverse_dependencies().unwrap().unwrap_or(Expr::Const(true)).display(bridge),
-        symbol.implied().unwrap().unwrap_or(Expr::Const(true)).display(bridge)
+        //symbol.reverse_dependencies().unwrap().unwrap_or(Expr::Const(true)).display(bridge),
+        //symbol.implied().unwrap().unwrap_or(Expr::Const(true)).display(bridge)
     );
 }
 

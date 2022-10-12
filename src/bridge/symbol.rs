@@ -1,16 +1,86 @@
 use super::expr::Expr;
 use super::types::*;
 use super::Bridge;
-use anyhow::{anyhow, bail, ensure, Result};
+use colored::{Color, Colorize};
+use itertools::Itertools;
 use std::borrow::Cow;
 use std::ffi::{CStr, CString};
 use std::fmt;
-use colored::{Color, Colorize};
-use itertools::Itertools;
+use thiserror::Error;
 
+macro_rules! ensure {
+    ($condition: expr, $error: expr) => {
+        if !$condition {
+            return Err($error);
+        }
+    };
+}
+
+#[derive(Error, Debug)]
+pub enum SymbolSetAutoError<'a> {
+    #[error(transparent)]
+    SymbolSetError(SymbolSetError<'a>),
+    #[error("{symbol} cannot be set to {value:?}: Cannot be parsed as an integer")]
+    InvalidInt { symbol: Symbol<'a>, value: &'a str },
+    #[error("{symbol} cannot be set to {value:?}: Cannot be parsed as a hex integer")]
+    InvalidHex { symbol: Symbol<'a>, value: &'a str },
+    #[error("{symbol} cannot be set to {value}: Valid tristates are 'n', 'm', 'y'")]
+    InvalidTristate { symbol: Symbol<'a>, value: &'a str },
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
+}
+
+impl<'a> From<SymbolSetError<'a>> for SymbolSetAutoError<'a> {
+    fn from(err: SymbolSetError<'a>) -> SymbolSetAutoError<'a> {
+        SymbolSetAutoError::SymbolSetError(err)
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum SymbolSetError<'a> {
+    #[error("{0} has unknown symbol type")]
+    UnknownType(Symbol<'a>),
+    #[error("{0} is const")]
+    IsConst(Symbol<'a>),
+    #[error("{0} cannot be set directly, assign child instead")]
+    IsChoice(Symbol<'a>),
+    #[error("{0} cannot be set to {1}: TODO visibility (upper bound) is {}. TODO {}",
+        symbol.visible(),
+        symbol.reverse_dependencies().unwrap().unwrap_or(Expr::Const(true)).display(symbol.bridge)
+    )]
+    VisibilityTooLow { symbol: Symbol<'a>, value: Tristate },
+    #[error("TODO")]
+    RequiredByOther { symbol: Symbol<'a>, value: Tristate },
+    #[error("TODO")]
+    InvalidVisibility { symbol: Symbol<'a>, value: Tristate },
+    #[error("{symbol} cannot be set to {value}: module support is not enabled (set MODULES to y)")]
+    ModulesNotEnabled { symbol: Symbol<'a>, value: Tristate },
+    #[error("{symbol} cannot be set to {value}: value must be in range [{min:#x}, {max:#x}]")]
+    OutOfRangeHex {
+        symbol: Symbol<'a>,
+        value: u64,
+        min: u64,
+        max: u64,
+    },
+    #[error("{symbol} cannot be set to {value}: value must be in range [{min}, {max}]")]
+    OutOfRangeInt {
+        symbol: Symbol<'a>,
+        value: u64,
+        min: u64,
+        max: u64,
+    },
+    #[error("{symbol} cannot be set to {value:?}: incompatible value type")]
+    InvalidValue { symbol: Symbol<'a>, value: SymbolValue },
+    #[error("{symbol} cannot be set to {value:?}: value was rejected by kernel")]
+    AssignmentFailed { symbol: Symbol<'a>, value: SymbolValue },
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
+}
+
+#[derive(Clone, Copy, Debug)]
 pub struct Symbol<'a> {
     pub(super) c_symbol: *mut CSymbol,
-    pub(super) bridge: &'a Bridge,
+    pub bridge: &'a Bridge,
 }
 
 impl<'a> Symbol<'a> {
@@ -22,128 +92,122 @@ impl<'a> Symbol<'a> {
         (self.bridge.vtable.c_sym_calc_value)(self.c_symbol);
     }
 
-    pub fn set_symbol_value_auto(&mut self, value: &str) -> Result<()> {
+    pub fn set_symbol_value_auto(&mut self, value: &str) -> Result<(), SymbolSetAutoError> {
         match self.symbol_type() {
-            SymbolType::Unknown => bail!(format!("TODO MESSAGE Cannot set symbol of unknown type")),
+            SymbolType::Unknown => return Err(SymbolSetAutoError::SymbolSetError(SymbolSetError::UnknownType(*self))),
             SymbolType::Boolean => {
                 // Allowed "y" "n"
-                ensure!(matches!(value, "y" | "n"), "TODO: only y or n");
+                ensure!(
+                    matches!(value, "y" | "n"),
+                    SymbolSetAutoError::Other(anyhow::anyhow!("TODO"))
+                );
                 self.set_symbol_value(SymbolValue::Boolean(
                     value.parse::<Tristate>().unwrap() == Tristate::Yes,
                 ))
             }
             SymbolType::Tristate => {
                 // Allowed "y" "m" "n"
-                self.set_symbol_value(SymbolValue::Tristate(value.parse::<Tristate>().unwrap()))
+                let value = value
+                    .parse::<Tristate>()
+                    .map_err(|_| SymbolSetAutoError::InvalidTristate { symbol: *self, value })?;
+                self.set_symbol_value(SymbolValue::Tristate(value))
             }
             SymbolType::Int => {
                 // Allowed: Any u64 integer
-                let value = value.parse::<u64>().expect("TODO MESSAGE not parsable int:");
+                let value = value
+                    .parse::<u64>()
+                    .map_err(|_| SymbolSetAutoError::InvalidInt { symbol: *self, value })?;
                 self.set_symbol_value(SymbolValue::Int(value))
             }
             SymbolType::Hex => {
                 // Allowed: Any u64 integer
-                ensure!(&value[..2] == "0x", format!("TODO MESSAGE must begin with 0x"));
-                let value = u64::from_str_radix(&value[2..], 16).expect("TODO MESSAGE:");
+                ensure!(
+                    &value[..2] == "0x",
+                    SymbolSetAutoError::InvalidHex { symbol: *self, value }
+                );
+                let value = u64::from_str_radix(&value[2..], 16)
+                    .map_err(|_| SymbolSetAutoError::InvalidHex { symbol: *self, value })?;
                 self.set_symbol_value(SymbolValue::Hex(value))
             }
             SymbolType::String => self.set_symbol_value(SymbolValue::String(value.to_owned())),
         }
+        .map_err(SymbolSetAutoError::SymbolSetError)
     }
 
-    pub fn set_symbol_value(&mut self, value: SymbolValue) -> Result<()> {
+    pub fn set_symbol_value(&mut self, value: SymbolValue) -> Result<(), SymbolSetError> {
         // TODO track which symbols were assigned to report conflicting later assignments.
         // TODO for choices there is no symbol name. track whether other choices were set and if
         //      they are overwritten. Tracking must have a disable switch to load external kconfig
         //      (defconfig) for example. Or a function that resets tracking state for one/all symbols.
-        ensure!(!self.is_const(), "TODO: Cannot assign const symbols");
-        ensure!(
-            !self.is_choice(),
-            "TODO: Cannot assign choice symbols directly. Assign y to a choice value instead."
-        );
+        ensure!(!self.is_const(), SymbolSetError::IsConst(*self));
+        ensure!(!self.is_choice(), SymbolSetError::IsChoice(*self));
 
-        let set_tristate = |value: Tristate| -> Result<bool> {
+        let set_tristate = |value: Tristate| -> Result<bool, SymbolSetError> {
             let rev_dep_tri = unsafe { (*self.c_symbol).reverse_dependencies.tri };
             ensure!(
-                self.visible() > rev_dep_tri,
-                "TODO: symbol visibility to low, cannot be assigned, probably deps not satisfied"
-            );
-            ensure!(
                 value <= self.visible(),
-                "TODO: symbol cannot be assigned above visibility"
+                SymbolSetError::VisibilityTooLow { symbol: *self, value }
             );
             ensure!(
                 value >= rev_dep_tri,
-                "TODO: symbol cannot be assigned below required value (inferred by reverse dependencies)"
+                SymbolSetError::RequiredByOther { symbol: *self, value }
+            );
+            ensure!(
+                self.visible() > rev_dep_tri,
+                SymbolSetError::InvalidVisibility { symbol: *self, value }
             );
             ensure!(
                 !(value == Tristate::Mod
                     && self.bridge.symbol("MODULES").unwrap().get_tristate_value() == Tristate::No),
-                "TODO: symbol cannot be set to Mod because MODULES is not set"
+                SymbolSetError::ModulesNotEnabled { symbol: *self, value }
             );
             Ok((self.bridge.vtable.c_sym_set_tristate_value)(self.c_symbol, value))
         };
-
-        macro_rules! check_int_range {
-            ($value: expr, $format: literal) => {
-                let min = (self.bridge.vtable.c_sym_int_get_min)(self.c_symbol);
-                let max = (self.bridge.vtable.c_sym_int_get_max)(self.c_symbol);
-                ensure!(
-                    $value >= min,
-                    concat!(
-                        "TODO: cannot set {}, desired value {",
-                        $format,
-                        "} must be >= {",
-                        $format,
-                        "}"
-                    ),
-                    self.name().unwrap(),
-                    $value,
-                    min
-                );
-                ensure!(
-                    $value <= max,
-                    concat!(
-                        "TODO: cannot set {}, desired value {",
-                        $format,
-                        "} must be <= {",
-                        $format,
-                        "}"
-                    ),
-                    self.name().unwrap(),
-                    $value,
-                    max
-                );
-            };
-        }
 
         let ret = match (self.symbol_type(), value) {
             (SymbolType::Boolean | SymbolType::Tristate, SymbolValue::Boolean(value)) => set_tristate(value.into())?,
             (SymbolType::Boolean, SymbolValue::Tristate(value)) if value != Tristate::Mod => set_tristate(value)?,
             (SymbolType::Tristate, SymbolValue::Tristate(value)) => set_tristate(value)?,
             (SymbolType::Int, SymbolValue::Int(value)) => {
-                check_int_range!(value, "");
-                let cstr = CString::new(value.to_string())?;
+                let min = (self.bridge.vtable.c_sym_int_get_min)(self.c_symbol);
+                let max = (self.bridge.vtable.c_sym_int_get_max)(self.c_symbol);
+                ensure!(
+                    value >= min && value <= max,
+                    SymbolSetError::OutOfRangeInt {
+                        symbol: *self,
+                        value,
+                        min,
+                        max
+                    }
+                );
+                let cstr = CString::new(value.to_string()).unwrap();
                 (self.bridge.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr())
             }
             (SymbolType::Hex, SymbolValue::Hex(value)) => {
-                check_int_range!(value, ":#x");
-                let cstr = CString::new(format!("{:#x}", value))?;
+                let min = (self.bridge.vtable.c_sym_int_get_min)(self.c_symbol);
+                let max = (self.bridge.vtable.c_sym_int_get_max)(self.c_symbol);
+                ensure!(
+                    value >= min && value <= max,
+                    SymbolSetError::OutOfRangeHex {
+                        symbol: *self,
+                        value,
+                        min,
+                        max
+                    }
+                );
+                let cstr = CString::new(format!("{:#x}", value)).unwrap();
                 (self.bridge.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr())
             }
             (SymbolType::String, SymbolValue::String(value)) => {
-                let cstr = CString::new(value)?;
+                let cstr = CString::new(value).unwrap();
                 (self.bridge.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr())
             }
             (SymbolType::Int, SymbolValue::Number(value)) => return self.set_symbol_value(SymbolValue::Int(value)),
             (SymbolType::Hex, SymbolValue::Number(value)) => return self.set_symbol_value(SymbolValue::Hex(value)),
-            (st, v) => bail!(format!(
-                "TODO: Cannot assign {v:?} to symbol {} ({st:?})",
-                self.name().unwrap()
-            )),
+            (st, v) => return Err(SymbolSetError::InvalidValue { symbol: *self, value }),
         };
 
-        ensure!(ret, format!("Could not set symbol {:?}", self.name()));
+        ensure!(ret, SymbolSetError::AssignmentFailed { symbol: *self, value });
 
         // TODO only recalculate the current symbol except when this was a choice?
         // not sure, check C code. Probably we need to go through all deps and recalculate those
@@ -165,8 +229,12 @@ impl<'a> Symbol<'a> {
         unsafe { &*self.c_symbol }.flags.intersects(SymbolFlags::CHOICE)
     }
 
-    pub fn choices(&self) -> Result<Vec<*mut CSymbol>> {
-        ensure!(
+    pub fn visible(&self) -> Tristate {
+        unsafe { &*self.c_symbol }.visible
+    }
+
+    pub fn choices(&self) -> anyhow::Result<Vec<*mut CSymbol>> {
+        anyhow::ensure!(
             self.is_choice(),
             "The symbol must be a choice symbol to call .choices()"
         );
@@ -177,30 +245,21 @@ impl<'a> Symbol<'a> {
         Ok(symbols)
     }
 
-    pub fn visible(&self) -> Tristate {
-        unsafe { &*self.c_symbol }.visible
-    }
-
     pub fn get_tristate_value(&self) -> Tristate {
         unsafe { &*self.c_symbol }.get_tristate_value()
     }
 
-    pub fn direct_dependencies(&self) -> Result<Option<Expr>> {
-        unsafe { &(*self.c_symbol).direct_dependencies }
-            .expr()
-            .map_err(|_| anyhow!("Failed to parse C kernel expression"))
+    pub fn visibility_expression(&self) -> Result<Option<Expr>, ()> {
+        todo!("Ughh..")
     }
 
-    pub fn reverse_dependencies(&self) -> Result<Option<Expr>> {
-        unsafe { &(*self.c_symbol).reverse_dependencies }
-            .expr()
-            .map_err(|_| anyhow!("Failed to parse C kernel expression"))
+    pub fn direct_dependencies(&self) -> Result<Option<Expr>, ()> {
+        unsafe { &(*self.c_symbol).direct_dependencies }.expr()
+        // TODO directly assign proper default here. .unwrap_or(Expr::Const(false))
     }
 
-    pub fn implied(&self) -> Result<Option<Expr>> {
-        unsafe { &(*self.c_symbol).implied }
-            .expr()
-            .map_err(|_| anyhow!("Failed to parse C kernel expression"))
+    pub fn reverse_dependencies(&self) -> Result<Option<Expr>, ()> {
+        unsafe { &(*self.c_symbol).reverse_dependencies }.expr()
     }
 
     pub fn get_string_value(&self) -> String {
@@ -222,11 +281,7 @@ impl<'a> fmt::Display for Symbol<'a> {
             write!(f, "{}={}", name.color(color), self.get_tristate_value())
         } else {
             if self.is_choice() {
-                let choices = self
-                    .choices()
-                    .unwrap()
-                    .into_iter()
-                    .map(|s| self.bridge.wrap_symbol(s));
+                let choices = self.choices().unwrap().into_iter().map(|s| self.bridge.wrap_symbol(s));
                 write!(f, "<choice>[{}]", choices.format(", "))
             } else {
                 write!(f, "?")

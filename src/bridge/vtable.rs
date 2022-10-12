@@ -21,6 +21,7 @@ pub type FuncSymIntGetMax = extern "C" fn(*mut CSymbol) -> u64;
 pub type FuncConfWrite = extern "C" fn(*const c_char) -> c_int;
 pub type FuncConfReadUnchecked = extern "C" fn(*const c_char) -> c_int;
 
+#[derive(Debug)]
 pub struct BridgeVTable {
     #[allow(dead_code)]
     library: Library,

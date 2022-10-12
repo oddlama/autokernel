@@ -22,6 +22,7 @@ pub use types::{SymbolValue, Tristate};
 mod vtable;
 use vtable::*;
 
+#[derive(Debug)]
 pub struct Bridge {
     #[allow(dead_code)]
     vtable: BridgeVTable,
@@ -123,6 +124,8 @@ impl Bridge {
         );
         Ok(())
     }
+
+
 
     pub fn get_env(&self, name: &str) -> String {
         let param = CString::new(name).unwrap();
