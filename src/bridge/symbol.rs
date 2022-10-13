@@ -6,6 +6,7 @@ use itertools::Itertools;
 use std::borrow::Cow;
 use std::ffi::{CStr, CString};
 use std::fmt;
+use anyhow::anyhow;
 use thiserror::Error;
 
 macro_rules! ensure {
@@ -46,7 +47,7 @@ pub enum SymbolSetError<'a> {
     IsChoice(Symbol<'a>),
     #[error("{0} cannot be set to {1}: TODO visibility (upper bound) is {}. TODO {}",
         symbol.visible(),
-        symbol.reverse_dependencies().unwrap().unwrap_or(Expr::Const(true)).display(symbol.bridge)
+        symbol.reverse_dependencies().unwrap().display(symbol.bridge)
     )]
     VisibilityTooLow { symbol: Symbol<'a>, value: Tristate },
     #[error("TODO")]
@@ -249,17 +250,22 @@ impl<'a> Symbol<'a> {
         unsafe { &*self.c_symbol }.get_tristate_value()
     }
 
-    pub fn visibility_expression(&self) -> Result<Option<Expr>, ()> {
+    pub fn visibility_expression(&self) -> anyhow::Result<Expr> {
         todo!("Ughh..")
     }
 
-    pub fn direct_dependencies(&self) -> Result<Option<Expr>, ()> {
-        unsafe { &(*self.c_symbol).direct_dependencies }.expr()
-        // TODO directly assign proper default here. .unwrap_or(Expr::Const(false))
+    pub fn direct_dependencies(&self) -> anyhow::Result<Expr> {
+        Ok(unsafe { &(*self.c_symbol).direct_dependencies }
+            .expr()
+            .map_err(|_| anyhow!("Could not parse C kernel expression"))?
+            .unwrap_or(Expr::Const(true)))
     }
 
-    pub fn reverse_dependencies(&self) -> Result<Option<Expr>, ()> {
-        unsafe { &(*self.c_symbol).reverse_dependencies }.expr()
+    pub fn reverse_dependencies(&self) -> anyhow::Result<Expr> {
+        Ok(unsafe { &(*self.c_symbol).reverse_dependencies }
+            .expr()
+            .map_err(|_| anyhow!("Could not parse C kernel expression"))?
+            .unwrap_or(Expr::Const(false)))
     }
 
     pub fn get_string_value(&self) -> String {

@@ -4,7 +4,6 @@ use super::{Symbol, Tristate};
 use anyhow::{bail, Context, Result};
 use typed_builder::TypedBuilder;
 
-
 /// Satisfier to solve symbol dependencies
 ///
 /// ```
@@ -24,7 +23,7 @@ pub struct Satisfier {
 }
 impl Satisfier {
     pub fn satisfy(&self, symbol: &Symbol) -> Result<Vec<String>> {
-        let dep = symbol.direct_dependencies()?.unwrap_or(Expr::Const(true));
+        let dep = symbol.direct_dependencies()?;
 
         if self.recursive {
             todo!("track list and satisfy the new ones");
@@ -43,7 +42,6 @@ pub trait Solver {
 pub struct SimpleSolver {}
 
 impl Solver for SimpleSolver {
-
     fn satisfy(&self, expr: Expr) -> Result<Vec<String>> {
         Ok(match expr {
             Expr::And(a, b) => [self.satisfy(*a)?, self.satisfy(*b)?].concat(),
@@ -117,9 +115,9 @@ impl SimpleSolver {
             Terminal::Leq(_, _) => bail!(format!("not supported {:?}", terminal)),
             Terminal::Gth(_, _) => bail!(format!("not supported {:?}", terminal)),
             Terminal::Geq(_, _) => bail!(format!("not supported {:?}", terminal)),
-            Terminal::Symbol(s) => {
-                self.is_satisfied(s, Tristate::Mod)?.or(self.is_satisfied(s, if not { Tristate::No } else { Tristate::Yes })?)
-            }
+            Terminal::Symbol(s) => self
+                .is_satisfied(s, Tristate::Mod)?
+                .or(self.is_satisfied(s, if not { Tristate::No } else { Tristate::Yes })?),
         })
     }
 
