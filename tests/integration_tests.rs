@@ -1,9 +1,9 @@
+use anyhow::Result;
 use autokernel::{
     bridge::{Bridge, SymbolValue, Tristate},
     config::{Config, KConfig, LuaConfig},
 };
 use log::info;
-use anyhow::Result;
 
 mod setup_teardown;
 use serial_test::serial;
@@ -66,7 +66,10 @@ fn integration_test_luaconfig() {
 
     macro_rules! lua_bad_test {
         ($name:literal, $code:expr) => {
-            assert!(test_config(&bridge, &LuaConfig::from_raw($name.into(), $code.into())).is_err(), $name)
+            assert!(
+                test_config(&bridge, &LuaConfig::from_raw($name.into(), $code.into())).is_err(),
+                $name
+            )
         };
     }
 

@@ -1,18 +1,18 @@
 use autokernel::bridge::Bridge;
 use libc::TIMER_ABSTIME;
 
+use anyhow::Context;
+use log::error;
+use log::info;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use log::info;
-use log::error;
-use anyhow::Context;
 
 const TMP_TEST_DIR: &str = "autokernel-test";
 const TEST_KERNEL: &str = "linux-5.19.1";
 
-fn cache_kernel(kdir: &PathBuf) -> String{
+fn cache_kernel(kdir: &PathBuf) -> String {
     // latest="$(curl -s https://www.kernel.org/ | grep -A1 'stable:' | grep -oP '(?<=strong>).*(?=</strong.*)' | head -1)"
     let kernel_tar = format!("{}.tar.xz", &TEST_KERNEL);
     // test if kernel exists
@@ -40,7 +40,7 @@ fn setup_kernel(kdir: &PathBuf) -> PathBuf {
 
     let res = kdir.join(TEST_KERNEL);
     if res.exists() {
-        return res ;
+        return res;
     }
 
     // remove kernel tar and folder if they already exists
@@ -53,7 +53,6 @@ fn setup_kernel(kdir: &PathBuf) -> PathBuf {
     //        .status()
     //        .unwrap();
     //}
-
 
     info!("extracting kernel {} ...", TEST_KERNEL);
     Command::new("tar")
@@ -71,7 +70,10 @@ pub fn setup() -> Bridge {
     let kdir = env::temp_dir().join(&TMP_TEST_DIR);
     info!("creating {} directory", &kdir.display());
     fs::create_dir_all(&kdir).unwrap();
-    let kdir = kdir.canonicalize().context(format!("tmp {:?}, folder {:?}", env::temp_dir(), TMP_TEST_DIR)).unwrap();
+    let kdir = kdir
+        .canonicalize()
+        .context(format!("tmp {:?}, folder {:?}", env::temp_dir(), TMP_TEST_DIR))
+        .unwrap();
     let kdir = setup_kernel(&kdir);
     Bridge::new(kdir).unwrap()
 }

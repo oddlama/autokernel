@@ -57,7 +57,7 @@ fn valid_symbol(symbol: &Symbol) -> bool {
 
 fn dump_symbol(bridge: &Bridge, symbol: &Symbol) {
     println!(
-        "{} {:?} {:?}\n  DIRECT: {}\n",//  REVERSE: {}\n  IMPLIED: {}",
+        "{} {:?} {:?}\n  DIRECT: {}\n", //  REVERSE: {}\n  IMPLIED: {}",
         symbol.name().unwrap(),
         symbol.symbol_type(),
         symbol.visible(),

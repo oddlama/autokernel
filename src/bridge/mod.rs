@@ -127,8 +127,6 @@ impl Bridge {
         Ok(())
     }
 
-
-
     pub fn get_env(&self, name: &str) -> String {
         let param = CString::new(name).unwrap();
         return unsafe { CStr::from_ptr((self.vtable.c_get_env)(param.as_ptr())) }

@@ -1,8 +1,8 @@
-use autokernel::config::{self, Config};
 use autokernel::bridge::Bridge;
+use autokernel::config::{self, Config};
 
-use std::process::{Command, Stdio};
 use std::path::PathBuf;
+use std::process::{Command, Stdio};
 
 use anyhow::{Ok, Result};
 use clap::Parser;

@@ -1,12 +1,12 @@
 use super::expr::Expr;
 use super::types::*;
 use super::Bridge;
+use anyhow::anyhow;
 use colored::{Color, Colorize};
 use itertools::Itertools;
 use std::borrow::Cow;
 use std::ffi::{CStr, CString};
 use std::fmt;
-use anyhow::anyhow;
 use thiserror::Error;
 
 macro_rules! ensure {
@@ -63,10 +63,7 @@ impl<'a> Symbol<'a> {
             SymbolType::Unknown => return Err(SymbolSetError::UnknownType.into()),
             SymbolType::Boolean => {
                 // Allowed "y" "n"
-                ensure!(
-                    matches!(value, "y" | "n"),
-                    SymbolSetAutoError::InvalidBoolean
-                );
+                ensure!(matches!(value, "y" | "n"), SymbolSetAutoError::InvalidBoolean);
                 self.set_symbol_value(SymbolValue::Boolean(
                     value.parse::<Tristate>().unwrap() == Tristate::Yes,
                 ))
@@ -80,16 +77,13 @@ impl<'a> Symbol<'a> {
             }
             SymbolType::Int => {
                 // Allowed: Any u64 integer
-                let value = value
-                    .parse::<u64>()
-                    .map_err(|_| SymbolSetAutoError::InvalidInt)?;
+                let value = value.parse::<u64>().map_err(|_| SymbolSetAutoError::InvalidInt)?;
                 self.set_symbol_value(SymbolValue::Int(value))
             }
             SymbolType::Hex => {
                 // Allowed: Any u64 integer
-                ensure!( &value[..2] == "0x", SymbolSetAutoError::InvalidHex);
-                let value = u64::from_str_radix(&value[2..], 16)
-                    .map_err(|_| SymbolSetAutoError::InvalidHex)?;
+                ensure!(&value[..2] == "0x", SymbolSetAutoError::InvalidHex);
+                let value = u64::from_str_radix(&value[2..], 16).map_err(|_| SymbolSetAutoError::InvalidHex)?;
                 self.set_symbol_value(SymbolValue::Hex(value))
             }
             SymbolType::String => self.set_symbol_value(SymbolValue::String(value.to_owned())),
@@ -107,18 +101,9 @@ impl<'a> Symbol<'a> {
 
         let set_tristate = |value: Tristate| -> Result<bool, SymbolSetError> {
             let rev_dep_tri = unsafe { (*self.c_symbol).reverse_dependencies.tri };
-            ensure!(
-                value <= self.visible(),
-                SymbolSetError::VisibilityTooLow
-            );
-            ensure!(
-                value >= rev_dep_tri,
-                SymbolSetError::RequiredByOther
-            );
-            ensure!(
-                self.visible() > rev_dep_tri,
-                SymbolSetError::InvalidVisibility
-            );
+            ensure!(value <= self.visible(), SymbolSetError::VisibilityTooLow);
+            ensure!(value >= rev_dep_tri, SymbolSetError::RequiredByOther);
+            ensure!(self.visible() > rev_dep_tri, SymbolSetError::InvalidVisibility);
             ensure!(
                 !(value == Tristate::Mod
                     && self.bridge.symbol("MODULES").unwrap().get_tristate_value() == Tristate::No),
@@ -134,20 +119,14 @@ impl<'a> Symbol<'a> {
             (SymbolType::Int, SymbolValue::Int(value)) => {
                 let min = (self.bridge.vtable.c_sym_int_get_min)(self.c_symbol);
                 let max = (self.bridge.vtable.c_sym_int_get_max)(self.c_symbol);
-                ensure!(
-                    value >= min && value <= max,
-                    SymbolSetError::OutOfRange
-                );
+                ensure!(value >= min && value <= max, SymbolSetError::OutOfRange);
                 let cstr = CString::new(value.to_string()).unwrap();
                 (self.bridge.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr())
             }
             (SymbolType::Hex, SymbolValue::Hex(value)) => {
                 let min = (self.bridge.vtable.c_sym_int_get_min)(self.c_symbol);
                 let max = (self.bridge.vtable.c_sym_int_get_max)(self.c_symbol);
-                ensure!(
-                    value >= min && value <= max,
-                    SymbolSetError::OutOfRange
-                );
+                ensure!(value >= min && value <= max, SymbolSetError::OutOfRange);
                 let cstr = CString::new(format!("{:#x}", value)).unwrap();
                 (self.bridge.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr())
             }
@@ -157,7 +136,7 @@ impl<'a> Symbol<'a> {
             }
             (SymbolType::Int, SymbolValue::Number(value)) => return self.set_symbol_value(SymbolValue::Int(value)),
             (SymbolType::Hex, SymbolValue::Number(value)) => return self.set_symbol_value(SymbolValue::Hex(value)),
-            (st, v) => return Err(SymbolSetError::InvalidValue),
+            (_, _) => return Err(SymbolSetError::InvalidValue),
         };
 
         ensure!(ret, SymbolSetError::AssignmentFailed);
