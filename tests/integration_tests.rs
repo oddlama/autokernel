@@ -39,7 +39,7 @@ fn test_symbol_tristate(bridge: &Bridge) {
     assert_eq!(sym.get_tristate_value(), Tristate::No);
 
     // Setting
-    sym.set_symbol_value(SymbolValue::Tristate(Tristate::Yes)).unwrap();
+    sym.set_value_tracked(SymbolValue::Tristate(Tristate::Yes)).unwrap();
     assert_eq!(sym.get_tristate_value(), Tristate::Yes);
 }
 
@@ -76,7 +76,7 @@ fn integration_test_luaconfig() {
     bridge
         .symbol("MODULES")
         .expect("this should have worked for test")
-        .set_symbol_value(SymbolValue::Tristate(Tristate::Yes))
+        .set_value_tracked(SymbolValue::Tristate(Tristate::Yes))
         .expect("this was for setting up the test");
     lua_test!(
         "assign syntax",

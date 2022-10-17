@@ -1,4 +1,5 @@
 use super::expr::Expr;
+use super::transactions::Transaction;
 use super::types::*;
 use super::Bridge;
 use anyhow::anyhow;
@@ -19,20 +20,16 @@ macro_rules! ensure {
 
 #[derive(Error, Debug)]
 #[error("{self:?}")]
-pub enum SymbolSetAutoError {
-    InvalidInt,
-    InvalidHex,
-    InvalidTristate,
-    InvalidBoolean,
-    SymbolSetError(#[from] SymbolSetError),
-}
-
-#[derive(Error, Debug)]
-#[error("{self:?}")]
 pub enum SymbolSetError {
     UnknownType,
     IsConst,
     IsChoice,
+
+    InvalidInt,
+    InvalidHex,
+    InvalidTristate,
+    InvalidBoolean,
+
     VisibilityTooLow,
     RequiredByOther,
     InvalidVisibility,
@@ -58,48 +55,11 @@ impl<'a> Symbol<'a> {
         (self.bridge.vtable.c_sym_calc_value)(self.c_symbol);
     }
 
-    pub fn set_symbol_value_auto(&mut self, value: &str) -> Result<(), SymbolSetAutoError> {
-        match self.symbol_type() {
-            SymbolType::Unknown => return Err(SymbolSetError::UnknownType.into()),
-            SymbolType::Boolean => {
-                // Allowed "y" "n"
-                ensure!(matches!(value, "y" | "n"), SymbolSetAutoError::InvalidBoolean);
-                self.set_symbol_value(SymbolValue::Boolean(
-                    value.parse::<Tristate>().unwrap() == Tristate::Yes,
-                ))
-            }
-            SymbolType::Tristate => {
-                // Allowed "y" "m" "n"
-                let value = value
-                    .parse::<Tristate>()
-                    .map_err(|_| SymbolSetAutoError::InvalidTristate)?;
-                self.set_symbol_value(SymbolValue::Tristate(value))
-            }
-            SymbolType::Int => {
-                // Allowed: Any u64 integer
-                let value = value.parse::<u64>().map_err(|_| SymbolSetAutoError::InvalidInt)?;
-                self.set_symbol_value(SymbolValue::Int(value))
-            }
-            SymbolType::Hex => {
-                // Allowed: Any u64 integer
-                ensure!(&value[..2] == "0x", SymbolSetAutoError::InvalidHex);
-                let value = u64::from_str_radix(&value[2..], 16).map_err(|_| SymbolSetAutoError::InvalidHex)?;
-                self.set_symbol_value(SymbolValue::Hex(value))
-            }
-            SymbolType::String => self.set_symbol_value(SymbolValue::String(value.to_owned())),
-        }
-        .map_err(SymbolSetAutoError::SymbolSetError)
-    }
-
-    pub fn set_symbol_value(&mut self, value: SymbolValue) -> Result<(), SymbolSetError> {
-        // TODO track which symbols were assigned to report conflicting later assignments.
-        // TODO for choices there is no symbol name. track whether other choices were set and if
-        //      they are overwritten. Tracking must have a disable switch to load external kconfig
-        //      (defconfig) for example. Or a function that resets tracking state for one/all symbols.
+    pub fn _set_value(&mut self, value: SymbolValue) -> Result<(), SymbolSetError> {
         ensure!(!self.is_const(), SymbolSetError::IsConst);
         ensure!(!self.is_choice(), SymbolSetError::IsChoice);
 
-        let set_tristate = |value: Tristate| -> Result<bool, SymbolSetError> {
+        let set_tristate = |value: Tristate| -> Result<(), SymbolSetError> {
             let rev_dep_tri = unsafe { (*self.c_symbol).reverse_dependencies.tri };
             ensure!(value <= self.visible(), SymbolSetError::VisibilityTooLow);
             ensure!(value >= rev_dep_tri, SymbolSetError::RequiredByOther);
@@ -109,10 +69,39 @@ impl<'a> Symbol<'a> {
                     && self.bridge.symbol("MODULES").unwrap().get_tristate_value() == Tristate::No),
                 SymbolSetError::ModulesNotEnabled
             );
-            Ok((self.bridge.vtable.c_sym_set_tristate_value)(self.c_symbol, value))
+            ensure!(
+                (self.bridge.vtable.c_sym_set_tristate_value)(self.c_symbol, value),
+                SymbolSetError::AssignmentFailed
+            );
+            Ok(())
         };
 
-        let ret = match (self.symbol_type(), value) {
+        match (self.symbol_type(), value) {
+            (SymbolType::Unknown, SymbolValue::Auto(_)) => return Err(SymbolSetError::UnknownType),
+            (SymbolType::Boolean, SymbolValue::Auto(value)) => {
+                // Allowed "y" "n"
+                ensure!(matches!(value.as_str(), "y" | "n"), SymbolSetError::InvalidBoolean);
+                self._set_value(SymbolValue::Boolean(
+                    value.parse::<Tristate>().unwrap() == Tristate::Yes,
+                ))?
+            }
+            (SymbolType::Tristate, SymbolValue::Auto(value)) => {
+                // Allowed "y" "m" "n"
+                let value = value.parse::<Tristate>().map_err(|_| SymbolSetError::InvalidTristate)?;
+                self._set_value(SymbolValue::Tristate(value))?
+            }
+            (SymbolType::Int, SymbolValue::Auto(value)) => {
+                // Allowed: Any u64 integer
+                let value = value.parse::<u64>().map_err(|_| SymbolSetError::InvalidInt)?;
+                self._set_value(SymbolValue::Int(value))?
+            }
+            (SymbolType::Hex, SymbolValue::Auto(value)) => {
+                // Allowed: Any u64 integer
+                ensure!(&value[..2] == "0x", SymbolSetError::InvalidHex);
+                let value = u64::from_str_radix(&value[2..], 16).map_err(|_| SymbolSetError::InvalidHex)?;
+                self._set_value(SymbolValue::Hex(value))?
+            }
+            (SymbolType::String, SymbolValue::Auto(value)) => self._set_value(SymbolValue::String(value.to_owned()))?,
             (SymbolType::Boolean | SymbolType::Tristate, SymbolValue::Boolean(value)) => set_tristate(value.into())?,
             (SymbolType::Boolean, SymbolValue::Tristate(value)) if value != Tristate::Mod => set_tristate(value)?,
             (SymbolType::Tristate, SymbolValue::Tristate(value)) => set_tristate(value)?,
@@ -121,25 +110,32 @@ impl<'a> Symbol<'a> {
                 let max = (self.bridge.vtable.c_sym_int_get_max)(self.c_symbol);
                 ensure!(value >= min && value <= max, SymbolSetError::OutOfRange);
                 let cstr = CString::new(value.to_string()).unwrap();
-                (self.bridge.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr())
+                ensure!(
+                    (self.bridge.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr()),
+                    SymbolSetError::AssignmentFailed
+                );
             }
             (SymbolType::Hex, SymbolValue::Hex(value)) => {
                 let min = (self.bridge.vtable.c_sym_int_get_min)(self.c_symbol);
                 let max = (self.bridge.vtable.c_sym_int_get_max)(self.c_symbol);
                 ensure!(value >= min && value <= max, SymbolSetError::OutOfRange);
                 let cstr = CString::new(format!("{:#x}", value)).unwrap();
-                (self.bridge.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr())
+                ensure!(
+                    (self.bridge.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr()),
+                    SymbolSetError::AssignmentFailed
+                );
             }
             (SymbolType::String, SymbolValue::String(value)) => {
                 let cstr = CString::new(value).unwrap();
-                (self.bridge.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr())
+                ensure!(
+                    (self.bridge.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr()),
+                    SymbolSetError::AssignmentFailed
+                );
             }
-            (SymbolType::Int, SymbolValue::Number(value)) => return self.set_symbol_value(SymbolValue::Int(value)),
-            (SymbolType::Hex, SymbolValue::Number(value)) => return self.set_symbol_value(SymbolValue::Hex(value)),
+            (SymbolType::Int, SymbolValue::Number(value)) => return self._set_value(SymbolValue::Int(value)),
+            (SymbolType::Hex, SymbolValue::Number(value)) => return self._set_value(SymbolValue::Hex(value)),
             (_, _) => return Err(SymbolSetError::InvalidValue),
         };
-
-        ensure!(ret, SymbolSetError::AssignmentFailed);
 
         // TODO only recalculate the current symbol except when this was a choice?
         // not sure, check C code. Probably we need to go through all deps and recalculate those
@@ -147,6 +143,22 @@ impl<'a> Symbol<'a> {
         self.bridge.recalculate_all_symbols();
 
         Ok(())
+    }
+
+    pub fn set_value_tracked(&mut self, value: SymbolValue) -> Result<(), SymbolSetError> {
+        let current_value = self.get_value();
+        let ret = self._set_value(value);
+        self.bridge.history.add(Transaction {
+            from,
+            current_value,
+            value,
+            ret,
+        });
+        ret
+    }
+
+    pub fn get_value(&self) -> Result<SymbolValue, ()> {
+        return Ok(SymbolValue::Int(0));
     }
 
     pub fn symbol_type(&self) -> SymbolType {

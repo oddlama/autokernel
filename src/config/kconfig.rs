@@ -50,7 +50,7 @@ impl Config for KConfig {
             bridge
                 .symbol(k)
                 .with_context(|| format!("could not get symbol {:?}", k))?
-                .set_symbol_value_auto(&v)?;
+                .set_value_tracked(bridge::SymbolValue::Auto(*v))?;
         }
         Ok(())
     }

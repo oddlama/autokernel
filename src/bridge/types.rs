@@ -104,6 +104,7 @@ pub enum SymbolValue {
     Hex(u64),
     Number(u64),
     String(String),
+    Auto(String),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]

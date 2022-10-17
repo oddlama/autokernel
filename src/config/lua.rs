@@ -44,7 +44,7 @@ impl Config for LuaConfig {
                     bridge
                         .symbol(&name)
                         .unwrap()
-                        .set_symbol_value_auto(&value)
+                        .set_value_tracked(SymbolValue::Auto(value))
                         .map_err(|e| LuaError::RuntimeError(e.to_string()))?;
                     println!("rust: set auto {name} = {value}");
                     StdOk(())
@@ -53,7 +53,7 @@ impl Config for LuaConfig {
                     bridge
                         .symbol(&name)
                         .unwrap()
-                        .set_symbol_value(SymbolValue::Boolean(value.clone()))
+                        .set_value_tracked(SymbolValue::Boolean(value.clone()))
                         .map_err(|e| LuaError::RuntimeError(e.to_string()))?;
                     println!("rust: set bool {name} = {value}");
                     StdOk(())
@@ -68,7 +68,7 @@ impl Config for LuaConfig {
                     bridge
                         .symbol(&name)
                         .unwrap()
-                        .set_symbol_value(SymbolValue::Number(value as u64))
+                        .set_value_tracked(SymbolValue::Number(value as u64))
                         .map_err(|e| LuaError::RuntimeError(e.to_string()))?;
                     println!("rust: set number {name} = {:x} -> {:x}", value, value as u64);
                     StdOk(())
@@ -77,7 +77,7 @@ impl Config for LuaConfig {
                     bridge
                         .symbol(&name)
                         .unwrap()
-                        .set_symbol_value(SymbolValue::Tristate(
+                        .set_value_tracked(SymbolValue::Tristate(
                             value
                                 .parse()
                                 .map_err(|_| LuaError::RuntimeError("Could not from str".into()))?,
