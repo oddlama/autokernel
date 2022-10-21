@@ -1,16 +1,32 @@
-use anyhow::{ensure, Context, Error, Result};
-use libc::c_char;
-use std::collections::HashMap;
-use std::ffi::{CStr, CString};
-use std::fs;
-use std::io::prelude::*;
-use std::os::unix::fs::OpenOptionsExt;
-use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use super::{SymbolValue, SymbolSetError};
 
-pub struct Transaction {
+#[derive(Debug)]
+pub enum Cause {
+    Unknown
 }
 
 #[derive(Debug)]
+pub struct TransactionError {
+    pub cause: Cause,
+    pub error: SymbolSetError,
+}
+
+#[derive(Debug)]
+pub struct Transaction {
+    pub symbol: String,
+    pub from: String,
+    pub value_before: SymbolValue,
+    pub value_after: SymbolValue,
+    pub error: Option<TransactionError>,
+}
+
+#[derive(Debug, Default)]
 pub struct TransactionHistory {
+    entries: Vec<Transaction>,
+}
+
+impl TransactionHistory {
+    pub fn add(&mut self, transaction: Transaction) {
+        self.entries.push(transaction);
+    }
 }

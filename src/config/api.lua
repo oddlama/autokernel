@@ -5,7 +5,7 @@ Tristate = { }
 Tristate.__index = Tristate
 
 function Tristate:new(name, value)
-	o = {}
+	local o = {}
 	setmetatable(o, self)
 	o.name = name
 	o.value = value
@@ -71,7 +71,7 @@ function Symbol:is(value)
 	end
 end
 
-function Symbol:v(value) return self:value() end
+function Symbol:v() return self:value() end
 function Symbol:value()
 	local stype = self:type()
 	local str_value = self:str_value()
@@ -90,11 +90,11 @@ end
 function Symbol:__call(value) self:set(value) end
 function Symbol:set(value)
 	if getmetatable(value) == Tristate then
-		ak.symbol_set_tristate(self.name, value.name)
+		ak.symbol_set_tristate(self.name, value.name, debug.traceback())
 	elseif type(value) == "string" then
-		ak.symbol_set_auto(self.name, value)
+		ak.symbol_set_auto(self.name, value, debug.traceback())
 	elseif type(value) == "number" then
-		ak.symbol_set_number(self.name, value)
+		ak.symbol_set_number(self.name, value, debug.traceback())
 	else
 		error ("Unsupported value type '" .. type(value) .. "'")
 	end

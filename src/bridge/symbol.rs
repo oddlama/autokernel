@@ -1,5 +1,7 @@
 use super::expr::Expr;
+use super::transactions::Cause;
 use super::transactions::Transaction;
+use super::transactions::TransactionError;
 use super::types::*;
 use super::Bridge;
 use anyhow::anyhow;
@@ -18,7 +20,7 @@ macro_rules! ensure {
     };
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 #[error("{self:?}")]
 pub enum SymbolSetError {
     UnknownType,
@@ -145,20 +147,24 @@ impl<'a> Symbol<'a> {
         Ok(())
     }
 
-    pub fn set_value_tracked(&mut self, value: SymbolValue) -> Result<(), SymbolSetError> {
+    pub fn set_value_tracked(&mut self, value: SymbolValue, from: String) -> Result<(), SymbolSetError> {
         let current_value = self.get_value();
         let ret = self._set_value(value);
-        self.bridge.history.add(Transaction {
+        self.bridge.history.borrow_mut().add(Transaction {
+            symbol: self.name().unwrap().to_string(),
             from,
-            current_value,
-            value,
-            ret,
+            value_before: current_value,
+            value_after: self.get_value(),
+            error: ret.as_ref().err().map(|e| TransactionError {
+                cause: Cause::Unknown,
+                error: e.clone(),
+            }),
         });
         ret
     }
 
-    pub fn get_value(&self) -> Result<SymbolValue, ()> {
-        return Ok(SymbolValue::Int(0));
+    pub fn get_value(&self) -> SymbolValue {
+        return SymbolValue::Int(0);
     }
 
     pub fn symbol_type(&self) -> SymbolType {
@@ -227,7 +233,7 @@ impl<'a> fmt::Display for Symbol<'a> {
                 Tristate::Mod => Color::Yellow,
                 Tristate::Yes => Color::Green,
             };
-            write!(f, "{}={}", name.color(color), self.get_tristate_value())
+            write!(f, "{}{}", name.color(color), format!("={}", self.get_tristate_value()).dimmed())
         } else {
             if self.is_choice() {
                 let choices = self.choices().unwrap().into_iter().map(|s| self.bridge.wrap_symbol(s));

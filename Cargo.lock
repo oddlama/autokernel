@@ -62,7 +62,6 @@ dependencies = [
  "colored",
  "const_format",
  "env_logger",
- "indexmap",
  "itertools",
  "libc",
  "libloading",

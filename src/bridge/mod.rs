@@ -1,5 +1,6 @@
 use anyhow::{ensure, Context, Error, Result};
 use libc::c_char;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::fs;
@@ -32,7 +33,7 @@ pub struct Bridge {
     vtable: BridgeVTable,
     pub kernel_dir: PathBuf,
 
-    history: TransactionHistory,
+    history: RefCell<TransactionHistory>,
 
     pub symbols: Vec<*mut CSymbol>,
     pub name_to_symbol: HashMap<String, *mut CSymbol>,
@@ -78,7 +79,7 @@ impl Bridge {
             kernel_dir,
             symbols,
             name_to_symbol,
-            history: TransactionHistory {  },
+            history: RefCell::new(TransactionHistory::default()),
         })
     }
 

@@ -25,9 +25,10 @@ impl LuaConfig {
             fs::read_to_string(file)?,
         ))
     }
+
     pub fn from_raw(filename: String, code: String) -> LuaConfig {
         LuaConfig {
-            lua: Lua::new(),
+            lua: unsafe { Lua::new_with_debug() },
             filename,
             code,
         }
@@ -40,25 +41,25 @@ impl Config for LuaConfig {
             lua_ctx.scope(|scope| {
                 let globals = lua_ctx.globals();
                 lua_ctx.load(include_bytes!("api.lua")).set_name("api.lua")?.exec()?;
-                let symbol_set_auto = scope.create_function(|_, (name, value): (String, String)| {
+                let symbol_set_auto = scope.create_function(|_, (name, value, from): (String, String, String)| {
                     bridge
                         .symbol(&name)
                         .unwrap()
-                        .set_value_tracked(SymbolValue::Auto(value))
+                        .set_value_tracked(SymbolValue::Auto(value.clone()), from)
                         .map_err(|e| LuaError::RuntimeError(e.to_string()))?;
                     println!("rust: set auto {name} = {value}");
                     StdOk(())
                 })?;
-                let symbol_set_bool = scope.create_function(|_, (name, value): (String, bool)| {
+                let symbol_set_bool = scope.create_function(|_, (name, value, from): (String, bool, String)| {
                     bridge
                         .symbol(&name)
                         .unwrap()
-                        .set_value_tracked(SymbolValue::Boolean(value.clone()))
+                        .set_value_tracked(SymbolValue::Boolean(value.clone()), from)
                         .map_err(|e| LuaError::RuntimeError(e.to_string()))?;
                     println!("rust: set bool {name} = {value}");
                     StdOk(())
                 })?;
-                let symbol_set_number = scope.create_function(|_, (name, value): (String, i64)| {
+                let symbol_set_number = scope.create_function(|_, (name, value, from): (String, i64, String)| {
                     // We use an i64 here to detect whether values in lua got clipped. Apparently
                     // when values wrap
                     if value < 0 {
@@ -68,24 +69,28 @@ impl Config for LuaConfig {
                     bridge
                         .symbol(&name)
                         .unwrap()
-                        .set_value_tracked(SymbolValue::Number(value as u64))
+                        .set_value_tracked(SymbolValue::Number(value as u64), from)
                         .map_err(|e| LuaError::RuntimeError(e.to_string()))?;
                     println!("rust: set number {name} = {:x} -> {:x}", value, value as u64);
                     StdOk(())
                 })?;
-                let symbol_set_tristate = scope.create_function(|_, (name, value): (String, String)| {
-                    bridge
-                        .symbol(&name)
-                        .unwrap()
-                        .set_value_tracked(SymbolValue::Tristate(
-                            value
-                                .parse()
-                                .map_err(|_| LuaError::RuntimeError("Could not from str".into()))?,
-                        ))
-                        .map_err(|e| LuaError::RuntimeError(e.to_string()))?;
-                    println!("rust: set tristate {name} = {value}");
-                    StdOk(())
-                })?;
+                let symbol_set_tristate =
+                    scope.create_function(|_, (name, value, from): (String, String, String)| {
+                        bridge
+                            .symbol(&name)
+                            .unwrap()
+                            .set_value_tracked(
+                                SymbolValue::Tristate(
+                                    value
+                                        .parse()
+                                        .map_err(|_| LuaError::RuntimeError("Could not from str".into()))?,
+                                ),
+                                from,
+                            )
+                            .map_err(|e| LuaError::RuntimeError(e.to_string()))?;
+                        println!("rust: set tristate {name} = {value}");
+                        StdOk(())
+                    })?;
                 let symbol_get_string =
                     scope.create_function(|_, name: String| StdOk(bridge.symbol(&name).unwrap().get_string_value()))?;
                 let symbol_get_type = scope.create_function(|_, name: String| {
