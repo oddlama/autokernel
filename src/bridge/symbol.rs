@@ -251,15 +251,15 @@ impl<'a> Symbol<'a> {
 impl<'a> fmt::Display for Symbol<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(name) = self.name() {
-            let (name_color, value_indicator) = match self.get_value().unwrap() {
-                SymbolValue::Boolean(value) => (
+            let (name_color, value_indicator) = match self.get_value() {
+                Ok(SymbolValue::Boolean(value)) => (
                     match value {
                         false => Color::Red,
                         true => Color::Green,
                     },
                     format!("={}", value),
                 ),
-                SymbolValue::Tristate(value) => (
+                Ok(SymbolValue::Tristate(value)) => (
                     match value {
                         Tristate::No => Color::Red,
                         Tristate::Mod => Color::Yellow,
@@ -267,10 +267,10 @@ impl<'a> fmt::Display for Symbol<'a> {
                     },
                     format!("={}", value),
                 ),
-                SymbolValue::Int(value) => (Color::White, format!("={}", value)),
-                SymbolValue::Hex(value) => (Color::White, format!("={:x}", value)),
-                SymbolValue::String(value) => (Color::White, format!("=\"{}\"", value)),
-                _ => return Err(fmt::Error {}),
+                Ok(SymbolValue::Int(value)) => (Color::White, format!("={}", value)),
+                Ok(SymbolValue::Hex(value)) => (Color::White, format!("={:x}", value)),
+                Ok(SymbolValue::String(value)) => (Color::White, format!("=\"{}\"", value)),
+                _ => (Color::BrightRed, "=?".to_string()),
             };
             write!(f, "{}{}", name.color(name_color), value_indicator.dimmed())
         } else {
