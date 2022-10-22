@@ -1,4 +1,4 @@
-use super::{SymbolSetError, SymbolValue};
+use super::{SymbolSetError, SymbolValue, Bridge};
 
 use anyhow::{bail, Result};
 use colored::Colorize;
@@ -58,19 +58,21 @@ fn print_value_change_note(transaction: &Transaction) {
     }
 }
 
-pub fn validate_transactions(history: &Vec<Transaction>) -> Result<()> {
+pub fn validate_transactions(bridge: &Bridge, history: &Vec<Transaction>) -> Result<()> {
     let mut n_errors = 0u32;
     for (i, t) in history.iter().enumerate() {
         if let Some(error) = &t.error {
             n_errors += 1;
             eprintln!(
-                "{}: failed to set symbol {} to {:?}",
+                "{}: failed to assign symbol {} to {:?}",
                 "error".red().bold(),
                 &t.symbol,
                 &t.value
             );
             print_location(t);
             print_value_change_note(t);
+            let symbol = bridge.symbol(&t.symbol);
+            eprintln!("TODO print nice: caused by {:?}", error);
             eprintln!("");
         }
 

@@ -1,5 +1,4 @@
 use super::Config;
-use crate::bridge::validate_transactions;
 use crate::{
     bridge::{Bridge, SymbolValue},
     config,
@@ -145,7 +144,6 @@ impl Config for LuaConfig {
             })
         })?;
 
-        validate_transactions(&bridge.history.borrow())?;
         Ok(())
     }
 }

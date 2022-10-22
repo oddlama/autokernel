@@ -1,5 +1,4 @@
-use autokernel::bridge::Bridge;
-use autokernel::config::{self, Config};
+use autokernel::{bridge::{Bridge, validate_transactions}, config::{self, Config}};
 
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -80,6 +79,8 @@ fn build_kernel(args: &Args, config: &mut dyn Config, bridge: &Bridge, action: &
     }
 
     config.apply_kernel_config(bridge)?;
+    validate_transactions(bridge, &bridge.history.borrow())?;
+
     let output = args.kernel_dir.join(".config");
     bridge.write_config(output)?;
 
