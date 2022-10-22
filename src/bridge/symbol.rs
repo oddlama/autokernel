@@ -1,7 +1,5 @@
 use super::expr::Expr;
-use super::transaction::Cause;
 use super::transaction::Transaction;
-use super::transaction::TransactionError;
 use super::types::*;
 use super::Bridge;
 use anyhow::anyhow;
@@ -21,25 +19,37 @@ macro_rules! ensure {
 }
 
 #[derive(Error, Debug, Clone)]
-#[error("{self:?}")]
 pub enum SymbolSetError {
+    #[error("Unknown symbol type")]
     UnknownType,
+    #[error("Is const")]
     IsConst,
+    #[error("Cannot be set directly, assign child instead")]
     IsChoice,
 
+    #[error("Cannot be parsed as an integer")]
     InvalidInt,
+    #[error("Cannot be parsed as a hex integer")]
     InvalidHex,
+    #[error("Valid tristates are: n, m, y")]
     InvalidTristate,
+    #[error("Valid booleans are: n, y")]
     InvalidBoolean,
 
-    VisibilityTooLow,
+    #[error("value must be inside visibility bounds [{min}, {max}]")]
+    VisibilityTooLow{ min: Tristate, max: Tristate },
+    #[error("TODO")]
     RequiredByOther,
+    #[error("TODO")]
     InvalidVisibility,
+    #[error("Module support is not enabled (try setting MODULES=y beforehand)")]
     ModulesNotEnabled,
-    OutOfRange,
+    #[error("Value must be in range [{min} ({min:#x}), {max} ({max:#x})]")]
+    OutOfRange{min: u64, max: u64 },
+    #[error("Incompatible value type")]
     InvalidValue,
+    #[error("Value was rejected by kernel for an unknown reason")]
     AssignmentFailed,
-    // TODO away Other(#[from] anyhow::Error),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -62,10 +72,11 @@ impl<'a> Symbol<'a> {
         ensure!(!self.is_choice(), SymbolSetError::IsChoice);
 
         let set_tristate = |value: Tristate| -> Result<(), SymbolSetError> {
-            let rev_dep_tri = unsafe { (*self.c_symbol).reverse_dependencies.tri };
-            ensure!(value <= self.visible(), SymbolSetError::VisibilityTooLow);
-            ensure!(value >= rev_dep_tri, SymbolSetError::RequiredByOther);
-            ensure!(self.visible() > rev_dep_tri, SymbolSetError::InvalidVisibility);
+            let min = unsafe { (*self.c_symbol).reverse_dependencies.tri };
+            let max = self.visible();
+            ensure!(value <= max, SymbolSetError::VisibilityTooLow{min, max});
+            ensure!(value >= min, SymbolSetError::RequiredByOther);
+            ensure!(max > min, SymbolSetError::InvalidVisibility);
             ensure!(
                 !(value == Tristate::Mod
                     && self.bridge.symbol("MODULES").unwrap().get_tristate_value() == Tristate::No),
@@ -110,7 +121,7 @@ impl<'a> Symbol<'a> {
             (SymbolType::Int, SymbolValue::Int(value)) => {
                 let min = (self.bridge.vtable.c_sym_int_get_min)(self.c_symbol);
                 let max = (self.bridge.vtable.c_sym_int_get_max)(self.c_symbol);
-                ensure!(value >= min && value <= max, SymbolSetError::OutOfRange);
+                ensure!(value >= min && value <= max, SymbolSetError::OutOfRange{min, max});
                 let cstr = CString::new(value.to_string()).unwrap();
                 ensure!(
                     (self.bridge.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr()),
@@ -120,7 +131,7 @@ impl<'a> Symbol<'a> {
             (SymbolType::Hex, SymbolValue::Hex(value)) => {
                 let min = (self.bridge.vtable.c_sym_int_get_min)(self.c_symbol);
                 let max = (self.bridge.vtable.c_sym_int_get_max)(self.c_symbol);
-                ensure!(value >= min && value <= max, SymbolSetError::OutOfRange);
+                ensure!(value >= min && value <= max, SymbolSetError::OutOfRange{min, max});
                 let cstr = CString::new(format!("{:#x}", value)).unwrap();
                 ensure!(
                     (self.bridge.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr()),
@@ -159,10 +170,7 @@ impl<'a> Symbol<'a> {
             value,
             value_before: current_value,
             value_after: self.get_value().unwrap(),
-            error: ret.clone().err().map(|e| TransactionError {
-                cause: Cause::Unknown,
-                error: e,
-            }),
+            error: ret.clone().err(),
         });
         ret
     }

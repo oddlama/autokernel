@@ -4,17 +4,6 @@ use anyhow::{bail, Result};
 use colored::Colorize;
 
 #[derive(Debug)]
-pub enum Cause {
-    Unknown,
-}
-
-#[derive(Debug)]
-pub struct TransactionError {
-    pub cause: Cause,
-    pub error: SymbolSetError,
-}
-
-#[derive(Debug)]
 pub struct Transaction {
     /// The affected symbol
     pub symbol: String,
@@ -29,7 +18,7 @@ pub struct Transaction {
     /// The value of the symbol after the transaction
     pub value_after: SymbolValue,
     /// Any error that occurred
-    pub error: Option<TransactionError>,
+    pub error: Option<SymbolSetError>,
 }
 
 fn print_location(transaction: &Transaction) {
@@ -59,6 +48,8 @@ fn print_value_change_note(transaction: &Transaction) {
 }
 
 pub fn validate_transactions(bridge: &Bridge, history: &Vec<Transaction>) -> Result<()> {
+    // TODO extract source line and display like rustc
+    // hide stacktrace unless --verbose / --debug is given
     let mut n_errors = 0u32;
     for (i, t) in history.iter().enumerate() {
         if let Some(error) = &t.error {
@@ -71,8 +62,11 @@ pub fn validate_transactions(bridge: &Bridge, history: &Vec<Transaction>) -> Res
             );
             print_location(t);
             print_value_change_note(t);
-            let symbol = bridge.symbol(&t.symbol);
-            eprintln!("TODO print nice: caused by {:?}", error);
+            eprintln!(
+                "{}: {}",
+                "caused by".red(),
+                error,
+            );
             eprintln!("");
         }
 
