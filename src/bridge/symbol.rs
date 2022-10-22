@@ -1,7 +1,7 @@
 use super::expr::Expr;
-use super::transactions::Cause;
-use super::transactions::Transaction;
-use super::transactions::TransactionError;
+use super::transaction::Cause;
+use super::transaction::Transaction;
+use super::transaction::TransactionError;
 use super::types::*;
 use super::Bridge;
 use anyhow::anyhow;
@@ -57,7 +57,7 @@ impl<'a> Symbol<'a> {
         (self.bridge.vtable.c_sym_calc_value)(self.c_symbol);
     }
 
-    pub fn _set_value(&mut self, value: SymbolValue) -> Result<(), SymbolSetError> {
+    pub fn set_value(&mut self, value: SymbolValue) -> Result<(), SymbolSetError> {
         ensure!(!self.is_const(), SymbolSetError::IsConst);
         ensure!(!self.is_choice(), SymbolSetError::IsChoice);
 
@@ -83,27 +83,27 @@ impl<'a> Symbol<'a> {
             (SymbolType::Boolean, SymbolValue::Auto(value)) => {
                 // Allowed "y" "n"
                 ensure!(matches!(value.as_str(), "y" | "n"), SymbolSetError::InvalidBoolean);
-                self._set_value(SymbolValue::Boolean(
+                self.set_value(SymbolValue::Boolean(
                     value.parse::<Tristate>().unwrap() == Tristate::Yes,
                 ))?
             }
             (SymbolType::Tristate, SymbolValue::Auto(value)) => {
                 // Allowed "y" "m" "n"
                 let value = value.parse::<Tristate>().map_err(|_| SymbolSetError::InvalidTristate)?;
-                self._set_value(SymbolValue::Tristate(value))?
+                self.set_value(SymbolValue::Tristate(value))?
             }
             (SymbolType::Int, SymbolValue::Auto(value)) => {
                 // Allowed: Any u64 integer
                 let value = value.parse::<u64>().map_err(|_| SymbolSetError::InvalidInt)?;
-                self._set_value(SymbolValue::Int(value))?
+                self.set_value(SymbolValue::Int(value))?
             }
             (SymbolType::Hex, SymbolValue::Auto(value)) => {
                 // Allowed: Any u64 integer
                 ensure!(&value[..2] == "0x", SymbolSetError::InvalidHex);
                 let value = u64::from_str_radix(&value[2..], 16).map_err(|_| SymbolSetError::InvalidHex)?;
-                self._set_value(SymbolValue::Hex(value))?
+                self.set_value(SymbolValue::Hex(value))?
             }
-            (SymbolType::String, SymbolValue::Auto(value)) => self._set_value(SymbolValue::String(value.to_owned()))?,
+            (SymbolType::String, SymbolValue::Auto(value)) => self.set_value(SymbolValue::String(value.to_owned()))?,
             (SymbolType::Boolean | SymbolType::Tristate, SymbolValue::Boolean(value)) => set_tristate(value.into())?,
             (SymbolType::Boolean, SymbolValue::Tristate(value)) if value != Tristate::Mod => set_tristate(value)?,
             (SymbolType::Tristate, SymbolValue::Tristate(value)) => set_tristate(value)?,
@@ -134,8 +134,8 @@ impl<'a> Symbol<'a> {
                     SymbolSetError::AssignmentFailed
                 );
             }
-            (SymbolType::Int, SymbolValue::Number(value)) => return self._set_value(SymbolValue::Int(value)),
-            (SymbolType::Hex, SymbolValue::Number(value)) => return self._set_value(SymbolValue::Hex(value)),
+            (SymbolType::Int, SymbolValue::Number(value)) => return self.set_value(SymbolValue::Int(value)),
+            (SymbolType::Hex, SymbolValue::Number(value)) => return self.set_value(SymbolValue::Hex(value)),
             (_, _) => return Err(SymbolSetError::InvalidValue),
         };
 
@@ -147,24 +147,39 @@ impl<'a> Symbol<'a> {
         Ok(())
     }
 
-    pub fn set_value_tracked(&mut self, value: SymbolValue, from: String) -> Result<(), SymbolSetError> {
-        let current_value = self.get_value();
-        let ret = self._set_value(value);
-        self.bridge.history.borrow_mut().add(Transaction {
+    pub fn set_value_tracked(&mut self, value: SymbolValue, from: String, traceback: Option<String>) -> Result<(), SymbolSetError> {
+        let current_value = self.get_value().unwrap();
+        print!("{self} -> ");
+        let ret = self.set_value(value.clone());
+        println!("{self}");
+        self.bridge.history.borrow_mut().push(Transaction {
             symbol: self.name().unwrap().to_string(),
             from,
+            traceback,
+            value,
             value_before: current_value,
-            value_after: self.get_value(),
-            error: ret.as_ref().err().map(|e| TransactionError {
+            value_after: self.get_value().unwrap(),
+            error: ret.clone().err().map(|e| TransactionError {
                 cause: Cause::Unknown,
-                error: e.clone(),
+                error: e,
             }),
         });
         ret
     }
 
-    pub fn get_value(&self) -> SymbolValue {
-        return SymbolValue::Int(0);
+    pub fn get_value(&self) -> Result<SymbolValue, ()> {
+        match self.symbol_type() {
+            SymbolType::Unknown => return Err(()),
+            SymbolType::Boolean => Ok(SymbolValue::Boolean(self.get_tristate_value() == Tristate::Yes)),
+            SymbolType::Tristate => Ok(SymbolValue::Tristate(self.get_tristate_value())),
+            SymbolType::Int => Ok(SymbolValue::Int(
+                self.get_string_value().parse::<u64>().map_err(|_| ())?,
+            )),
+            SymbolType::Hex => Ok(SymbolValue::Hex(
+                u64::from_str_radix(&self.get_string_value()[2..], 16).map_err(|_| ())?,
+            )),
+            SymbolType::String => Ok(SymbolValue::String(self.get_string_value())),
+        }
     }
 
     pub fn symbol_type(&self) -> SymbolType {
@@ -228,18 +243,34 @@ impl<'a> Symbol<'a> {
 impl<'a> fmt::Display for Symbol<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(name) = self.name() {
-            let color = match self.get_tristate_value() {
-                Tristate::No => Color::Red,
-                Tristate::Mod => Color::Yellow,
-                Tristate::Yes => Color::Green,
+            let (name_color, value_indicator) = match self.get_value().unwrap() {
+                SymbolValue::Boolean(value) => (
+                    match value {
+                        false => Color::Red,
+                        true => Color::Green,
+                    },
+                    format!("={}", value),
+                ),
+                SymbolValue::Tristate(value) => (
+                    match value {
+                        Tristate::No => Color::Red,
+                        Tristate::Mod => Color::Yellow,
+                        Tristate::Yes => Color::Green,
+                    },
+                    format!("={}", value),
+                ),
+                SymbolValue::Int(value) => (Color::White, format!("={}", value)),
+                SymbolValue::Hex(value) => (Color::White, format!("={:x}", value)),
+                SymbolValue::String(value) => (Color::White, format!("=\"{}\"", value)),
+                _ => return Err(fmt::Error {}),
             };
-            write!(f, "{}{}", name.color(color), format!("={}", self.get_tristate_value()).dimmed())
+            write!(f, "{}{}", name.color(name_color), value_indicator.dimmed())
         } else {
             if self.is_choice() {
                 let choices = self.choices().unwrap().into_iter().map(|s| self.bridge.wrap_symbol(s));
                 write!(f, "<choice>[{}]", choices.format(", "))
             } else {
-                write!(f, "?")
+                write!(f, "<??>")
             }
         }
     }

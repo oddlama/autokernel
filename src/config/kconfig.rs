@@ -17,16 +17,16 @@ struct Assignment {
 }
 
 pub struct KConfig {
-    content: String,
+    filename: String,
     assignments: Vec<Assignment>,
 }
 
 impl KConfig {
     pub fn new(path: impl AsRef<Path>) -> Result<KConfig> {
-        KConfig::from_content(fs::read_to_string(path)?)
+        KConfig::from_content(path.as_ref().display().to_string(), fs::read_to_string(path)?)
     }
 
-    pub fn from_content(content: String) -> Result<KConfig> {
+    pub fn from_content(filename: String, content: String) -> Result<KConfig> {
         let mut assignments = Vec::new();
         for (i, line) in content.lines().enumerate() {
             let line = line.trim();
@@ -47,7 +47,7 @@ impl KConfig {
                 line: i + 1,
             });
         }
-        Ok(KConfig { content, assignments })
+        Ok(KConfig { filename, assignments })
     }
 }
 
@@ -59,7 +59,8 @@ impl Config for KConfig {
                 .with_context(|| format!("could not get symbol {:?}", assignment.symbol))?
                 .set_value_tracked(
                     bridge::SymbolValue::Auto(assignment.value.clone()),
-                    format!("line {}", assignment.line),
+                    format!("{}:{}", self.filename, assignment.line),
+                    None
                 )?;
         }
         Ok(())

@@ -87,14 +87,16 @@ function Symbol:value()
 	end
 end
 
-function Symbol:__call(value) self:set(value) end
-function Symbol:set(value)
+function Symbol:__call(value) self:set(value, debug.getinfo(2)) end
+function Symbol:set(value, dbginfo)
+	dbginfo = dbginfo or debug.getinfo(2)
+	local from = dbginfo.source .. ":" .. dbginfo.currentline
 	if getmetatable(value) == Tristate then
-		ak.symbol_set_tristate(self.name, value.name, debug.traceback())
+		ak.symbol_set_tristate(self.name, value.name, from, debug.traceback())
 	elseif type(value) == "string" then
-		ak.symbol_set_auto(self.name, value, debug.traceback())
+		ak.symbol_set_auto(self.name, value, from, debug.traceback())
 	elseif type(value) == "number" then
-		ak.symbol_set_number(self.name, value, debug.traceback())
+		ak.symbol_set_number(self.name, value, from, debug.traceback())
 	else
 		error ("Unsupported value type '" .. type(value) .. "'")
 	end

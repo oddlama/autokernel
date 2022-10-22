@@ -10,8 +10,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 mod satisfier;
-mod transactions;
-use transactions::*;
+mod transaction;
+pub use transaction::*;
 
 mod symbol;
 // dont show abstraction to parent modules
@@ -33,7 +33,7 @@ pub struct Bridge {
     vtable: BridgeVTable,
     pub kernel_dir: PathBuf,
 
-    history: RefCell<TransactionHistory>,
+    pub history: RefCell<Vec<Transaction>>,
 
     pub symbols: Vec<*mut CSymbol>,
     pub name_to_symbol: HashMap<String, *mut CSymbol>,
@@ -79,7 +79,7 @@ impl Bridge {
             kernel_dir,
             symbols,
             name_to_symbol,
-            history: RefCell::new(TransactionHistory::default()),
+            history: RefCell::new(Vec::new()),
         })
     }
 
