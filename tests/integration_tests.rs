@@ -39,7 +39,7 @@ fn test_symbol_tristate(bridge: &Bridge) {
     assert_eq!(sym.get_tristate_value(), Tristate::No);
 
     // Setting
-    sym.set_value_tracked(SymbolValue::Tristate(Tristate::Yes)).unwrap();
+    sym.set_value_tracked(SymbolValue::Tristate(Tristate::Yes), format!("{}:{}", file!(), line!()), None).unwrap();
     assert_eq!(sym.get_tristate_value(), Tristate::Yes);
 }
 
@@ -48,8 +48,8 @@ fn test_symbol_tristate(bridge: &Bridge) {
 fn integration_test_kconfig() {
     let bridge = setup();
     info!("testing kconfig");
-    let config = KConfig::from_lines(include_str!("good.kconfig").lines()).unwrap();
-    test_config(&bridge, &config);
+    let config = KConfig::from_content("good.kconfig".into(), include_str!("good.kconfig").into()).unwrap();
+    test_config(&bridge, &config).unwrap();
     teardown();
 }
 
@@ -76,7 +76,7 @@ fn integration_test_luaconfig() {
     bridge
         .symbol("MODULES")
         .expect("this should have worked for test")
-        .set_value_tracked(SymbolValue::Tristate(Tristate::Yes))
+        .set_value_tracked(SymbolValue::Tristate(Tristate::Yes), format!("{}:{}", file!(), line!()), None)
         .expect("this was for setting up the test");
     lua_test!(
         "assign syntax",

@@ -7,10 +7,10 @@ use typed_builder::TypedBuilder;
 /// Satisfier to solve symbol dependencies
 ///
 /// ```
-/// let satisfier = Satisfier::builder()
-///     .bound(Tristate::Yes)
-///     .recursive(true);
-/// satisfier.satisfy()
+// let satisfier = Satisfier::builder()
+//     .bound(Tristate::Yes)
+//     .recursive(true);
+// satisfier.satisfy()
 /// ```
 #[derive(TypedBuilder)]
 pub struct Satisfier {

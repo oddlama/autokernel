@@ -158,6 +158,11 @@ impl<'a> Symbol<'a> {
         Ok(())
     }
 
+    /// Sets the symbol parameters, tracking the transaction.
+    /// parameters:
+    /// - value: The symbol value
+    /// - from: The location (file) it was set from
+    /// - traceback: optional
     pub fn set_value_tracked(&mut self, value: SymbolValue, from: String, traceback: Option<String>) -> Result<(), SymbolSetError> {
         let current_value = self.get_value().unwrap();
         print!("{self} -> ");
