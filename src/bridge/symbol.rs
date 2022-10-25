@@ -20,35 +20,39 @@ macro_rules! ensure {
 
 #[derive(Error, Debug, Clone)]
 pub enum SymbolSetError {
-    #[error("Unknown symbol type")]
+    #[error("unknown symbol type")]
     UnknownType,
-    #[error("Is const")]
+    #[error("is const")]
     IsConst,
-    #[error("Cannot be set directly, assign child instead")]
+    #[error("cannot be set directly, assign child instead")]
     IsChoice,
 
-    #[error("Cannot be parsed as an integer")]
+    #[error("cannot be parsed as an integer")]
     InvalidInt,
-    #[error("Cannot be parsed as a hex integer")]
+    #[error("cannot be parsed as a hex integer")]
     InvalidHex,
-    #[error("Valid tristates are: n, m, y")]
+    #[error("valid tristates are: n, m, y")]
     InvalidTristate,
-    #[error("Valid booleans are: n, y")]
+    #[error("valid booleans are: n, y")]
     InvalidBoolean,
 
-    #[error("value must be inside visibility bounds [{min}, {max}]")]
-    VisibilityTooLow{ min: Tristate, max: Tristate },
+    #[error("desired value is above the symbol's visibility bounds [{min}, {max}]")]
+    UnmetDependencies {
+        min: Tristate,
+        max: Tristate,
+        deps: Vec<String>,
+    },
     #[error("TODO")]
     RequiredByOther,
     #[error("TODO")]
     InvalidVisibility,
-    #[error("Module support is not enabled (try setting MODULES=y beforehand)")]
+    #[error("module support is not enabled (try setting MODULES=y beforehand)")]
     ModulesNotEnabled,
-    #[error("Value must be in range [{min} ({min:#x}), {max} ({max:#x})]")]
-    OutOfRange{min: u64, max: u64 },
-    #[error("Incompatible value type")]
+    #[error("value must be in range [{min} ({min:#x}), {max} ({max:#x})]")]
+    OutOfRange { min: u64, max: u64 },
+    #[error("incompatible value type")]
     InvalidValue,
-    #[error("Value was rejected by kernel for an unknown reason")]
+    #[error("value was rejected by kernel for an unknown reason")]
     AssignmentFailed,
 }
 
@@ -74,7 +78,16 @@ impl<'a> Symbol<'a> {
         let set_tristate = |value: Tristate| -> Result<(), SymbolSetError> {
             let min = unsafe { (*self.c_symbol).reverse_dependencies.tri };
             let max = self.visible();
-            ensure!(value <= max, SymbolSetError::VisibilityTooLow{min, max});
+            if value > max {
+                let deps = self
+                    .direct_dependencies()
+                    .unwrap()
+                    .and_clauses()
+                    .into_iter()
+                    .map(|x| x.display(self.bridge).to_string())
+                    .collect_vec();
+                return Err(SymbolSetError::UnmetDependencies { min, max, deps });
+            }
             ensure!(value >= min, SymbolSetError::RequiredByOther);
             ensure!(max > min, SymbolSetError::InvalidVisibility);
             ensure!(
@@ -121,7 +134,7 @@ impl<'a> Symbol<'a> {
             (SymbolType::Int, SymbolValue::Int(value)) => {
                 let min = (self.bridge.vtable.c_sym_int_get_min)(self.c_symbol);
                 let max = (self.bridge.vtable.c_sym_int_get_max)(self.c_symbol);
-                ensure!(value >= min && value <= max, SymbolSetError::OutOfRange{min, max});
+                ensure!(value >= min && value <= max, SymbolSetError::OutOfRange { min, max });
                 let cstr = CString::new(value.to_string()).unwrap();
                 ensure!(
                     (self.bridge.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr()),
@@ -131,7 +144,7 @@ impl<'a> Symbol<'a> {
             (SymbolType::Hex, SymbolValue::Hex(value)) => {
                 let min = (self.bridge.vtable.c_sym_int_get_min)(self.c_symbol);
                 let max = (self.bridge.vtable.c_sym_int_get_max)(self.c_symbol);
-                ensure!(value >= min && value <= max, SymbolSetError::OutOfRange{min, max});
+                ensure!(value >= min && value <= max, SymbolSetError::OutOfRange { min, max });
                 let cstr = CString::new(format!("{:#x}", value)).unwrap();
                 ensure!(
                     (self.bridge.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr()),
@@ -163,7 +176,12 @@ impl<'a> Symbol<'a> {
     /// - value: The symbol value
     /// - from: The location (file) it was set from
     /// - traceback: optional
-    pub fn set_value_tracked(&mut self, value: SymbolValue, from: String, traceback: Option<String>) -> Result<(), SymbolSetError> {
+    pub fn set_value_tracked(
+        &mut self,
+        value: SymbolValue,
+        from: String,
+        traceback: Option<String>,
+    ) -> Result<(), SymbolSetError> {
         let current_value = self.get_value().unwrap();
         print!("{self} -> ");
         let ret = self.set_value(value.clone());

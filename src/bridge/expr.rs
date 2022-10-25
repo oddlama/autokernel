@@ -30,6 +30,36 @@ pub enum Expr {
 }
 
 impl Expr {
+    pub fn or_clauses<'a>(&'a self) -> Vec<&'a Expr> {
+        let mut exprs = Vec::new();
+        fn visit<'a>(exprs: &mut Vec<&'a Expr>, expr: &'a Expr) {
+            match expr {
+                Expr::Or(a, b) => {
+                    visit(exprs, a);
+                    visit(exprs, b);
+                }
+                e => exprs.push(e),
+            }
+        }
+        visit(&mut exprs, &self);
+        return exprs;
+    }
+
+    pub fn and_clauses<'a>(&'a self) -> Vec<&'a Expr> {
+        let mut exprs = Vec::new();
+        fn visit<'a>(exprs: &mut Vec<&'a Expr>, expr: &'a Expr) {
+            match expr {
+                Expr::And(a, b) => {
+                    visit(exprs, a);
+                    visit(exprs, b);
+                }
+                e => exprs.push(e),
+            }
+        }
+        visit(&mut exprs, &self);
+        return exprs;
+    }
+
     pub fn display<'a>(&'a self, bridge: &'a Bridge) -> ExprDisplay {
         ExprDisplay { expr: self, bridge }
     }
