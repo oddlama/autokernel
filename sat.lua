@@ -1,0 +1,2 @@
+RTLWIFI_USB "y"
+VIRTIO_MEM "y"

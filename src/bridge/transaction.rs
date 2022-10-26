@@ -24,9 +24,11 @@ pub struct Transaction {
 fn print_location(transaction: &Transaction) {
     eprintln!("  {} {}", "-->".blue(), transaction.from);
     if let Some(traceback) = &transaction.traceback {
+        eprintln!("   {}", "|".blue());
         for line in traceback.lines() {
             eprintln!("   {} {}", "|".blue(), line.dimmed())
         }
+        eprintln!("   {}", "|".blue());
     }
 }
 
@@ -64,14 +66,34 @@ pub fn validate_transactions(bridge: &Bridge, history: &Vec<Transaction>) -> Res
             print_value_change_note(t);
             eprint!("{}: ", "note".green());
             match error {
-                SymbolSetError::UnmetDependencies { min: _, max: _, deps } => {
+                SymbolSetError::UnmetDependencies {
+                    min: _,
+                    max: _,
+                    deps,
+                    satisfying_configuration,
+                } => {
                     eprintln!("...because it currently has unmet dependencies");
+                    eprintln!("   {}", "|".blue());
                     for dep in deps {
                         eprintln!("   {} {}", "|".blue(), dep)
                     }
-                    eprintln!("{}: did you mean to also set these symbols?", "note".green());
+                    eprintln!("   {}", "|".blue());
+                    if let Some(satconf) = satisfying_configuration {
+                        eprintln!("{}: did you mean to also set these symbols?", "note".green());
+                        eprintln!("   {}", "|".blue());
+                        for sym in satconf {
+                            eprintln!("   {} {:?} {}", "|".blue(), sym, "\"y\"".green())
+                        }
+                        eprintln!("   {}", "|".blue());
+                    } else {
+                        eprintln!(
+                            "   {} note: cannot suggest solution because automatic dependency resolution failed",
+                            "=".blue(),
+                        );
+                        // TODO: show exact error
+                    }
                 }
-                _ => eprintln!("{}", error)
+                _ => eprintln!("{}", error),
             }
             eprintln!("");
         }

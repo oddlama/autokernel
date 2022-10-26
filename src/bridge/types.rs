@@ -17,6 +17,16 @@ pub enum Tristate {
     Yes,
 }
 
+impl Tristate {
+    pub fn not(self) -> Self {
+        match self {
+            Tristate::No => Tristate::Yes,
+            Tristate::Mod => Tristate::Mod,
+            Tristate::Yes => Tristate::No,
+        }
+    }
+}
+
 impl From<bool> for Tristate {
     fn from(value: bool) -> Self {
         if value {
@@ -220,6 +230,19 @@ impl CSymbol {
     pub fn get_tristate_value(&self) -> Tristate {
         self.current_value.tri
     }
+
+    pub fn symbol_type(&self) -> SymbolType {
+        self.symbol_type
+    }
+
+    pub fn is_const(&self) -> bool {
+        self.flags.intersects(SymbolFlags::CONST)
+    }
+
+    pub fn is_choice(&self) -> bool {
+        self.flags.intersects(SymbolFlags::CHOICE)
+    }
+
 }
 
 use bitflags::bitflags;

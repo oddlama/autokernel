@@ -1,5 +1,5 @@
-use super::types::CSymbol;
-use super::Bridge;
+use super::types::{CSymbol, SymbolType};
+use super::{Bridge, Tristate};
 use std::fmt;
 use std::fmt::Debug;
 
@@ -58,6 +58,39 @@ impl Expr {
         }
         visit(&mut exprs, &self);
         return exprs;
+    }
+
+    pub fn eval(&self) -> Result<Tristate, ()> {
+        Ok(match self {
+            Expr::Const(b) => (*b).into(),
+            Expr::And(a, b) => {
+                let a = a.eval()?;
+                let b = b.eval()?;
+                if a < b {
+                    a
+                } else {
+                    b
+                }
+            }
+            Expr::Or(a, b) => {
+                let a = a.eval()?;
+                let b = b.eval()?;
+                if a > b {
+                    a
+                } else {
+                    b
+                }
+            }
+            Expr::Not(a) => a.eval()?.not(),
+            Expr::Terminal(Terminal::Eq(a, b))
+                if matches!(unsafe {&**a}.symbol_type(), SymbolType::Tristate | SymbolType::Boolean) =>
+            unsafe { ((**a).get_tristate_value() == (**b).get_tristate_value()).into() },
+            Expr::Terminal(Terminal::Neq(a, b))
+                if matches!(unsafe {&**a}.symbol_type(), SymbolType::Tristate | SymbolType::Boolean) =>
+            unsafe { ((**a).get_tristate_value() != (**b).get_tristate_value()).into() },
+            Expr::Terminal(Terminal::Symbol(s)) => unsafe { (**s).get_tristate_value() },
+            Expr::Terminal(_) => return Err(()),
+        })
     }
 
     pub fn display<'a>(&'a self, bridge: &'a Bridge) -> ExprDisplay {

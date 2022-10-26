@@ -1,131 +1,224 @@
-use super::types::CSymbol;
+use std::collections::{HashSet, VecDeque};
+
+use super::types::SymbolType;
 use super::{expr::Terminal, Expr};
-use super::{Symbol, Tristate};
-use anyhow::{bail, Context, Result};
-use typed_builder::TypedBuilder;
+use super::{Bridge, Symbol, Tristate};
+use thiserror::Error;
 
-/// Satisfier to solve symbol dependencies
-///
-/// ```
-// let satisfier = Satisfier::builder()
-//     .bound(Tristate::Yes)
-//     .recursive(true);
-// satisfier.satisfy()
-/// ```
-#[derive(TypedBuilder)]
-pub struct Satisfier {
-    #[builder(default=Box::new(SimpleSolver{}), setter(into))]
-    solver: Box<dyn Solver>,
-    #[builder(default=Tristate::Mod, setter(into))]
-    bound: Tristate,
-    #[builder(default, setter(into))]
-    recursive: bool,
+#[derive(Error, Debug, Clone)]
+pub enum SolveError {
+    #[error("the expression is provably unsatisfiable")]
+    Unsatisfiable,
+    #[error("complex negated expressions are unsupported")]
+    ComplexNot,
+    #[error("expression contains unsupported constructs")]
+    UnsupportedConstituents,
+    #[error("expression contains an ambiguous comparison")]
+    AmbiguousComparison,
+    #[error("encountered an invalid symbol")]
+    InvalidSymbol,
+    #[error("encountered an invalid expression")]
+    InvalidExpression,
+    #[error("expression would require Tristate::Mod for boolean symbol {symbol}")]
+    RequiresModForBoolean { symbol: String },
+    #[error("solver yielded conflicting assignment for symbol {symbol} (both {a} and {b})")]
+    ConflictingAssignment { symbol: String, a: Tristate, b: Tristate },
 }
-impl Satisfier {
-    pub fn satisfy(&self, symbol: &Symbol) -> Result<Vec<String>> {
-        let dep = symbol.direct_dependencies()?;
 
-        if self.recursive {
-            todo!("track list and satisfy the new ones");
-            // TODO: error when the dependency expects ==n
-        }
-
-        self.solver.satisfy(dep)
-    }
+#[derive(Debug, Clone)]
+pub struct Assignment {
+    pub symbol: String,
+    pub value: Tristate,
 }
 
 pub trait Solver {
-    fn satisfy(&self, expr: Expr) -> Result<Vec<String>>;
+    fn satisfy(&self, bridge: &Bridge, expr: &Expr, desired_value: Tristate) -> Result<Vec<Assignment>, SolveError>;
 }
 
-// TODO: pass the bridge to simplify symbol access (and make it more safe)
-pub struct SimpleSolver {}
+pub struct SolverConfig {
+    pub solver: Box<dyn Solver>,
+    pub desired_value: Tristate,
+    pub recursive: bool,
+}
 
-impl Solver for SimpleSolver {
-    fn satisfy(&self, expr: Expr) -> Result<Vec<String>> {
-        Ok(match expr {
-            Expr::And(a, b) => [self.satisfy(*a)?, self.satisfy(*b)?].concat(),
-            Expr::Or(a, b) => {
-                bail!(format!("ambiguous: please satisfy either {:?} or {:?}", a, b));
-                // TODO: will we ever need this for more complex logic?
-                //let sa = satisfy(*a);
-                //let sb = satisfy(*b);
-                //match (sa,sb) {
-                //    (Ok(l1), Ok(l2)) => bail!(format!("ambiguous: please satisfy either {:?} or {:?}", l1, l2)),
-                //    (Ok(l1), Err(_)) => l1,
-                //    (Err(_), Ok(l2)) => l2,
-                //    (Err(_), Err(_)) => bail!("unsatisfiable, both or branches"),
-                //}
-            }
-            Expr::Const(false) => bail!("unsatisfiable: false"),
-            Expr::Const(true) => vec![],
-            Expr::Not(a) => match *a {
-                Expr::Terminal(t) => self.satisfy_terminal(t, true)?.map_or_else(Vec::new, |el| vec![el]),
-                _ => bail!("not supported"),
-            },
-            Expr::Terminal(t) => self.satisfy_terminal(t, false)?.map_or_else(Vec::new, |el| vec![el]),
-        })
+impl Default for SolverConfig {
+    fn default() -> Self {
+        SolverConfig {
+            solver: Box::new(SimpleSolver {}),
+            desired_value: Tristate::Yes,
+            recursive: false,
+        }
     }
 }
-impl SimpleSolver {
-    fn symbol_to_tristate(&self, sym: *mut CSymbol) -> Option<Tristate> {
-        self.name(sym).ok()?.parse().ok()
-    }
 
-    fn name(&self, sym: *mut CSymbol) -> Result<String> {
-        Ok(unsafe { &*sym }.name().clone().context("unnamed symbol")?.to_string())
-    }
+pub fn satisfy(bridge: &Bridge, symbol: String, config: SolverConfig) -> Result<Vec<Assignment>, SolveError> {
+    if config.recursive {
+        let mut queue = VecDeque::new();
+        queue.push_back(symbol);
 
-    fn satisfy_terminal(&self, terminal: Terminal, not: bool) -> Result<Option<String>> {
-        let mut terminal = terminal;
-        if not {
-            if let Terminal::Eq(a, b) = terminal {
-                terminal = Terminal::Neq(a, b);
+        let mut requirements = Vec::new();
+        let mut done = HashSet::new();
+        while let Some(symbol) = queue.pop_front() {
+            // Skip symbols that were already satisfied
+            if !done.insert(symbol.clone()) {
+                continue;
             }
-            if let Terminal::Neq(a, b) = terminal {
-                terminal = Terminal::Eq(a, b);
+
+            let expr = bridge
+                .symbol(&symbol)
+                .ok_or(SolveError::InvalidSymbol)?
+                .direct_dependencies()
+                .map_err(|_| SolveError::InvalidExpression)?;
+
+            let mut reqs = config.solver.satisfy(bridge, &expr, config.desired_value)?;
+            for i in &reqs {
+                if i.value != Tristate::No {
+                    queue.push_back(i.symbol.clone());
+                }
             }
+            requirements.append(&mut reqs);
         }
 
-        // no mod yes symbols
-        Ok(match terminal {
-            Terminal::Eq(a, b) => match (self.symbol_to_tristate(a), self.symbol_to_tristate(b)) {
-                (Some(t), None) => self.is_satisfied(b, t)?,
-                (None, Some(t)) => self.is_satisfied(a, t)?,
-                _ => bail!("not supported, not just one tristate"),
-            },
-            Terminal::Neq(a, b) => match (self.symbol_to_tristate(a), self.symbol_to_tristate(b)) {
-                (Some(t), None) => {
-                    if self.is_satisfied(b, t)?.is_none() {
-                        None
-                    } else {
-                        bail!(format!("ambiguous, set {:?} not to {}", self.name(b), t))
-                    }
-                }
-                (None, Some(t)) => {
-                    if self.is_satisfied(a, t)?.is_none() {
-                        None
-                    } else {
-                        bail!(format!("ambiguous, set {:?} not to {}", self.name(a), t))
-                    }
-                }
-                _ => bail!("not supported, not just one tristate"),
-            },
-            Terminal::Lth(_, _) => bail!(format!("not supported {:?}", terminal)),
-            Terminal::Leq(_, _) => bail!(format!("not supported {:?}", terminal)),
-            Terminal::Gth(_, _) => bail!(format!("not supported {:?}", terminal)),
-            Terminal::Geq(_, _) => bail!(format!("not supported {:?}", terminal)),
-            Terminal::Symbol(s) => self
-                .is_satisfied(s, Tristate::Mod)?
-                .or(self.is_satisfied(s, if not { Tristate::No } else { Tristate::Yes })?),
-        })
+        Ok(requirements)
+    } else {
+        let expr = bridge
+            .symbol(&symbol)
+            .ok_or(SolveError::InvalidSymbol)?
+            .direct_dependencies()
+            .map_err(|_| SolveError::InvalidExpression)?;
+
+        config.solver.satisfy(bridge, &expr, config.desired_value)
+    }
+}
+
+pub struct SimpleSolver {}
+impl SimpleSolver {
+    fn satisfy_eq(&self, a: &Symbol, b: Tristate) -> Result<Vec<Assignment>, SolveError> {
+        let name = a.name_owned().ok_or(SolveError::InvalidSymbol)?;
+        if b == Tristate::Mod && a.symbol_type() != SymbolType::Tristate {
+            return Err(SolveError::RequiresModForBoolean { symbol: name });
+        }
+
+        Ok(vec![Assignment { symbol: name, value: b }])
     }
 
-    fn is_satisfied(&self, sym: *mut CSymbol, tri: Tristate) -> Result<Option<String>> {
-        Ok(if unsafe { &*sym }.get_tristate_value() == tri {
-            None
-        } else {
-            Some(self.name(sym)?)
+    fn satisfy_neq(&self, a: &Symbol, b: Tristate, desired_value: Tristate) -> Result<Vec<Assignment>, SolveError> {
+        let name = a.name_owned().ok_or(SolveError::InvalidSymbol)?;
+
+        // a != y, des=y -> m
+        // a != y, des=m -> m
+        // a != m, des=y -> y
+        // a != m, des=m -> y
+        // a != n, des=y -> des
+        // a != n, des=m -> des
+        let value = match b {
+            Tristate::No => desired_value,
+            Tristate::Mod => Tristate::Yes,
+            Tristate::Yes => Tristate::Mod,
+        };
+
+        if value == Tristate::Mod && a.symbol_type() != SymbolType::Tristate {
+            return Err(SolveError::RequiresModForBoolean { symbol: name });
+        }
+
+        Ok(vec![Assignment {
+            symbol: a.name_owned().ok_or(SolveError::InvalidSymbol)?,
+            value,
+        }])
+    }
+}
+
+impl Solver for SimpleSolver {
+    fn satisfy(&self, bridge: &Bridge, expr: &Expr, desired_value: Tristate) -> Result<Vec<Assignment>, SolveError> {
+        // If the expression already evaluates to at least the desired value,
+        // we don't have to change any variables
+        if expr.eval().map_err(|_| SolveError::UnsupportedConstituents)? >= desired_value {
+            return Ok(vec![]);
+        }
+
+        Ok(match expr {
+            Expr::And(a, b) => {
+                let a = self.satisfy(bridge, a, desired_value)?;
+                let b = self.satisfy(bridge, b, desired_value)?;
+
+                // TODO dont calculate conflict here, instead supply "already changed"
+                // map to this function so that conflicts can be detected when genereated,
+                // also then we can override get_tristate_value with this map to generate
+                // a tight list from the beginning
+                todo!();
+
+                [a, b].concat()
+            }
+            Expr::Or(a, b) => {
+                if let Ok(assignment) = self.satisfy(bridge, a, desired_value) {
+                    assignment
+                } else {
+                    self.satisfy(bridge, b, desired_value)?
+                }
+            }
+            Expr::Const(false) => return Err(SolveError::Unsatisfiable),
+            Expr::Const(true) => vec![],
+            Expr::Not(a) => match &**a {
+                Expr::Terminal(Terminal::Eq(a, b)) => {
+                    let a = bridge.wrap_symbol(*a);
+                    let b = bridge.wrap_symbol(*b);
+                    if a.is_const() {
+                        self.satisfy_neq(&b, a.get_tristate_value(), desired_value)?
+                    } else if b.is_const() {
+                        self.satisfy_neq(&a, b.get_tristate_value(), desired_value)?
+                    } else {
+                        return Err(SolveError::AmbiguousComparison);
+                    }
+                }
+                Expr::Terminal(Terminal::Neq(a, b)) => {
+                    let a = bridge.wrap_symbol(*a);
+                    let b = bridge.wrap_symbol(*b);
+                    if a.is_const() {
+                        self.satisfy_eq(&b, a.get_tristate_value())?
+                    } else if b.is_const() {
+                        self.satisfy_eq(&a, b.get_tristate_value())?
+                    } else {
+                        return Err(SolveError::AmbiguousComparison);
+                    }
+                }
+                Expr::Terminal(Terminal::Symbol(s)) => self.satisfy_eq(&bridge.wrap_symbol(*s), Tristate::No)?,
+                Expr::Terminal(_) => return Err(SolveError::UnsupportedConstituents),
+                _ => return Err(SolveError::ComplexNot),
+            },
+            Expr::Terminal(Terminal::Eq(a, b)) => {
+                let a = bridge.wrap_symbol(*a);
+                let b = bridge.wrap_symbol(*b);
+                if a.is_const() {
+                    self.satisfy_eq(&b, a.get_tristate_value())?
+                } else if b.is_const() {
+                    self.satisfy_eq(&a, b.get_tristate_value())?
+                } else {
+                    return Err(SolveError::AmbiguousComparison);
+                }
+            }
+            Expr::Terminal(Terminal::Neq(a, b)) => {
+                let a = bridge.wrap_symbol(*a);
+                let b = bridge.wrap_symbol(*b);
+                if a.is_const() {
+                    self.satisfy_neq(&b, a.get_tristate_value(), desired_value)?
+                } else if b.is_const() {
+                    self.satisfy_neq(&a, b.get_tristate_value(), desired_value)?
+                } else {
+                    return Err(SolveError::AmbiguousComparison);
+                }
+            }
+            Expr::Terminal(Terminal::Symbol(s)) => {
+                // Almost the same as satisfy_neq(s, No), but we need to allow
+                // value promotion (if desired = mod but value is a boolean, we want y instead)
+                let s = bridge.wrap_symbol(*s);
+                let desired_value = if s.symbol_type() == SymbolType::Boolean {
+                    Tristate::Yes
+                } else {
+                    desired_value
+                };
+                self.satisfy_neq(&s, Tristate::No, desired_value)?
+            }
+            Expr::Terminal(_) => return Err(SolveError::UnsupportedConstituents),
         })
     }
 }

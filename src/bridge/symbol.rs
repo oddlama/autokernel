@@ -1,8 +1,12 @@
+use crate::bridge::satisfier;
+use crate::bridge::satisfier::SolverConfig;
+
 use super::expr::Expr;
+use super::satisfier::Assignment;
+use super::satisfier::SolveError;
 use super::transaction::Transaction;
 use super::types::*;
 use super::Bridge;
-use anyhow::anyhow;
 use colored::{Color, Colorize};
 use itertools::Itertools;
 use std::borrow::Cow;
@@ -36,11 +40,12 @@ pub enum SymbolSetError {
     #[error("valid booleans are: n, y")]
     InvalidBoolean,
 
-    #[error("desired value is above the symbol's visibility bounds [{min}, {max}]")]
+    #[error("desired value is above the symbol's visibility bounds [{min},{max}]")]
     UnmetDependencies {
         min: Tristate,
         max: Tristate,
         deps: Vec<String>,
+        satisfying_configuration: Option<Vec<Assignment>>,
     },
     #[error("TODO")]
     RequiredByOther,
@@ -67,6 +72,10 @@ impl<'a> Symbol<'a> {
         unsafe { (*self.c_symbol).name() }
     }
 
+    pub fn name_owned(&self) -> Option<String> {
+        unsafe { (*self.c_symbol).name() }.map(|s| s.to_string())
+    }
+
     pub fn recalculate(&self) {
         (self.bridge.vtable.c_sym_calc_value)(self.c_symbol);
     }
@@ -86,7 +95,18 @@ impl<'a> Symbol<'a> {
                     .into_iter()
                     .map(|x| x.display(self.bridge).to_string())
                     .collect_vec();
-                return Err(SymbolSetError::UnmetDependencies { min, max, deps });
+                let satisfying_configuration = self
+                    .satisfy(SolverConfig {
+                        recursive: true,
+                        ..SolverConfig::default()
+                    })
+                    .ok();
+                return Err(SymbolSetError::UnmetDependencies {
+                    min,
+                    max,
+                    deps,
+                    satisfying_configuration,
+                });
             }
             ensure!(value >= min, SymbolSetError::RequiredByOther);
             ensure!(max > min, SymbolSetError::InvalidVisibility);
@@ -214,15 +234,15 @@ impl<'a> Symbol<'a> {
     }
 
     pub fn symbol_type(&self) -> SymbolType {
-        unsafe { &*self.c_symbol }.symbol_type
+        unsafe { &*self.c_symbol }.symbol_type()
     }
 
     pub fn is_const(&self) -> bool {
-        unsafe { &*self.c_symbol }.flags.intersects(SymbolFlags::CONST)
+        unsafe { &*self.c_symbol }.is_const()
     }
 
     pub fn is_choice(&self) -> bool {
-        unsafe { &*self.c_symbol }.flags.intersects(SymbolFlags::CHOICE)
+        unsafe { &*self.c_symbol }.is_choice()
     }
 
     pub fn visible(&self) -> Tristate {
@@ -249,17 +269,15 @@ impl<'a> Symbol<'a> {
         todo!("Ughh..")
     }
 
-    pub fn direct_dependencies(&self) -> anyhow::Result<Expr> {
+    pub fn direct_dependencies(&self) -> Result<Expr, ()> {
         Ok(unsafe { &(*self.c_symbol).direct_dependencies }
-            .expr()
-            .map_err(|_| anyhow!("Could not parse C kernel expression"))?
+            .expr()?
             .unwrap_or(Expr::Const(true)))
     }
 
-    pub fn reverse_dependencies(&self) -> anyhow::Result<Expr> {
+    pub fn reverse_dependencies(&self) -> Result<Expr, ()> {
         Ok(unsafe { &(*self.c_symbol).reverse_dependencies }
-            .expr()
-            .map_err(|_| anyhow!("Could not parse C kernel expression"))?
+            .expr()?
             .unwrap_or(Expr::Const(false)))
     }
 
@@ -268,6 +286,14 @@ impl<'a> Symbol<'a> {
             .to_str()
             .unwrap()
             .to_owned();
+    }
+
+    pub fn satisfy(&self, config: SolverConfig) -> Result<Vec<Assignment>, SolveError> {
+        satisfier::satisfy(
+            self.bridge,
+            self.name_owned().ok_or(SolveError::InvalidSymbol)?,
+            config,
+        )
     }
 }
 
