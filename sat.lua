@@ -1,2 +1,2 @@
 RTLWIFI_USB "y"
-VIRTIO_MEM "y"
+VIRTIO_MEM "m"

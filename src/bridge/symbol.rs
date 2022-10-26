@@ -2,7 +2,6 @@ use crate::bridge::satisfier;
 use crate::bridge::satisfier::SolverConfig;
 
 use super::expr::Expr;
-use super::satisfier::Assignment;
 use super::satisfier::SolveError;
 use super::transaction::Transaction;
 use super::types::*;
@@ -45,7 +44,7 @@ pub enum SymbolSetError {
         min: Tristate,
         max: Tristate,
         deps: Vec<String>,
-        satisfying_configuration: Option<Vec<Assignment>>,
+        satisfying_configuration: Option<Vec<(String, Tristate)>>,
     },
     #[error("TODO")]
     RequiredByOther,
@@ -98,6 +97,7 @@ impl<'a> Symbol<'a> {
                 let satisfying_configuration = self
                     .satisfy(SolverConfig {
                         recursive: true,
+                        desired_value: value,
                         ..SolverConfig::default()
                     })
                     .ok();
@@ -288,12 +288,8 @@ impl<'a> Symbol<'a> {
             .to_owned();
     }
 
-    pub fn satisfy(&self, config: SolverConfig) -> Result<Vec<Assignment>, SolveError> {
-        satisfier::satisfy(
-            self.bridge,
-            self.name_owned().ok_or(SolveError::InvalidSymbol)?,
-            config,
-        )
+    pub fn satisfy(&self, config: SolverConfig) -> Result<Vec<(String, Tristate)>, SolveError> {
+        satisfier::satisfy(self.bridge, self.name_owned().ok_or(SolveError::InvalidSymbol)?, config)
     }
 }
 
