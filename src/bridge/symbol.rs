@@ -304,14 +304,7 @@ impl<'a> fmt::Display for Symbol<'a> {
                     },
                     format!("={}", value),
                 ),
-                Ok(SymbolValue::Tristate(value)) => (
-                    match value {
-                        Tristate::No => Color::Red,
-                        Tristate::Mod => Color::Yellow,
-                        Tristate::Yes => Color::Green,
-                    },
-                    format!("={}", value),
-                ),
+                Ok(SymbolValue::Tristate(value)) => (value.color(), format!("={}", value)),
                 Ok(SymbolValue::Int(value)) => (Color::White, format!("={}", value)),
                 Ok(SymbolValue::Hex(value)) => (Color::White, format!("={:x}", value)),
                 Ok(SymbolValue::String(value)) => (Color::White, format!("=\"{}\"", value)),

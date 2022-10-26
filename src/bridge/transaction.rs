@@ -79,10 +79,15 @@ pub fn validate_transactions(bridge: &Bridge, history: &Vec<Transaction>) -> Res
                     }
                     eprintln!("   {}", "|".blue());
                     if let Some(satconf) = satisfying_configuration {
-                        eprintln!("{}: did you mean to also set these symbols?", "note".green());
+                        eprintln!("{}: you may want to set these symbols beforehand", "note".green());
                         eprintln!("   {}", "|".blue());
-                        for sym in satconf {
-                            eprintln!("   {} {:?} {}", "|".blue(), sym, "\"y\"".green())
+                        for (sym, value) in satconf {
+                            eprintln!(
+                                "   {} {} {}",
+                                "|".blue(),
+                                sym,
+                                format!("\"{}\"", value).color(value.color())
+                            )
                         }
                         eprintln!("   {}", "|".blue());
                     } else {

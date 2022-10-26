@@ -6,6 +6,7 @@ use std::fmt;
 use std::fmt::Debug;
 use std::str::FromStr;
 
+use colored::Color;
 use libc::{c_char, c_int, c_void};
 
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Clone, Copy)]
@@ -23,6 +24,14 @@ impl Tristate {
             Tristate::No => Tristate::Yes,
             Tristate::Mod => Tristate::Mod,
             Tristate::Yes => Tristate::No,
+        }
+    }
+
+    pub fn color(self) -> Color {
+        match self {
+            Tristate::No => Color::Red,
+            Tristate::Mod => Color::Yellow,
+            Tristate::Yes => Color::Green,
         }
     }
 }
@@ -242,7 +251,6 @@ impl CSymbol {
     pub fn is_choice(&self) -> bool {
         self.flags.intersects(SymbolFlags::CHOICE)
     }
-
 }
 
 use bitflags::bitflags;
