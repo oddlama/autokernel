@@ -70,8 +70,6 @@ pub fn satisfy(bridge: &Bridge, symbol: String, config: SolverConfig) -> Result<
                 .visibility_expression_bare()
                 .map_err(|_| SolveError::InvalidExpression)?;
 
-            // TODO use prompt coutn
-            prompt count
             // If there is no associated expression, the symbol must be implicitly
             // selected by requiring it via the reverse_dependencies. If there are
             // several choices, we can't solve it because some options may be undesirable.
@@ -101,7 +99,7 @@ pub fn satisfy(bridge: &Bridge, symbol: String, config: SolverConfig) -> Result<
                 }
             };
 
-            let new_assignments = config.solver.satisfy(bridge, &expr, config.desired_value)?;
+            let mut new_assignments = config.solver.satisfy(bridge, &expr, config.desired_value)?;
             let depends_on: Vec<String> = new_assignments
                 .iter()
                 .filter(|(_, &v)| v != Tristate::No)
@@ -110,6 +108,8 @@ pub fn satisfy(bridge: &Bridge, symbol: String, config: SolverConfig) -> Result<
 
             queue.extend(depends_on.iter().cloned());
             dependencies.insert(symbol.clone(), depends_on);
+            // Filter assignments to unassignable values (without any prompts)
+            new_assignments.retain(|k, _| bridge.symbol(k).map_or(0, |s| s.prompt_count()) > 0);
             solved_symbols.insert(symbol.clone(), new_assignments);
         }
 
