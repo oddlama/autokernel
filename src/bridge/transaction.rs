@@ -1,6 +1,6 @@
 use crate::bridge::satisfier::{Ambiguity, SolveError};
 
-use super::{SymbolSetError, SymbolValue};
+use super::{SymbolSetError, SymbolValue, Tristate};
 
 use anyhow::{ensure, Result};
 use colored::Colorize;
@@ -51,6 +51,48 @@ fn print_value_change_note(transaction: &Transaction) {
     }
 }
 
+fn print_satisfy_result(satisfying_configuration: &Result<Vec<(String, Tristate)>, SolveError>) {
+    match satisfying_configuration {
+        Ok(satisfying_configuration) => {
+            eprintln!("{}: you may want to set these symbols beforehand", "note".green());
+            eprintln!("   {}", "|".blue());
+            for (sym, value) in satisfying_configuration {
+                eprintln!(
+                    "   {} {} {}",
+                    "|".blue(),
+                    sym,
+                    format!("\"{}\"", value).color(value.color())
+                )
+            }
+            eprintln!("   {}", "|".blue());
+        }
+        Err(SolveError::AmbiguousSolution { symbols }) => {
+            eprintln!(
+                "{}: automatic solution is ambiguous; requires manual action",
+                "note".green()
+            );
+            for ambiguity in symbols {
+                let Ambiguity { symbol, clauses } = ambiguity;
+                eprintln!("   {}", "|".blue());
+                eprintln!(
+                    "   {} {}: one of the following expressions must be satisfied",
+                    "|".blue(),
+                    symbol.blue()
+                );
+                for clause in clauses {
+                    eprintln!("   {} - {}", "|".blue(), clause)
+                }
+            }
+            eprintln!("   {}", "|".blue());
+        }
+        Err(err) => eprintln!(
+            "   {} note: cannot suggest solution because automatic dependency resolution failed ({:?})",
+            "=".blue(),
+            err
+        ),
+    }
+}
+
 pub fn validate_transactions(history: &Vec<Transaction>) -> Result<()> {
     // TODO extract source line and display like rustc
     // hide stacktrace unless --verbose / --debug is given
@@ -66,15 +108,15 @@ pub fn validate_transactions(history: &Vec<Transaction>) -> Result<()> {
             );
             print_location(t);
             print_value_change_note(t);
-            eprint!("{}: ", "note".green());
             match error {
+                SymbolSetError::SatisfyFailed { error } => print_satisfy_result(&Err(error.clone())),
                 SymbolSetError::UnmetDependencies {
                     min,
                     max,
                     deps,
                     satisfying_configuration,
                 } => {
-                    eprintln!("...because it currently has unmet dependencies");
+                    eprintln!("{}: ...because it currently has unmet dependencies", "note".green());
                     eprintln!("   {}", "|".blue());
                     for dep in deps {
                         eprintln!("   {} - {}", "|".blue(), dep)
@@ -86,48 +128,13 @@ pub fn validate_transactions(history: &Vec<Transaction>) -> Result<()> {
                         min.to_string().color(min.color()),
                         max.to_string().color(max.color()),
                     );
-                    match satisfying_configuration {
-                        Ok(satisfying_configuration) => {
-                            eprintln!("{}: you may want to set these symbols beforehand", "note".green());
-                            eprintln!("   {}", "|".blue());
-                            for (sym, value) in satisfying_configuration {
-                                eprintln!(
-                                    "   {} {} {}",
-                                    "|".blue(),
-                                    sym,
-                                    format!("\"{}\"", value).color(value.color())
-                                )
-                            }
-                            eprintln!("   {}", "|".blue());
-                        }
-                        Err(SolveError::AmbiguousSolution { symbols }) => {
-                            eprintln!(
-                                "{}: automatic solution is ambiguous; requires manual action",
-                                "note".green()
-                            );
-                            for ambiguity in symbols {
-                                let Ambiguity { symbol, clauses } = ambiguity;
-                                eprintln!("   {}", "|".blue());
-                                eprintln!(
-                                    "   {} {}: one of the following expressions must be satisfied",
-                                    "|".blue(),
-                                    symbol.blue()
-                                );
-                                for clause in clauses {
-                                    eprintln!("   {} - {}", "|".blue(), clause)
-                                }
-                            }
-                            eprintln!("   {}", "|".blue());
-                        }
-                        Err(err) => eprintln!(
-                            "   {} note: cannot suggest solution because automatic dependency resolution failed ({:?})",
-                            "=".blue(),
-                            err
-                        ),
-                    }
+                    print_satisfy_result(satisfying_configuration);
                 }
                 SymbolSetError::RequiredByOther { min, max, rev_deps } => {
-                    eprintln!("...because it is required by at least one other symbol");
+                    eprintln!(
+                        "{}: ...because it is required by at least one other symbol",
+                        "note".green()
+                    );
                     eprintln!("   {}", "|".blue());
                     for dep in rev_deps {
                         eprintln!("   {} - {}", "|".blue(), dep)
@@ -141,7 +148,10 @@ pub fn validate_transactions(history: &Vec<Transaction>) -> Result<()> {
                     );
                 }
                 SymbolSetError::MustBeSelected { rev_deps } => {
-                    eprintln!("...because it must be implicitly selected by satisfying any of these expressions");
+                    eprintln!(
+                        "{}: ...because it must be implicitly selected by satisfying any of these expressions",
+                        "note".green()
+                    );
                     eprintln!("   {}", "|".blue());
                     for dep in rev_deps {
                         eprintln!("   {} - {}", "|".blue(), dep)

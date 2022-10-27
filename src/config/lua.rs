@@ -7,6 +7,7 @@ use crate::{
 
 use std::fs;
 use std::path::Path;
+use std::result::Result::Err as StdErr;
 use std::result::Result::Ok as StdOk;
 
 use anyhow::{Ok, Result};
@@ -64,10 +65,9 @@ impl Config for LuaConfig {
                         // We use an i64 here to detect whether values in lua got clipped. Apparently
                         // when values wrap
                         if value < 0 {
-                            // TODO
-                            println!(
-                                "TODO result Please pass values >= 2*63 in string syntax. lua doesn't support this."
-                            )
+                            return StdErr(LuaError::RuntimeError(format!(
+                                "Please pass values >=2*63 in string syntax. lua doesn't support this."
+                            )));
                         }
                         bridge
                             .symbol(&name)
@@ -96,16 +96,24 @@ impl Config for LuaConfig {
                         let value = value
                             .parse()
                             .map_err(|_| LuaError::RuntimeError(format!("Could not convert {value} to tristate")))?;
-                        let bridge_symbol = bridge.symbol(&name).unwrap();
-                        let satisfying_configuration = bridge_symbol
-                            .satisfy(SolverConfig {
+                        let satisfying_configuration = bridge.symbol(&name).unwrap().satisfy_track_error(
+                            SymbolValue::Tristate(value),
+                            from.clone(),
+                            Some(traceback.clone()),
+                            SolverConfig {
                                 recursive,
                                 desired_value: value,
                                 ..SolverConfig::default()
-                            })
-                            .map_err(|e| LuaError::RuntimeError(e.to_string()))?;
+                            },
+                        );
 
-                        for (sym, value) in satisfying_configuration {
+                        // If there was an error, it will have been tracked already.
+                        // Ignore and continue.
+                        if satisfying_configuration.is_err() {
+                            return StdOk(());
+                        }
+
+                        for (sym, value) in satisfying_configuration.unwrap() {
                             bridge
                                 .symbol(&sym)
                                 .unwrap()

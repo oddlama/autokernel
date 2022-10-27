@@ -39,6 +39,8 @@ pub enum SymbolSetError {
     #[error("valid booleans are: n, y")]
     InvalidBoolean,
 
+    #[error("could not automatically solve symbol dependencies")]
+    SatisfyFailed { error: SolveError },
     #[error("cannot set a higher value than {max}, the symbol has unmet dependencies")]
     UnmetDependencies {
         min: Tristate,
@@ -326,6 +328,33 @@ impl<'a> Symbol<'a> {
 
     pub fn satisfy(&self, config: SolverConfig) -> Result<Vec<(String, Tristate)>, SolveError> {
         satisfier::satisfy(self.bridge, self.name_owned().ok_or(SolveError::InvalidSymbol)?, config)
+    }
+
+    pub fn satisfy_track_error(
+        &mut self,
+        value: SymbolValue,
+        from: String,
+        traceback: Option<String>,
+        config: SolverConfig,
+    ) -> Result<Vec<(String, Tristate)>, SolveError> {
+        let ret = self.satisfy(config);
+        if ret.is_ok() {
+            return ret;
+        }
+
+        let current_value = self.get_value().unwrap();
+        self.bridge.history.borrow_mut().push(Transaction {
+            symbol: self.name().unwrap().to_string(),
+            from,
+            traceback,
+            value,
+            value_before: current_value.clone(),
+            value_after: current_value,
+            error: Some(SymbolSetError::SatisfyFailed {
+                error: ret.clone().unwrap_err(),
+            }),
+        });
+        ret
     }
 }
 

@@ -23,9 +23,6 @@ function Tristate.__le(a, b) return a.value <= b.value end
 n = Tristate:new("n", 0)
 m = Tristate:new("m", 1)
 y = Tristate:new("y", 2)
-no = n   -- TODO keep these?
-mod = m  -- TODO keep these?
-yes = y  -- TODO keep these?
 
 function tristate_from_str(str)
 	if str == "y" then
