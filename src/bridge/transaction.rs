@@ -102,7 +102,7 @@ pub fn validate_transactions(history: &Vec<Transaction>) -> Result<()> {
                         }
                         Err(SolveError::AmbiguousSolution { symbols }) => {
                             eprintln!(
-                                "{}: automatic dependency resolution is ambiguous; requires manual action",
+                                "{}: automatic solution is ambiguous; requires manual action",
                                 "note".green()
                             );
                             for ambiguity in symbols {

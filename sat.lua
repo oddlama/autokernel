@@ -1,8 +1,10 @@
-RTLWIFI_USB "y"
+MODULES "y"
+
+RTLWIFI_USB:satisfy { y, recursive = true }
+
 VIRTIO_MMIO "y"
 VIRTIO_MEM "m"
 
-MODULES "y"
 MEMORY_HOTPLUG "y"
 MEMORY_HOTREMOVE "y"
 VIRTIO_MEM "m"

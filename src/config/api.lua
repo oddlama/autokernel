@@ -101,3 +101,25 @@ function Symbol:set(value, dbginfo)
 		error ("Unsupported value type '" .. type(value) .. "'")
 	end
 end
+
+function Symbol:satisfy(tbl, dbginfo)
+	dbginfo = dbginfo or debug.getinfo(2)
+	local from = dbginfo.source .. ":" .. dbginfo.currentline
+
+	local value = tbl[1]
+	local recursive = tbl["recursive"]
+
+	if type(value) == "string" then
+		if value == "m" then
+			value = m
+		elseif value == "y" then
+			value = y
+		end
+	end
+
+	if getmetatable(value) == Tristate then
+		ak.symbol_satisfy_and_set(self.name, value.name, recursive, from, debug.traceback())
+	else
+		error ("Unsupported value type '" .. type(value) .. "', must be Tristate (m or y)")
+	end
+end

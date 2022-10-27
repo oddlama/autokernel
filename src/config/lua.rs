@@ -1,4 +1,5 @@
 use super::Config;
+use crate::bridge::satisfier::SolverConfig;
 use crate::{
     bridge::{Bridge, SymbolValue},
     config,
@@ -19,7 +20,6 @@ pub struct LuaConfig {
 
 impl LuaConfig {
     pub fn new(file: impl AsRef<Path>) -> Result<LuaConfig> {
-        println!("Loading lua config...");
         Ok(LuaConfig::from_raw(
             file.as_ref().display().to_string(),
             fs::read_to_string(file)?,
@@ -82,17 +82,47 @@ impl Config for LuaConfig {
                             .symbol(&name)
                             .unwrap()
                             .set_value_tracked(
-                                SymbolValue::Tristate(
-                                    value
-                                        .parse()
-                                        .map_err(|_| LuaError::RuntimeError("Could not from str".into()))?,
-                                ),
+                                SymbolValue::Tristate(value.parse().map_err(|_| {
+                                    LuaError::RuntimeError(format!("Could not convert {value} to tristate"))
+                                })?),
                                 from,
                                 Some(traceback),
                             )
                             .ok();
                         StdOk(())
                     })?;
+                let symbol_satisfy_and_set = scope.create_function(
+                    |_, (name, value, recursive, from, traceback): (String, String, bool, String, String)| {
+                        let value = value
+                            .parse()
+                            .map_err(|_| LuaError::RuntimeError(format!("Could not convert {value} to tristate")))?;
+                        let bridge_symbol = bridge.symbol(&name).unwrap();
+                        let satisfying_configuration = bridge_symbol
+                            .satisfy(SolverConfig {
+                                recursive,
+                                desired_value: value,
+                                ..SolverConfig::default()
+                            })
+                            .map_err(|e| LuaError::RuntimeError(e.to_string()))?;
+
+                        for (sym, value) in satisfying_configuration {
+                            bridge
+                                .symbol(&sym)
+                                .unwrap()
+                                .set_value_tracked(SymbolValue::Tristate(value), from.clone(), Some(traceback.clone()))
+                                .ok();
+                        }
+
+                        let mut symbol = bridge.symbol(&name).unwrap();
+                        if symbol.prompt_count() > 0 {
+                            symbol
+                                .set_value_tracked(SymbolValue::Tristate(value), from, Some(traceback))
+                                .ok();
+                        }
+
+                        StdOk(())
+                    },
+                )?;
                 let symbol_get_string =
                     scope.create_function(|_, name: String| StdOk(bridge.symbol(&name).unwrap().get_string_value()))?;
                 let symbol_get_type = scope.create_function(|_, name: String| {
@@ -105,6 +135,7 @@ impl Config for LuaConfig {
                 ak.set("symbol_set_bool", symbol_set_bool)?;
                 ak.set("symbol_set_number", symbol_set_number)?;
                 ak.set("symbol_set_tristate", symbol_set_tristate)?;
+                ak.set("symbol_satisfy_and_set", symbol_satisfy_and_set)?;
                 ak.set("symbol_get_string", symbol_get_string)?;
                 ak.set("symbol_get_type", symbol_get_type)?;
                 globals.set("ak", ak)?;

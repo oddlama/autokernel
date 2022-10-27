@@ -9,7 +9,7 @@ use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-mod satisfier;
+pub mod satisfier;
 mod transaction;
 pub use transaction::*;
 

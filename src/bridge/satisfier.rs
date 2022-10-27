@@ -32,7 +32,7 @@ pub enum SolveError {
     RequiresModForBoolean { symbol: String },
     #[error("solver yielded conflicting assignment for symbol {symbol} (both {a} and {b})")]
     ConflictingAssignment { symbol: String, a: Tristate, b: Tristate },
-    #[error("solution is ambiguous, please satisfy at least one of the listed expressions for each symbol")]
+    #[error("solution is ambiguous, please satisfy at least one of the expressions for each symbol")]
     AmbiguousSolution { symbols: Vec<Ambiguity> },
 }
 
@@ -77,43 +77,47 @@ pub fn satisfy(bridge: &Bridge, symbol: String, config: SolverConfig) -> Result<
 
         let bridge_symbol = bridge.symbol(&symbol).ok_or(SolveError::InvalidSymbol)?;
         let expr = bridge_symbol
-            .visibility_expression_bare()
+            .visibility_expression()
             .map_err(|_| SolveError::InvalidExpression)?;
 
-        // If there is no associated expression, the symbol must be implicitly
-        // selected by requiring it via the reverse_dependencies. If there are
-        // several choices, we can't solve it because some options may be undesirable.
+        // If there is no prompt, then the symbol cannot be set directly. Instead, it
+        // must be implicitly selected by requiring it via the reverse_dependencies.
+        // If there are several choices, we can't solve it because some options may be undesirable.
         // Yet, we don't fail in that case, because the user will notice when trying to use the partial solution,
         // and otherwise there would be no useful hint at all (but everything until then is).
-        let expr = match expr {
-            Some(expr) => expr,
-            None => {
-                let expr = bridge_symbol
-                    .reverse_dependencies_bare()
-                    .map_err(|_| SolveError::InvalidExpression)?;
-                if let Some(expr) = expr {
-                    let clauses = expr.or_clauses();
-                    match clauses.len() {
-                        // Nothing to select => assume the symbol can be trivially changed
-                        0 => Expr::Const(true),
-                        // Just one thing can be used to require this => Satisfy it
-                        1 => clauses[0].clone(),
-                        // Several possible choices exist to enable this symbol. Collect the
-                        // information to later return an aggregated error. Therefore we
-                        // continue with Const(true) to assume that this is already solved.
-                        _ => {
-                            ambiguities.push(Ambiguity {
-                                symbol: symbol.clone(),
-                                clauses: clauses.into_iter().map(|x| x.display(bridge).to_string()).collect_vec(),
-                            });
-                            Expr::Const(true)
+        let expr = if bridge_symbol.prompt_count() == 0 {
+            Expr::And(
+                Box::new(expr),
+                Box::new({
+                    let expr = bridge_symbol
+                        .reverse_dependencies_bare()
+                        .map_err(|_| SolveError::InvalidExpression)?;
+                    if let Some(expr) = expr {
+                        let clauses = expr.or_clauses();
+                        match clauses.len() {
+                            // Nothing to select => assume the symbol can be trivially changed
+                            0 => Expr::Const(true),
+                            // Just one thing can be used to require this => Satisfy it
+                            1 => clauses[0].clone(),
+                            // Several possible choices exist to enable this symbol. Collect the
+                            // information to later return an aggregated error. Therefore we
+                            // continue with Const(true) to assume that this is already solved.
+                            _ => {
+                                ambiguities.push(Ambiguity {
+                                    symbol: symbol.clone(),
+                                    clauses: clauses.into_iter().map(|x| x.display(bridge).to_string()).collect_vec(),
+                                });
+                                Expr::Const(true)
+                            }
                         }
+                    } else {
+                        // No expression attached => assume the symbol can be trivially changed
+                        Expr::Const(true)
                     }
-                } else {
-                    // No expression attachted => assume the symbol can be trivially changed
-                    Expr::Const(true)
-                }
-            }
+                }),
+            )
+        } else {
+            expr
         };
 
         let mut new_assignments = config.solver.satisfy(bridge, &expr, config.desired_value)?;

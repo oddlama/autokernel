@@ -90,6 +90,7 @@ impl<'a> Symbol<'a> {
     pub fn set_value(&mut self, value: SymbolValue) -> Result<(), SymbolSetError> {
         ensure!(!self.is_const(), SymbolSetError::IsConst);
         ensure!(!self.is_choice(), SymbolSetError::IsChoice);
+        ensure!(self.prompt_count() > 0, SymbolSetError::CannotSetManually);
 
         let set_tristate = |value: Tristate| -> Result<(), SymbolSetError> {
             let min = unsafe { (*self.c_symbol).reverse_dependencies.tri };
@@ -137,9 +138,7 @@ impl<'a> Symbol<'a> {
                         .collect_vec(),
                 });
             }
-            println!("{} max {}", min, max);
             ensure!(max >= min, SymbolSetError::InvalidVisibility { min, max });
-            ensure!(self.prompt_count() > 0, SymbolSetError::CannotSetManually);
             ensure!(
                 !(value == Tristate::Mod
                     && self.bridge.symbol("MODULES").unwrap().get_tristate_value() == Tristate::No),
