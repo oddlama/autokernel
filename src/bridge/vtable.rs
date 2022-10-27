@@ -18,7 +18,8 @@ pub type FuncSymGetStringValue = extern "C" fn(*mut CSymbol) -> *const c_char;
 pub type FuncSymCalcValue = extern "C" fn(*mut CSymbol) -> c_void;
 pub type FuncSymIntGetMin = extern "C" fn(*mut CSymbol) -> u64;
 pub type FuncSymIntGetMax = extern "C" fn(*mut CSymbol) -> u64;
-pub type FuncSymDirectDepsWithProps = extern "C" fn(*mut CSymbol) -> *mut CExpr;
+pub type FuncSymDirectDepsWithPrompts = extern "C" fn(*mut CSymbol) -> *mut CExpr;
+pub type FuncSymPromptCount = extern "C" fn(*mut CSymbol) -> size_t;
 pub type FuncConfWrite = extern "C" fn(*const c_char) -> c_int;
 pub type FuncConfReadUnchecked = extern "C" fn(*const c_char) -> c_int;
 
@@ -37,7 +38,8 @@ pub struct BridgeVTable {
     pub c_sym_calc_value: RawSymbol<FuncSymCalcValue>,
     pub c_sym_int_get_min: RawSymbol<FuncSymIntGetMin>,
     pub c_sym_int_get_max: RawSymbol<FuncSymIntGetMax>,
-    pub c_sym_direct_deps_with_props: RawSymbol<FuncSymDirectDepsWithProps>,
+    pub c_sym_direct_deps_with_prompts: RawSymbol<FuncSymDirectDepsWithPrompts>,
+    pub c_sym_prompt_count: RawSymbol<FuncSymPromptCount>,
     pub c_conf_write: RawSymbol<FuncConfWrite>,
     pub c_conf_read_unchecked: RawSymbol<FuncConfReadUnchecked>,
 }
@@ -62,7 +64,8 @@ impl BridgeVTable {
         let c_sym_calc_value = load_symbol!(FuncSymCalcValue, b"sym_calc_value");
         let c_sym_int_get_min = load_symbol!(FuncSymIntGetMin, b"sym_int_get_min");
         let c_sym_int_get_max = load_symbol!(FuncSymIntGetMin, b"sym_int_get_max");
-        let c_sym_direct_deps_with_props = load_symbol!(FuncSymDirectDepsWithProps, b"sym_direct_deps_with_props");
+        let c_sym_direct_deps_with_prompts = load_symbol!(FuncSymDirectDepsWithPrompts, b"sym_direct_deps_with_prompts");
+        let c_sym_prompt_count = load_symbol!(FuncSymPromptCount, b"sym_prompt_count");
         let c_conf_write = load_symbol!(FuncConfWrite, b"conf_write");
         let c_conf_read_unchecked = load_symbol!(FuncConfReadUnchecked, b"conf_read");
 
@@ -79,7 +82,8 @@ impl BridgeVTable {
             c_sym_calc_value,
             c_sym_int_get_min,
             c_sym_int_get_max,
-            c_sym_direct_deps_with_props,
+            c_sym_direct_deps_with_prompts,
+            c_sym_prompt_count,
             c_conf_write,
             c_conf_read_unchecked,
         })

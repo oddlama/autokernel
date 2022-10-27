@@ -65,11 +65,41 @@ pub fn satisfy(bridge: &Bridge, symbol: String, config: SolverConfig) -> Result<
                 continue;
             }
 
-            let expr = bridge
-                .symbol(&symbol)
-                .ok_or(SolveError::InvalidSymbol)?
-                .visibility_expression()
+            let bridge_symbol = bridge.symbol(&symbol).ok_or(SolveError::InvalidSymbol)?;
+            let expr = bridge_symbol
+                .visibility_expression_bare()
                 .map_err(|_| SolveError::InvalidExpression)?;
+
+            // TODO use prompt coutn
+            prompt count
+            // If there is no associated expression, the symbol must be implicitly
+            // selected by requiring it via the reverse_dependencies. If there are
+            // several choices, we can't solve it because some options may be undesirable.
+            // Yet, we don't fail in that case, because the user will notice when trying to use the partial solution,
+            // and otherwise there would be no useful hint at all (but everything until then is).
+            let expr = match expr {
+                Some(expr) => expr,
+                None => {
+                    let expr = bridge_symbol
+                        .reverse_dependencies_bare()
+                        .map_err(|_| SolveError::InvalidExpression)?;
+                    if let Some(expr) = expr {
+                        let clauses = expr.or_clauses();
+                        match clauses.len() {
+                            // Nothing to select => assume the symbol can be trivially changed
+                            0 => Expr::Const(true),
+                            // Just one thing can be used to require this => Satisfy it
+                            1 => clauses[0].clone(),
+                            // Several choices can require this. Instead of throwing an error
+                            // just do noting at all. This will return a partial solution then.
+                            _ => Expr::Const(true),
+                        }
+                    } else {
+                        // No expression attachted => assume the symbol can be trivially changed
+                        Expr::Const(true)
+                    }
+                }
+            };
 
             let new_assignments = config.solver.satisfy(bridge, &expr, config.desired_value)?;
             let depends_on: Vec<String> = new_assignments

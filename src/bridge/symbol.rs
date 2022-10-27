@@ -52,6 +52,8 @@ pub enum SymbolSetError {
         max: Tristate,
         rev_deps: Vec<String>,
     },
+    #[error("this symbol cannot be set manually")]
+    CannotSetManually,
     #[error("cannot set directly, instead satisfy any of the reverse dependencies")]
     MustBeSelected { rev_deps: Vec<String> },
     #[error("TODO")]
@@ -88,6 +90,7 @@ impl<'a> Symbol<'a> {
     pub fn set_value(&mut self, value: SymbolValue) -> Result<(), SymbolSetError> {
         ensure!(!self.is_const(), SymbolSetError::IsConst);
         ensure!(!self.is_choice(), SymbolSetError::IsChoice);
+        ensure!(self.prompt_count() > 0, SymbolSetError::CannotSetManually);
 
         let set_tristate = |value: Tristate| -> Result<(), SymbolSetError> {
             let min = unsafe { (*self.c_symbol).reverse_dependencies.tri };
@@ -96,7 +99,7 @@ impl<'a> Symbol<'a> {
                 let deps = self
                     .visibility_expression_bare()
                     .unwrap()
-                    .ok_or_else(|| SymbolSetError::MustBeSelected {
+                    .ok_or(SymbolSetError::MustBeSelected {
                         rev_deps: self
                             .reverse_dependencies()
                             .unwrap()
@@ -273,6 +276,10 @@ impl<'a> Symbol<'a> {
         unsafe { &*self.c_symbol }.is_choice()
     }
 
+    pub fn prompt_count(&self) -> usize {
+        (self.bridge.vtable.c_sym_prompt_count)(self.c_symbol)
+    }
+
     pub fn visible(&self) -> Tristate {
         self.recalculate();
         unsafe { &*self.c_symbol }.visible
@@ -295,17 +302,15 @@ impl<'a> Symbol<'a> {
     }
 
     pub fn visibility_expression_bare(&self) -> Result<Option<Expr>, ()> {
-        Ok(unsafe { &mut *(self.bridge.vtable.c_sym_direct_deps_with_props)(self.c_symbol) }.expr()?)
+        Ok(unsafe { &mut *(self.bridge.vtable.c_sym_direct_deps_with_prompts)(self.c_symbol) }.expr()?)
     }
 
     pub fn visibility_expression(&self) -> Result<Expr, ()> {
         Ok(self.visibility_expression_bare()?.unwrap_or(Expr::Const(true)))
     }
 
-    pub fn direct_dependencies(&self) -> Result<Expr, ()> {
-        Ok(unsafe { &(*self.c_symbol).direct_dependencies }
-            .expr()?
-            .unwrap_or(Expr::Const(true)))
+    pub fn reverse_dependencies_bare(&self) -> Result<Option<Expr>, ()> {
+        Ok(unsafe { &(*self.c_symbol).reverse_dependencies }.expr()?)
     }
 
     pub fn reverse_dependencies(&self) -> Result<Expr, ()> {
