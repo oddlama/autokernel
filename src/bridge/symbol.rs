@@ -56,8 +56,8 @@ pub enum SymbolSetError {
     CannotSetManually,
     #[error("cannot set directly, instead satisfy any of the reverse dependencies")]
     MustBeSelected { rev_deps: Vec<String> },
-    #[error("TODO")]
-    InvalidVisibility,
+    #[error("symbol's minimum visibility is higher than its maximum visibility [min={min}, max={max}]")]
+    InvalidVisibility { min: Tristate, max: Tristate },
     #[error("module support is not enabled (try setting MODULES=y beforehand)")]
     ModulesNotEnabled,
     #[error("value must be in range [{min} ({min:#x}), {max} ({max:#x})]")]
@@ -90,7 +90,6 @@ impl<'a> Symbol<'a> {
     pub fn set_value(&mut self, value: SymbolValue) -> Result<(), SymbolSetError> {
         ensure!(!self.is_const(), SymbolSetError::IsConst);
         ensure!(!self.is_choice(), SymbolSetError::IsChoice);
-        ensure!(self.prompt_count() > 0, SymbolSetError::CannotSetManually);
 
         let set_tristate = |value: Tristate| -> Result<(), SymbolSetError> {
             let min = unsafe { (*self.c_symbol).reverse_dependencies.tri };
@@ -112,8 +111,6 @@ impl<'a> Symbol<'a> {
                     .into_iter()
                     .map(|x| x.display(self.bridge).to_string())
                     .collect_vec();
-
-                if deps.is_empty() {}
 
                 let satisfying_configuration = self.satisfy(SolverConfig {
                     recursive: true,
@@ -140,7 +137,9 @@ impl<'a> Symbol<'a> {
                         .collect_vec(),
                 });
             }
-            ensure!(max > min, SymbolSetError::InvalidVisibility);
+            println!("{} max {}", min, max);
+            ensure!(max >= min, SymbolSetError::InvalidVisibility { min, max });
+            ensure!(self.prompt_count() > 0, SymbolSetError::CannotSetManually);
             ensure!(
                 !(value == Tristate::Mod
                     && self.bridge.symbol("MODULES").unwrap().get_tristate_value() == Tristate::No),

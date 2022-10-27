@@ -1,4 +1,6 @@
-use super::{Bridge, SymbolSetError, SymbolValue};
+use crate::bridge::satisfier::{Ambiguity, SolveError};
+
+use super::{SymbolSetError, SymbolValue};
 
 use anyhow::{ensure, Result};
 use colored::Colorize;
@@ -98,6 +100,25 @@ pub fn validate_transactions(history: &Vec<Transaction>) -> Result<()> {
                             }
                             eprintln!("   {}", "|".blue());
                         }
+                        Err(SolveError::AmbiguousSolution { symbols }) => {
+                            eprintln!(
+                                "{}: automatic dependency resolution is ambiguous; requires manual action",
+                                "note".green()
+                            );
+                            for ambiguity in symbols {
+                                let Ambiguity { symbol, clauses } = ambiguity;
+                                eprintln!("   {}", "|".blue());
+                                eprintln!(
+                                    "   {} {}: one of the following expressions must be satisfied",
+                                    "|".blue(),
+                                    symbol.blue()
+                                );
+                                for clause in clauses {
+                                    eprintln!("   {} - {}", "|".blue(), clause)
+                                }
+                            }
+                            eprintln!("   {}", "|".blue());
+                        }
                         Err(err) => eprintln!(
                             "   {} note: cannot suggest solution because automatic dependency resolution failed ({:?})",
                             "=".blue(),
@@ -105,11 +126,7 @@ pub fn validate_transactions(history: &Vec<Transaction>) -> Result<()> {
                         ),
                     }
                 }
-                SymbolSetError::RequiredByOther {
-                    min,
-                    max,
-                    rev_deps,
-                } => {
+                SymbolSetError::RequiredByOther { min, max, rev_deps } => {
                     eprintln!("...because it is required by at least one other symbol");
                     eprintln!("   {}", "|".blue());
                     for dep in rev_deps {
@@ -123,9 +140,7 @@ pub fn validate_transactions(history: &Vec<Transaction>) -> Result<()> {
                         max.to_string().color(max.color()),
                     );
                 }
-                SymbolSetError::MustBeSelected {
-                    rev_deps,
-                } => {
+                SymbolSetError::MustBeSelected { rev_deps } => {
                     eprintln!("...because it must be implicitly selected by satisfying any of these expressions");
                     eprintln!("   {}", "|".blue());
                     for dep in rev_deps {

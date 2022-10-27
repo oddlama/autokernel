@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use super::types::SymbolType;
@@ -6,6 +7,12 @@ use super::{Bridge, Symbol, Tristate};
 use thiserror::Error;
 
 pub type Assignments = HashMap<String, Tristate>;
+
+#[derive(Debug, Clone)]
+pub struct Ambiguity {
+    pub symbol: String,
+    pub clauses: Vec<String>,
+}
 
 #[derive(Error, Debug, Clone)]
 pub enum SolveError {
@@ -25,6 +32,8 @@ pub enum SolveError {
     RequiresModForBoolean { symbol: String },
     #[error("solver yielded conflicting assignment for symbol {symbol} (both {a} and {b})")]
     ConflictingAssignment { symbol: String, a: Tristate, b: Tristate },
+    #[error("solution is ambiguous, please satisfy at least one of the listed expressions for each symbol")]
+    AmbiguousSolution { symbols: Vec<Ambiguity> },
 }
 
 pub trait Solver {
@@ -49,113 +58,119 @@ impl Default for SolverConfig {
 
 pub fn satisfy(bridge: &Bridge, symbol: String, config: SolverConfig) -> Result<Vec<(String, Tristate)>, SolveError> {
     let mut assignments: Vec<(String, Tristate)> = Vec::new();
-    if config.recursive {
-        // Tracks which other symbols this symbol depends on
-        let mut dependencies = HashMap::<String, Vec<String>>::new();
-        // symbol -> assignments
-        let mut solved_symbols = HashMap::new();
+    let mut ambiguities = Vec::new();
 
-        let mut done = HashSet::new();
-        let mut queue = VecDeque::new();
-        queue.push_back(symbol);
+    // Tracks which other symbols this symbol depends on
+    let mut dependencies = HashMap::<String, Vec<String>>::new();
+    // symbol -> assignments
+    let mut solved_symbols = HashMap::new();
 
-        while let Some(symbol) = queue.pop_front() {
-            // Skip symbols that were already satisfied
-            if !done.insert(symbol.clone()) {
-                continue;
-            }
+    let mut done = HashSet::new();
+    let mut queue = VecDeque::new();
+    queue.push_back(symbol);
 
-            let bridge_symbol = bridge.symbol(&symbol).ok_or(SolveError::InvalidSymbol)?;
-            let expr = bridge_symbol
-                .visibility_expression_bare()
-                .map_err(|_| SolveError::InvalidExpression)?;
-
-            // If there is no associated expression, the symbol must be implicitly
-            // selected by requiring it via the reverse_dependencies. If there are
-            // several choices, we can't solve it because some options may be undesirable.
-            // Yet, we don't fail in that case, because the user will notice when trying to use the partial solution,
-            // and otherwise there would be no useful hint at all (but everything until then is).
-            let expr = match expr {
-                Some(expr) => expr,
-                None => {
-                    let expr = bridge_symbol
-                        .reverse_dependencies_bare()
-                        .map_err(|_| SolveError::InvalidExpression)?;
-                    if let Some(expr) = expr {
-                        let clauses = expr.or_clauses();
-                        match clauses.len() {
-                            // Nothing to select => assume the symbol can be trivially changed
-                            0 => Expr::Const(true),
-                            // Just one thing can be used to require this => Satisfy it
-                            1 => clauses[0].clone(),
-                            // Several choices can require this. Instead of throwing an error
-                            // just do noting at all. This will return a partial solution then.
-                            _ => Expr::Const(true),
-                        }
-                    } else {
-                        // No expression attachted => assume the symbol can be trivially changed
-                        Expr::Const(true)
-                    }
-                }
-            };
-
-            let mut new_assignments = config.solver.satisfy(bridge, &expr, config.desired_value)?;
-            let depends_on: Vec<String> = new_assignments
-                .iter()
-                .filter(|(_, &v)| v != Tristate::No)
-                .map(|(k, _)| k.clone())
-                .collect();
-
-            queue.extend(depends_on.iter().cloned());
-            dependencies.insert(symbol.clone(), depends_on);
-            // Filter assignments to unassignable values (without any prompts)
-            new_assignments.retain(|k, _| bridge.symbol(k).map_or(0, |s| s.prompt_count()) > 0);
-            solved_symbols.insert(symbol.clone(), new_assignments);
+    while let Some(symbol) = queue.pop_front() {
+        // Skip symbols that were already satisfied
+        if !done.insert(symbol.clone()) {
+            continue;
         }
 
-        // Temporarily merge all assignments into a hashmap to detect collisions
-        let mut merged_assignments = HashMap::new();
-        for ass in solved_symbols.values() {
-            merge(&mut merged_assignments, ass.clone())?;
-        }
-
-        // Now collect the assignments in the correct order, such that
-        // all dependencies are set before setting the symbol itself.
-        let mut already_assigned_symbols = HashSet::new();
-        while !dependencies.is_empty() {
-            // Split into symbols which have their dependencies fulfilled,
-            // and those that still require some other symbol to be set first
-            let (fulfilled_symbols, mut remaining_symbols): (
-                HashMap<String, Vec<String>>,
-                HashMap<String, Vec<String>>,
-            ) = dependencies.into_iter().partition(|(_, v)| v.is_empty());
-
-            // Collect the new assignments, but only if they weren't assigned before.
-            // Conflicts cannot happen, as we already tested for conflicts before.
-            for fs in fulfilled_symbols.keys() {
-                solved_symbols.get_mut(fs).unwrap().drain().for_each(|e| {
-                    let (k, _) = &e;
-                    if !already_assigned_symbols.contains(k) {
-                        already_assigned_symbols.insert(k.clone());
-                        assignments.push(e);
-                    }
-                });
-            }
-
-            // Remove dependencies to symbols that are now fulfilled
-            for v in remaining_symbols.values_mut() {
-                v.retain(|s| !fulfilled_symbols.contains_key(s))
-            }
-            dependencies = remaining_symbols;
-        }
-    } else {
-        let expr = bridge
-            .symbol(&symbol)
-            .ok_or(SolveError::InvalidSymbol)?
-            .visibility_expression()
+        let bridge_symbol = bridge.symbol(&symbol).ok_or(SolveError::InvalidSymbol)?;
+        let expr = bridge_symbol
+            .visibility_expression_bare()
             .map_err(|_| SolveError::InvalidExpression)?;
 
-        assignments.extend(config.solver.satisfy(bridge, &expr, config.desired_value)?);
+        // If there is no associated expression, the symbol must be implicitly
+        // selected by requiring it via the reverse_dependencies. If there are
+        // several choices, we can't solve it because some options may be undesirable.
+        // Yet, we don't fail in that case, because the user will notice when trying to use the partial solution,
+        // and otherwise there would be no useful hint at all (but everything until then is).
+        let expr = match expr {
+            Some(expr) => expr,
+            None => {
+                let expr = bridge_symbol
+                    .reverse_dependencies_bare()
+                    .map_err(|_| SolveError::InvalidExpression)?;
+                if let Some(expr) = expr {
+                    let clauses = expr.or_clauses();
+                    match clauses.len() {
+                        // Nothing to select => assume the symbol can be trivially changed
+                        0 => Expr::Const(true),
+                        // Just one thing can be used to require this => Satisfy it
+                        1 => clauses[0].clone(),
+                        // Several possible choices exist to enable this symbol. Collect the
+                        // information to later return an aggregated error. Therefore we
+                        // continue with Const(true) to assume that this is already solved.
+                        _ => {
+                            ambiguities.push(Ambiguity {
+                                symbol: symbol.clone(),
+                                clauses: clauses.into_iter().map(|x| x.display(bridge).to_string()).collect_vec(),
+                            });
+                            Expr::Const(true)
+                        }
+                    }
+                } else {
+                    // No expression attachted => assume the symbol can be trivially changed
+                    Expr::Const(true)
+                }
+            }
+        };
+
+        let mut new_assignments = config.solver.satisfy(bridge, &expr, config.desired_value)?;
+        let depends_on: Vec<String> = new_assignments
+            .iter()
+            .filter(|(_, &v)| v != Tristate::No)
+            .map(|(k, _)| k.clone())
+            .collect();
+
+        // Remove assignments to unassignable symbols, but only after adding
+        // them to our dependencies (depends_on).
+        new_assignments.retain(|k, _| bridge.symbol(k).unwrap().prompt_count() > 0);
+        solved_symbols.insert(symbol.clone(), new_assignments);
+        if !config.recursive {
+            break;
+        }
+
+        queue.extend(depends_on.iter().cloned());
+        dependencies.insert(symbol.clone(), depends_on);
+    }
+
+    // Temporarily merge all assignments into a hashmap to detect collisions
+    let mut merged_assignments = HashMap::new();
+    for ass in solved_symbols.values() {
+        merge(&mut merged_assignments, ass.clone())?;
+    }
+
+    // Now collect the assignments in the correct order, such that
+    // all dependencies are set before setting the symbol itself.
+    let mut already_assigned_symbols = HashSet::new();
+    while !dependencies.is_empty() {
+        // Split into symbols which have their dependencies fulfilled,
+        // and those that still require some other symbol to be set first
+        let (fulfilled_symbols, mut remaining_symbols): (HashMap<String, Vec<String>>, HashMap<String, Vec<String>>) =
+            dependencies.into_iter().partition(|(_, v)| v.is_empty());
+
+        // Collect the new assignments, but only if they weren't assigned before.
+        // Conflicts cannot happen, as we already tested for conflicts before.
+        for fs in fulfilled_symbols.keys() {
+            solved_symbols.get_mut(fs).unwrap().drain().for_each(|e| {
+                let (k, _) = &e;
+                if !already_assigned_symbols.contains(k) {
+                    already_assigned_symbols.insert(k.clone());
+                    assignments.push(e);
+                }
+            });
+        }
+
+        // Remove dependencies to symbols that are now fulfilled
+        for v in remaining_symbols.values_mut() {
+            v.retain(|s| !fulfilled_symbols.contains_key(s))
+        }
+        dependencies = remaining_symbols;
+    }
+
+    if !ambiguities.is_empty() {
+        return Err(SolveError::AmbiguousSolution { symbols: ambiguities });
     }
 
     Ok(assignments)
