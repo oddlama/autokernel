@@ -39,15 +39,21 @@ pub enum SymbolSetError {
     #[error("valid booleans are: n, y")]
     InvalidBoolean,
 
-    #[error("desired value is above the symbol's visibility bounds [{min},{max}]")]
+    #[error("cannot set a higher value than {max}, the symbol has unmet dependencies")]
     UnmetDependencies {
         min: Tristate,
         max: Tristate,
         deps: Vec<String>,
-        satisfying_configuration: Option<Vec<(String, Tristate)>>,
+        satisfying_configuration: Result<Vec<(String, Tristate)>, SolveError>,
     },
-    #[error("TODO")]
-    RequiredByOther,
+    #[error("cannot set a lower value than {min}, the symbol is required by other symbols")]
+    RequiredByOther {
+        min: Tristate,
+        max: Tristate,
+        rev_deps: Vec<String>,
+    },
+    #[error("cannot set directly, instead satisfy any of the reverse dependencies")]
+    MustBeSelected { rev_deps: Vec<String> },
     #[error("TODO")]
     InvalidVisibility,
     #[error("module support is not enabled (try setting MODULES=y beforehand)")]
@@ -88,19 +94,29 @@ impl<'a> Symbol<'a> {
             let max = self.visible();
             if value > max {
                 let deps = self
-                    .direct_dependencies()
+                    .visibility_expression_bare()
                     .unwrap()
+                    .ok_or_else(|| SymbolSetError::MustBeSelected {
+                        rev_deps: self
+                            .reverse_dependencies()
+                            .unwrap()
+                            .or_clauses()
+                            .into_iter()
+                            .map(|x| x.display(self.bridge).to_string())
+                            .collect_vec(),
+                    })?
                     .and_clauses()
                     .into_iter()
                     .map(|x| x.display(self.bridge).to_string())
                     .collect_vec();
-                let satisfying_configuration = self
-                    .satisfy(SolverConfig {
-                        recursive: true,
-                        desired_value: value,
-                        ..SolverConfig::default()
-                    })
-                    .ok();
+
+                if deps.is_empty() {}
+
+                let satisfying_configuration = self.satisfy(SolverConfig {
+                    recursive: true,
+                    desired_value: value,
+                    ..SolverConfig::default()
+                });
                 return Err(SymbolSetError::UnmetDependencies {
                     min,
                     max,
@@ -108,7 +124,19 @@ impl<'a> Symbol<'a> {
                     satisfying_configuration,
                 });
             }
-            ensure!(value >= min, SymbolSetError::RequiredByOther);
+            if value < min {
+                return Err(SymbolSetError::RequiredByOther {
+                    min,
+                    max,
+                    rev_deps: self
+                        .reverse_dependencies()
+                        .unwrap()
+                        .or_clauses()
+                        .into_iter()
+                        .map(|x| x.display(self.bridge).to_string())
+                        .collect_vec(),
+                });
+            }
             ensure!(max > min, SymbolSetError::InvalidVisibility);
             ensure!(
                 !(value == Tristate::Mod
@@ -246,6 +274,7 @@ impl<'a> Symbol<'a> {
     }
 
     pub fn visible(&self) -> Tristate {
+        self.recalculate();
         unsafe { &*self.c_symbol }.visible
     }
 
@@ -265,8 +294,12 @@ impl<'a> Symbol<'a> {
         unsafe { &*self.c_symbol }.get_tristate_value()
     }
 
-    pub fn visibility_expression(&self) -> anyhow::Result<Expr> {
-        todo!("Ughh..")
+    pub fn visibility_expression_bare(&self) -> Result<Option<Expr>, ()> {
+        Ok(unsafe { &mut *(self.bridge.vtable.c_sym_direct_deps_with_props)(self.c_symbol) }.expr()?)
+    }
+
+    pub fn visibility_expression(&self) -> Result<Expr, ()> {
+        Ok(self.visibility_expression_bare()?.unwrap_or(Expr::Const(true)))
     }
 
     pub fn direct_dependencies(&self) -> Result<Expr, ()> {

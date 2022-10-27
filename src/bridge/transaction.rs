@@ -49,7 +49,7 @@ fn print_value_change_note(transaction: &Transaction) {
     }
 }
 
-pub fn validate_transactions(bridge: &Bridge, history: &Vec<Transaction>) -> Result<()> {
+pub fn validate_transactions(history: &Vec<Transaction>) -> Result<()> {
     // TODO extract source line and display like rustc
     // hide stacktrace unless --verbose / --debug is given
     let mut n_errors = 0u32;
@@ -67,36 +67,71 @@ pub fn validate_transactions(bridge: &Bridge, history: &Vec<Transaction>) -> Res
             eprint!("{}: ", "note".green());
             match error {
                 SymbolSetError::UnmetDependencies {
-                    min: _,
-                    max: _,
+                    min,
+                    max,
                     deps,
                     satisfying_configuration,
                 } => {
                     eprintln!("...because it currently has unmet dependencies");
                     eprintln!("   {}", "|".blue());
                     for dep in deps {
-                        eprintln!("   {} {}", "|".blue(), dep)
+                        eprintln!("   {} - {}", "|".blue(), dep)
                     }
                     eprintln!("   {}", "|".blue());
-                    if let Some(satconf) = satisfying_configuration {
-                        eprintln!("{}: you may want to set these symbols beforehand", "note".green());
-                        eprintln!("   {}", "|".blue());
-                        for (sym, value) in satconf {
-                            eprintln!(
-                                "   {} {} {}",
-                                "|".blue(),
-                                sym,
-                                format!("\"{}\"", value).color(value.color())
-                            )
+                    eprintln!(
+                        "   {} note: the range of assignable values is currently [min={}, max={}]",
+                        "=".blue(),
+                        min.to_string().color(min.color()),
+                        max.to_string().color(max.color()),
+                    );
+                    match satisfying_configuration {
+                        Ok(satisfying_configuration) => {
+                            eprintln!("{}: you may want to set these symbols beforehand", "note".green());
+                            eprintln!("   {}", "|".blue());
+                            for (sym, value) in satisfying_configuration {
+                                eprintln!(
+                                    "   {} {} {}",
+                                    "|".blue(),
+                                    sym,
+                                    format!("\"{}\"", value).color(value.color())
+                                )
+                            }
+                            eprintln!("   {}", "|".blue());
                         }
-                        eprintln!("   {}", "|".blue());
-                    } else {
-                        eprintln!(
-                            "   {} note: cannot suggest solution because automatic dependency resolution failed",
+                        Err(err) => eprintln!(
+                            "   {} note: cannot suggest solution because automatic dependency resolution failed ({:?})",
                             "=".blue(),
-                        );
-                        // TODO: show exact error
+                            err
+                        ),
                     }
+                }
+                SymbolSetError::RequiredByOther {
+                    min,
+                    max,
+                    rev_deps,
+                } => {
+                    eprintln!("...because it is required by at least one other symbol");
+                    eprintln!("   {}", "|".blue());
+                    for dep in rev_deps {
+                        eprintln!("   {} - {}", "|".blue(), dep)
+                    }
+                    eprintln!("   {}", "|".blue());
+                    eprintln!(
+                        "   {} note: the range of assignable values is currently [min={}, max={}]",
+                        "=".blue(),
+                        min.to_string().color(min.color()),
+                        max.to_string().color(max.color()),
+                    );
+                }
+                SymbolSetError::MustBeSelected {
+                    rev_deps,
+                } => {
+                    eprintln!("...because it must be implicitly selected by satisfying any of these expressions");
+                    eprintln!("   {}", "|".blue());
+                    for dep in rev_deps {
+                        eprintln!("   {} - {}", "|".blue(), dep)
+                    }
+                    eprintln!("   {}", "|".blue());
                 }
                 _ => eprintln!("{}", error),
             }

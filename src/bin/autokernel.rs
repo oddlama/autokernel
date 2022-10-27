@@ -79,7 +79,7 @@ fn build_kernel(args: &Args, config: &mut dyn Config, bridge: &Bridge, action: &
     }
 
     config.apply_kernel_config(bridge)?;
-    validate_transactions(bridge, &bridge.history.borrow())?;
+    validate_transactions(&bridge.history.borrow())?;
 
     let output = args.kernel_dir.join(".config");
     bridge.write_config(output)?;

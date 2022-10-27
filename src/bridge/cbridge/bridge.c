@@ -194,3 +194,12 @@ size_t get_choice_symbols(struct symbol* sym, struct symbol** out) {
 
 	return i;
 }
+
+struct expr* sym_direct_deps_with_props(struct symbol* sym) {
+	struct property* prop;
+	struct expr* e = NULL;
+	for_all_prompts(sym, prop) {
+		e = expr_alloc_or(e, expr_copy(prop->visible.expr));
+	}
+	return expr_eliminate_dups(expr_alloc_and(e, expr_copy(sym->dir_dep.expr)));
+}

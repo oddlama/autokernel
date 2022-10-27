@@ -68,7 +68,7 @@ pub fn satisfy(bridge: &Bridge, symbol: String, config: SolverConfig) -> Result<
             let expr = bridge
                 .symbol(&symbol)
                 .ok_or(SolveError::InvalidSymbol)?
-                .direct_dependencies()
+                .visibility_expression()
                 .map_err(|_| SolveError::InvalidExpression)?;
 
             let new_assignments = config.solver.satisfy(bridge, &expr, config.desired_value)?;
@@ -122,7 +122,7 @@ pub fn satisfy(bridge: &Bridge, symbol: String, config: SolverConfig) -> Result<
         let expr = bridge
             .symbol(&symbol)
             .ok_or(SolveError::InvalidSymbol)?
-            .direct_dependencies()
+            .visibility_expression()
             .map_err(|_| SolveError::InvalidExpression)?;
 
         assignments.extend(config.solver.satisfy(bridge, &expr, config.desired_value)?);

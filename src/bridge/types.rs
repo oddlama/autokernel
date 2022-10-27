@@ -152,16 +152,28 @@ pub union CExprData {
 }
 
 #[repr(C)]
-struct CExpr {
+pub struct CExpr {
     expr_type: CExprType,
     left: CExprData,
     right: CExprData,
+}
+
+impl CExpr {
+    pub fn expr(&mut self) -> Result<Option<Expr>, ()> {
+        convert_expression(self)
+    }
 }
 
 #[repr(C)]
 pub struct CExprValue {
     expression: *mut CExpr,
     pub tri: Tristate,
+}
+
+impl CExprValue {
+    pub fn expr(&self) -> Result<Option<Expr>, ()> {
+        convert_expression(self.expression)
+    }
 }
 
 fn convert_expression(expression: *mut CExpr) -> Result<Option<Expr>, ()> {
@@ -204,12 +216,6 @@ fn convert_expression(expression: *mut CExpr) -> Result<Option<Expr>, ()> {
         CExprType::Symbol => Expr::Terminal(Terminal::Symbol(sym!(left))),
         CExprType::Range => panic!("List expressions are not supported at this time, as they shouldn't be required. Please report this as a bug if you encounter this message under normal use."),
     }))
-}
-
-impl CExprValue {
-    pub fn expr(&self) -> Result<Option<Expr>, ()> {
-        convert_expression(self.expression)
-    }
 }
 
 #[repr(C)]
