@@ -9,8 +9,10 @@ use colored::Colorize;
 pub struct Transaction {
     /// The affected symbol
     pub symbol: String,
-    /// The location (e.g. file and line numer) where the change originated from
-    pub from: String,
+    /// The file where the change originated from
+    pub file: String,
+    /// The line where the change originated from
+    pub line: u32,
     /// The full traceback where the change originated from
     pub traceback: Option<String>,
     /// The intended new value for the symbol
@@ -24,7 +26,7 @@ pub struct Transaction {
 }
 
 fn print_location(transaction: &Transaction) {
-    eprintln!("  {} {}", "-->".blue(), transaction.from);
+    eprintln!("  {} {}:{}", "-->".blue(), transaction.file, transaction.line);
     if let Some(traceback) = &transaction.traceback {
         eprintln!("   {}", "|".blue());
         for line in traceback.lines() {

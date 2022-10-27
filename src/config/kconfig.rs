@@ -59,8 +59,9 @@ impl Config for KConfig {
                 .with_context(|| format!("could not get symbol {:?}", assignment.symbol))?
                 .set_value_tracked(
                     bridge::SymbolValue::Auto(assignment.value.clone()),
-                    format!("{}:{}", self.filename, assignment.line),
-                    None
+                    self.filename.clone(),
+                    assignment.line.try_into().unwrap(),
+                    None,
                 )?;
         }
         Ok(())

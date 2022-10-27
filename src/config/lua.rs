@@ -42,26 +42,28 @@ impl Config for LuaConfig {
             lua_ctx.scope(|scope| {
                 let globals = lua_ctx.globals();
                 lua_ctx.load(include_bytes!("api.lua")).set_name("api.lua")?.exec()?;
-                let symbol_set_auto =
-                    scope.create_function(|_, (name, value, from, traceback): (String, String, String, String)| {
+                let symbol_set_auto = scope.create_function(
+                    |_, (name, value, file, line, traceback): (String, String, String, u32, String)| {
                         bridge
                             .symbol(&name)
                             .unwrap()
-                            .set_value_tracked(SymbolValue::Auto(value.clone()), from, Some(traceback))
+                            .set_value_tracked(SymbolValue::Auto(value.clone()), file, line, Some(traceback))
                             .ok();
                         StdOk(())
-                    })?;
-                let symbol_set_bool =
-                    scope.create_function(|_, (name, value, from, traceback): (String, bool, String, String)| {
+                    },
+                )?;
+                let symbol_set_bool = scope.create_function(
+                    |_, (name, value, file, line, traceback): (String, bool, String, u32, String)| {
                         bridge
                             .symbol(&name)
                             .unwrap()
-                            .set_value_tracked(SymbolValue::Boolean(value.clone()), from, Some(traceback))
+                            .set_value_tracked(SymbolValue::Boolean(value.clone()), file, line, Some(traceback))
                             .ok();
                         StdOk(())
-                    })?;
-                let symbol_set_number =
-                    scope.create_function(|_, (name, value, from, traceback): (String, i64, String, String)| {
+                    },
+                )?;
+                let symbol_set_number = scope.create_function(
+                    |_, (name, value, file, line, traceback): (String, i64, String, u32, String)| {
                         // We use an i64 here to detect whether values in lua got clipped. Apparently
                         // when values wrap
                         if value < 0 {
@@ -72,12 +74,13 @@ impl Config for LuaConfig {
                         bridge
                             .symbol(&name)
                             .unwrap()
-                            .set_value_tracked(SymbolValue::Number(value as u64), from, Some(traceback))
+                            .set_value_tracked(SymbolValue::Number(value as u64), file, line, Some(traceback))
                             .ok();
                         StdOk(())
-                    })?;
-                let symbol_set_tristate =
-                    scope.create_function(|_, (name, value, from, traceback): (String, String, String, String)| {
+                    },
+                )?;
+                let symbol_set_tristate = scope.create_function(
+                    |_, (name, value, file, line, traceback): (String, String, String, u32, String)| {
                         bridge
                             .symbol(&name)
                             .unwrap()
@@ -85,52 +88,69 @@ impl Config for LuaConfig {
                                 SymbolValue::Tristate(value.parse().map_err(|_| {
                                     LuaError::RuntimeError(format!("Could not convert {value} to tristate"))
                                 })?),
-                                from,
+                                file,
+                                line,
                                 Some(traceback),
                             )
                             .ok();
                         StdOk(())
-                    })?;
-                let symbol_satisfy_and_set = scope.create_function(
-                    |_, (name, value, recursive, from, traceback): (String, String, bool, String, String)| {
-                        let value = value
-                            .parse()
-                            .map_err(|_| LuaError::RuntimeError(format!("Could not convert {value} to tristate")))?;
-                        let satisfying_configuration = bridge.symbol(&name).unwrap().satisfy_track_error(
-                            SymbolValue::Tristate(value),
-                            from.clone(),
-                            Some(traceback.clone()),
-                            SolverConfig {
-                                recursive,
-                                desired_value: value,
-                                ..SolverConfig::default()
-                            },
-                        );
-
-                        // If there was an error, it will have been tracked already.
-                        // Ignore and continue.
-                        if satisfying_configuration.is_err() {
-                            return StdOk(());
-                        }
-
-                        for (sym, value) in satisfying_configuration.unwrap() {
-                            bridge
-                                .symbol(&sym)
-                                .unwrap()
-                                .set_value_tracked(SymbolValue::Tristate(value), from.clone(), Some(traceback.clone()))
-                                .ok();
-                        }
-
-                        let mut symbol = bridge.symbol(&name).unwrap();
-                        if symbol.prompt_count() > 0 {
-                            symbol
-                                .set_value_tracked(SymbolValue::Tristate(value), from, Some(traceback))
-                                .ok();
-                        }
-
-                        StdOk(())
                     },
                 )?;
+                let symbol_satisfy_and_set =
+                    scope.create_function(
+                        |_,
+                         (name, value, recursive, file, line, traceback): (
+                            String,
+                            String,
+                            bool,
+                            String,
+                            u32,
+                            String,
+                        )| {
+                            let value = value.parse().map_err(|_| {
+                                LuaError::RuntimeError(format!("Could not convert {value} to tristate"))
+                            })?;
+                            let satisfying_configuration = bridge.symbol(&name).unwrap().satisfy_track_error(
+                                SymbolValue::Tristate(value),
+                                file.clone(),
+                                line,
+                                Some(traceback.clone()),
+                                SolverConfig {
+                                    recursive,
+                                    desired_value: value,
+                                    ..SolverConfig::default()
+                                },
+                            );
+
+                            // If there was an error, it will have been tracked already.
+                            // Ignore and continue.
+                            if satisfying_configuration.is_err() {
+                                return StdOk(());
+                            }
+
+                            for (sym, value) in satisfying_configuration.unwrap() {
+                                bridge
+                                    .symbol(&sym)
+                                    .unwrap()
+                                    .set_value_tracked(
+                                        SymbolValue::Tristate(value),
+                                        file.clone(),
+                                        line,
+                                        Some(traceback.clone()),
+                                    )
+                                    .ok();
+                            }
+
+                            let mut symbol = bridge.symbol(&name).unwrap();
+                            if symbol.prompt_count() > 0 {
+                                symbol
+                                    .set_value_tracked(SymbolValue::Tristate(value), file, line, Some(traceback))
+                                    .ok();
+                            }
+
+                            StdOk(())
+                        },
+                    )?;
                 let symbol_get_string =
                     scope.create_function(|_, name: String| StdOk(bridge.symbol(&name).unwrap().get_string_value()))?;
                 let symbol_get_type = scope.create_function(|_, name: String| {

@@ -230,7 +230,8 @@ impl<'a> Symbol<'a> {
     pub fn set_value_tracked(
         &mut self,
         value: SymbolValue,
-        from: String,
+        file: String,
+        line: u32,
         traceback: Option<String>,
     ) -> Result<(), SymbolSetError> {
         let current_value = self.get_value().unwrap();
@@ -239,7 +240,8 @@ impl<'a> Symbol<'a> {
         println!("{self}");
         self.bridge.history.borrow_mut().push(Transaction {
             symbol: self.name().unwrap().to_string(),
-            from,
+            file,
+            line,
             traceback,
             value,
             value_before: current_value,
@@ -333,7 +335,8 @@ impl<'a> Symbol<'a> {
     pub fn satisfy_track_error(
         &mut self,
         value: SymbolValue,
-        from: String,
+        file: String,
+        line: u32,
         traceback: Option<String>,
         config: SolverConfig,
     ) -> Result<Vec<(String, Tristate)>, SolveError> {
@@ -345,7 +348,8 @@ impl<'a> Symbol<'a> {
         let current_value = self.get_value().unwrap();
         self.bridge.history.borrow_mut().push(Transaction {
             symbol: self.name().unwrap().to_string(),
-            from,
+            file,
+            line,
             traceback,
             value,
             value_before: current_value.clone(),

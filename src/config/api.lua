@@ -87,13 +87,12 @@ end
 function Symbol:__call(value) self:set(value, debug.getinfo(2)) end
 function Symbol:set(value, dbginfo)
 	dbginfo = dbginfo or debug.getinfo(2)
-	local from = dbginfo.source .. ":" .. dbginfo.currentline
 	if getmetatable(value) == Tristate then
-		ak.symbol_set_tristate(self.name, value.name, from, debug.traceback())
+		ak.symbol_set_tristate(self.name, value.name, dbginfo.source, dbginfo.currentline, debug.traceback())
 	elseif type(value) == "string" then
-		ak.symbol_set_auto(self.name, value, from, debug.traceback())
+		ak.symbol_set_auto(self.name, value, dbginfo.source, dbginfo.currentline, debug.traceback())
 	elseif type(value) == "number" then
-		ak.symbol_set_number(self.name, value, from, debug.traceback())
+		ak.symbol_set_number(self.name, value, dbginfo.source, dbginfo.currentline, debug.traceback())
 	else
 		error ("Unsupported value type '" .. type(value) .. "'")
 	end
@@ -101,7 +100,6 @@ end
 
 function Symbol:satisfy(tbl, dbginfo)
 	dbginfo = dbginfo or debug.getinfo(2)
-	local from = dbginfo.source .. ":" .. dbginfo.currentline
 
 	local value = tbl[1]
 	local recursive = tbl["recursive"]
@@ -115,7 +113,7 @@ function Symbol:satisfy(tbl, dbginfo)
 	end
 
 	if getmetatable(value) == Tristate then
-		ak.symbol_satisfy_and_set(self.name, value.name, recursive, from, debug.traceback())
+		ak.symbol_satisfy_and_set(self.name, value.name, recursive, dbginfo.source, dbginfo.currentline, debug.traceback())
 	else
 		error ("Unsupported value type '" .. type(value) .. "', must be Tristate (m or y)")
 	end
