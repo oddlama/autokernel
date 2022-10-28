@@ -1,9 +1,14 @@
+use std::{
+    fs::File,
+    io::{BufRead, BufReader},
+};
+
 use crate::bridge::satisfier::{Ambiguity, SolveError};
 
 use super::{SymbolSetError, SymbolValue, Tristate};
 
 use anyhow::{ensure, Result};
-use colored::Colorize;
+use colored::{Color, Colorize};
 
 #[derive(Debug)]
 pub struct Transaction {
@@ -25,31 +30,76 @@ pub struct Transaction {
     pub error: Option<SymbolSetError>,
 }
 
-fn print_location(transaction: &Transaction) {
-    eprintln!("  {} {}:{}", "-->".blue(), transaction.file, transaction.line);
-    if let Some(traceback) = &transaction.traceback {
-        eprintln!("   {}", "|".blue());
-        for line in traceback.lines() {
-            eprintln!("   {} {}", "|".blue(), line.dimmed())
-        }
-        eprintln!("   {}", "|".blue());
-    }
+fn read_line_at_location(transaction: &Transaction) -> Option<String> {
+    let file = File::open(&transaction.file).ok()?;
+    let line = BufReader::new(file)
+        .lines()
+        .nth((transaction.line - 1).try_into().unwrap())?
+        .ok()?;
+    Some(line)
 }
 
-fn print_value_change_note(transaction: &Transaction) {
+struct Location<'a> {
+    transaction: &'a Transaction,
+    hints: &'a [&'a str],
+    color: Color,
+}
+
+fn print_locations(mut locations: Vec<Location>) {
+    // for line in traceback.lines() {
+    //     eprintln!("   {} {}", "|".blue(), line.dimmed())
+    // }
+    locations.sort_by_key(|x| (&x.transaction.file, x.transaction.line));
+    let num_col_width = format!("{}", locations.iter().map(|l| l.transaction.line).max().unwrap_or(0)).len();
+    let indent = " ".repeat(num_col_width);
+    let mut previous_file = None;
+    for loc in locations {
+        if previous_file == Some(&loc.transaction.file) {
+            eprintln!("{indent} {}", "|".blue());
+        } else {
+            eprintln!(
+                "{indent}{} {}:{}",
+                "-->".blue(),
+                loc.transaction.file,
+                loc.transaction.line
+            );
+            eprintln!("{indent} {}", "|".blue());
+            previous_file = Some(&loc.transaction.file)
+        }
+
+        let line = read_line_at_location(loc.transaction).unwrap_or("<cannot read file>".into());
+        eprintln!(
+            "{:>indent$} {} {}",
+            loc.transaction.line.to_string().blue(),
+            "|".blue(),
+            line,
+            indent = num_col_width
+        );
+        if loc.hints.len() > 0 {
+            eprintln!(
+                "{indent} {} {} {}",
+                "|".blue(),
+                "^".repeat(line.len()).color(loc.color),
+                loc.hints[0]
+            );
+            for hint in loc.hints.iter().skip(1) {
+                eprintln!("{indent} {} {} {}", "|".blue(), " ".repeat(line.len()), hint);
+            }
+        } else {
+            eprint!("{indent} {} {}", "|".blue(), "^".repeat(line.len()).color(loc.color));
+        }
+    }
+    eprintln!("{indent} {}", "|".blue());
+}
+
+fn value_change_note(transaction: &Transaction) -> String {
     if transaction.value_before == transaction.value_after {
-        eprintln!(
-            "   {} note: this did not change the previous value {:?}",
-            "=".blue(),
-            transaction.value_before
-        );
+        format!("this did not change the previous value {:?}", transaction.value_before)
     } else {
-        eprintln!(
-            "   {} note: this changed the value from {:?} to {:?}",
-            "=".blue(),
-            transaction.value_before,
-            transaction.value_after
-        );
+        format!(
+            "this changed the value from {:?} to {:?}",
+            transaction.value_before, transaction.value_after
+        )
     }
 }
 
@@ -108,8 +158,12 @@ pub fn validate_transactions(history: &Vec<Transaction>) -> Result<()> {
                 &t.symbol,
                 &t.value
             );
-            print_location(t);
-            print_value_change_note(t);
+
+            print_locations(vec![Location {
+                transaction: t,
+                hints: &[&format!("hint: {}", value_change_note(t)).dimmed().to_string()],
+                color: Color::Red,
+            }]);
             match error {
                 SymbolSetError::SatisfyFailed { error } => print_satisfy_result(&Err(error.clone())),
                 SymbolSetError::UnmetDependencies {
@@ -174,12 +228,27 @@ pub fn validate_transactions(history: &Vec<Transaction>) -> Result<()> {
                     t.symbol,
                     t.value,
                 );
-                print_location(t);
-                print_value_change_note(t);
-                eprintln!("{}: last assigned here to {:?}", "note".green(), other.value);
-                print_location(other);
-                print_value_change_note(other);
-                eprintln!("");
+                print_locations(vec![
+                    Location {
+                        transaction: t,
+                        hints: &[
+                            &format!("help: reassigned here to {:?}", t.value).yellow().to_string(),
+                            &format!("hint: {}", value_change_note(t)).dimmed().to_string(),
+                        ],
+                        color: Color::Yellow,
+                    },
+                    Location {
+                        transaction: other,
+                        hints: &[
+                            &format!("help: previously assigned here to {:?}", t.value)
+                                .yellow()
+                                .to_string(),
+                            &format!("hint: {}", value_change_note(t)).dimmed().to_string(),
+                        ],
+                        color: Color::Yellow,
+                    },
+                ]);
+                eprintln!();
                 break;
             }
         }
