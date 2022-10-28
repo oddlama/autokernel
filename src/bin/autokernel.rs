@@ -1,10 +1,17 @@
-use autokernel::{bridge::{Bridge, validate_transactions}, config::{self, Config}};
+use autokernel::bridge::satisfier::SolverConfig;
+use autokernel::bridge::{print_satisfy_result, Tristate};
+use autokernel::{
+    bridge::{validate_transactions, Bridge},
+    config,
+};
 
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::result::Result::Ok as StdOk;
 
-use anyhow::{Ok, Result};
+use anyhow::{anyhow, Context, Ok, Result};
 use clap::Parser;
+use colored::Colorize;
 
 #[derive(Parser, Debug)]
 #[clap(version, about, long_about = None)]
@@ -35,26 +42,73 @@ struct ActionGenerateConfig {
     output: Option<PathBuf>,
 }
 
+#[derive(Debug, clap::Args)]
+struct ActionSatisfy {
+    /// The symbol to satisfy
+    symbol: String,
+    /// The value to solve for (either m or y)
+    #[clap(default_value = "y")]
+    value: String,
+    /// Don't load the config before satisfying, instead run the solver directly with all symbols set to their default values
+    #[clap(short, long)]
+    ignore_config: bool,
+    /// Recursively satisfy any encountered dependencies
+    #[clap(short, long)]
+    recursive: bool,
+}
+
 #[derive(Debug, clap::Subcommand)]
 enum Action {
     Build(ActionBuild),
     GenerateConfig(ActionGenerateConfig),
+    Satisfy(ActionSatisfy),
 }
 
 fn main() -> Result<()> {
     let args = Args::parse();
-    let mut config = config::load(&args.config)?;
     let bridge = Bridge::new(args.kernel_dir.clone())?;
 
     match &args.action {
-        Action::Build(action) => build_kernel(&args, config.as_mut(), &bridge, action),
-        Action::GenerateConfig(action) => generate_config(&args, config.as_mut(), &bridge, action),
+        Action::Build(action) => build_kernel(&args, &bridge, action),
+        Action::GenerateConfig(action) => generate_config(&args, &bridge, action),
+        Action::Satisfy(action) => satisfy_symbol(&args, &bridge, action),
     }
 }
 
-fn generate_config(args: &Args, config: &mut dyn Config, bridge: &Bridge, action: &ActionGenerateConfig) -> Result<()> {
+fn satisfy_symbol(args: &Args, bridge: &Bridge, action: &ActionSatisfy) -> Result<()> {
+    if !action.ignore_config {
+        let config = config::load(&args.config)?;
+        config.apply_kernel_config(bridge)?;
+        validate_transactions(&bridge.history.borrow())?;
+    }
+
+    let value: Tristate = action.value.parse().map_err(|_| anyhow!("Invalid symbol value '{}'", action.value))?;
+    println!(
+        "Trying to satisfy {}={}...",
+        action.symbol.blue(),
+        value.to_string().color(value.color())
+    );
+    let satisfying_configuration = bridge
+        .symbol(&action.symbol)
+        .context("This symbol doesn't exist")?
+        .satisfy(SolverConfig {
+            recursive: action.recursive,
+            desired_value: value,
+            ..SolverConfig::default()
+        });
+
+    match satisfying_configuration {
+        StdOk(c) if c.is_empty() => println!("Nothing to do :)"),
+        _ => print_satisfy_result(&satisfying_configuration),
+    };
+    Ok(())
+}
+
+fn generate_config(args: &Args, bridge: &Bridge, action: &ActionGenerateConfig) -> Result<()> {
+    let config = config::load(&args.config)?;
     println!("Generating config...");
     config.apply_kernel_config(bridge)?;
+    validate_transactions(&bridge.history.borrow())?;
 
     // Write to given output file or fallback to .config in the kernel directory
     let output = action.output.clone().unwrap_or(args.kernel_dir.join(".config"));
@@ -62,7 +116,8 @@ fn generate_config(args: &Args, config: &mut dyn Config, bridge: &Bridge, action
     Ok(())
 }
 
-fn build_kernel(args: &Args, config: &mut dyn Config, bridge: &Bridge, action: &ActionBuild) -> Result<()> {
+fn build_kernel(args: &Args, bridge: &Bridge, action: &ActionBuild) -> Result<()> {
+    let config = config::load(&args.config)?;
     println!("Building kernel...");
     // umask 022 // do we want this from the config?
 

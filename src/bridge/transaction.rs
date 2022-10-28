@@ -103,7 +103,7 @@ fn value_change_note(transaction: &Transaction) -> String {
     }
 }
 
-fn print_satisfy_result(satisfying_configuration: &Result<Vec<(String, Tristate)>, SolveError>) {
+pub fn print_satisfy_result(satisfying_configuration: &Result<Vec<(String, Tristate)>, SolveError>) {
     match satisfying_configuration {
         Ok(satisfying_configuration) => {
             eprintln!("{}: you may want to set these symbols beforehand", "note".green());
@@ -172,8 +172,13 @@ pub fn validate_transactions(history: &Vec<Transaction>) -> Result<()> {
                     deps,
                     satisfying_configuration,
                 } => {
-                    eprintln!("{}: ...because it currently has unmet dependencies", "note".green());
+                    eprintln!("{}: ...because it has unmet dependencies", "note".green());
                     eprintln!("   {}", "|".blue());
+                    eprintln!(
+                        "   {} {}: all of the following expressions must be satisfied",
+                        "|".blue(),
+                        t.symbol.blue()
+                    );
                     for dep in deps {
                         eprintln!("   {} - {}", "|".blue(), dep)
                     }

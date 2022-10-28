@@ -39,7 +39,8 @@ fn test_symbol_tristate(bridge: &Bridge) {
     assert_eq!(sym.get_tristate_value(), Tristate::No);
 
     // Setting
-    sym.set_value_tracked(SymbolValue::Tristate(Tristate::Yes), format!("{}:{}", file!(), line!()), None).unwrap();
+    sym.set_value_tracked(SymbolValue::Tristate(Tristate::Yes), file!().to_string(), line!(), None)
+        .unwrap();
     assert_eq!(sym.get_tristate_value(), Tristate::Yes);
 }
 
@@ -76,7 +77,7 @@ fn integration_test_luaconfig() {
     bridge
         .symbol("MODULES")
         .expect("this should have worked for test")
-        .set_value_tracked(SymbolValue::Tristate(Tristate::Yes), format!("{}:{}", file!(), line!()), None)
+        .set_value_tracked(SymbolValue::Tristate(Tristate::Yes), file!().to_string(), line!(), None)
         .expect("this was for setting up the test");
     lua_test!(
         "assign syntax",
@@ -84,9 +85,6 @@ fn integration_test_luaconfig() {
         CONFIG_CRYPTO "y"
         CONFIG_CRYPTO "m"
         CONFIG_CRYPTO "n"
-        CONFIG_CRYPTO(yes)
-        CONFIG_CRYPTO(mod)
-        CONFIG_CRYPTO(no)
         CONFIG_CRYPTO(y)
         CONFIG_CRYPTO(m)
         CONFIG_CRYPTO(n)

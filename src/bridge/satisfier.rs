@@ -132,6 +132,7 @@ pub fn satisfy(bridge: &Bridge, symbol: String, config: SolverConfig) -> Result<
         new_assignments.retain(|k, _| bridge.symbol(k).unwrap().prompt_count() > 0);
         solved_symbols.insert(symbol.clone(), new_assignments);
         if !config.recursive {
+            dependencies.insert(symbol.clone(), vec![]);
             break;
         }
 

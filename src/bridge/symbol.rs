@@ -235,9 +235,7 @@ impl<'a> Symbol<'a> {
         traceback: Option<String>,
     ) -> Result<(), SymbolSetError> {
         let current_value = self.get_value().unwrap();
-        print!("{self} -> ");
         let ret = self.set_value(value.clone());
-        println!("{self}");
         self.bridge.history.borrow_mut().push(Transaction {
             symbol: self.name().unwrap().to_string(),
             file,
@@ -371,7 +369,7 @@ impl<'a> fmt::Display for Symbol<'a> {
                         false => Color::Red,
                         true => Color::Green,
                     },
-                    format!("={}", value),
+                    format!("={}", Tristate::from(value)),
                 ),
                 Ok(SymbolValue::Tristate(value)) => (value.color(), format!("={}", value)),
                 Ok(SymbolValue::Int(value)) => (Color::White, format!("={}", value)),

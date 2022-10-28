@@ -1,19 +1,10 @@
 // -- todo always test all three "y" ("y") and .set("y") using rust
-// BOOLEAN_SYMBOL(true)
-// BOOLEAN_SYMBOL(false)
 // BOOLEAN_SYMBOL "y"
 // BOOLEAN_SYMBOL "n"
-// BOOLEAN_SYMBOL(yes)
-// BOOLEAN_SYMBOL(no)
 //
-// TRISTATE_SYMBOL(true)
-// TRISTATE_SYMBOL(false)
 // TRISTATE_SYMBOL "y"
 // TRISTATE_SYMBOL "m"
 // TRISTATE_SYMBOL "n"
-// TRISTATE_SYMBOL(yes)
-// TRISTATE_SYMBOL(mod)
-// TRISTATE_SYMBOL(no)
 //
 // STRING_SYMBOL ""
 // STRING_SYMBOL "y"
@@ -62,7 +53,7 @@
 // -- Errors
 //
 // -- try to support this using rlua
-// TRISTATE_SYMBOL = yes
+// TRISTATE_SYMBOL = y
 // TRISTATE_SYMBOL = "y"
 //
 // BOOLEAN_SYMBOL "m"

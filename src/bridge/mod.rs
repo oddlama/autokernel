@@ -95,7 +95,7 @@ impl Bridge {
     }
 
     /// Saves all modified (unsaved) values
-    /// Iterates over all symbols, wraps them and recalculates them
+    /// Iterates over all symbols and recalculates them
     pub fn recalculate_all_symbols(&self) {
         //iterate
         for symbol in &self.symbols {
@@ -116,8 +116,6 @@ impl Bridge {
 
     pub fn write_config(&self, path: impl AsRef<Path>) -> Result<()> {
         println!("Writing {}...", path.as_ref().display());
-        // TODO prevent conf_write from printing shit by overriding conf_message.
-        // TODO do error checks in rust and dont depend on C here for nicer error handling
         let c: CString = CString::new(path.as_ref().to_str().context("Invalid filename")?)?;
         ensure!((self.vtable.c_conf_write)(c.as_ptr()) == 0, "Could not write config");
         Ok(())
