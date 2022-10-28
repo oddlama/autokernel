@@ -141,7 +141,6 @@ impl Bridge {
     }
 
     pub fn read_config_unchecked(&self, path: impl AsRef<Path>) -> Result<()> {
-        println!("Reading unchecked {}...", path.as_ref().display());
         let c: CString = CString::new(path.as_ref().to_str().context("Invalid filename")?)?;
         ensure!(
             (self.vtable.c_conf_read_unchecked)(c.as_ptr()) == 0,
