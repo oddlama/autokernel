@@ -50,7 +50,7 @@ fn print_locations(mut locations: Vec<Location>) {
     //     eprintln!("   {} {}", "|".blue(), line.dimmed())
     // }
     locations.sort_by_key(|x| (&x.transaction.file, x.transaction.line));
-    let num_col_width = format!("{}", locations.iter().map(|l| l.transaction.line).max().unwrap_or(0)).len();
+    let num_col_width = format!("{}", locations.iter().map(|l| l.transaction.line).max().unwrap_or(0)).len().max(2);
     let indent = " ".repeat(num_col_width);
     let mut previous_file = None;
     for loc in locations {
