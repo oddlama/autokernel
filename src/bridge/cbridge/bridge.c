@@ -8,13 +8,18 @@
 #include "lkc.h"
 #include <ctype.h>
 
-bool autokernel_debug = true;
+bool autokernel_debug = false;
 extern struct symbol symbol_yes, symbol_no, symbol_mod;
 size_t n_symbols = 0;
 size_t n_unknown_symbols = 0;
 char** autokernel_env = NULL;
 
-#define DEBUG(...) do { if (autokernel_debug) { printf("[bridge] " __VA_ARGS__); } } while(0)
+#define DEBUG(...)                           \
+	do {                                     \
+		if (autokernel_debug) {              \
+			printf("[bridge] " __VA_ARGS__); \
+		}                                    \
+	} while (0)
 
 static void dev_null_message_callback(const char* s) {}
 
@@ -87,27 +92,20 @@ void init(char const* const* env) {
 	}
 
 	gettimeofday(&now, NULL);
-	DEBUG("Parsed Kconfig in %.4fs\n", (double)(now.tv_usec - start.tv_usec) / 1000000 + (double)(now.tv_sec - start.tv_sec));
+	DEBUG("Parsed Kconfig in %.4fs\n",
+	      (double)(now.tv_usec - start.tv_usec) / 1000000 + (double)(now.tv_sec - start.tv_sec));
 	start = now;
 
 	// Pre-count symbols: Three static symbols plus all parsed symbols
 	n_symbols = 3;
-	n_unknown_symbols = 0;
-	for_all_symbols(i, sym) {
-		++n_symbols;
-		if (sym->type == S_UNKNOWN) {
-			++n_unknown_symbols;
-		}
-	}
-	DEBUG("Found %ld symbols (+%ld unknown symbols)\n", n_symbols - n_unknown_symbols, n_unknown_symbols);
+	for_all_symbols(i, sym) { ++n_symbols; }
+	DEBUG("Found %ld symbols\n", n_symbols);
 }
 
 /**
  * Returns the count of all known symbols.
  */
-size_t symbol_count() {
-	return n_symbols;
-}
+size_t symbol_count() { return n_symbols; }
 
 /**
  * Returns a list of all known symbols.
@@ -120,9 +118,7 @@ void get_all_symbols(struct symbol** out) {
 	*(next++) = &symbol_yes;
 	*(next++) = &symbol_no;
 	*(next++) = &symbol_mod;
-	for_all_symbols(i, sym) {
-		*(next++) = sym;
-	}
+	for_all_symbols(i, sym) { *(next++) = sym; }
 }
 
 /**
@@ -141,8 +137,7 @@ uint64_t sym_int_get_min(struct symbol* sym) {
 			if (!prop)
 				return 0;
 			return strtoll(prop->expr->left.sym->curr.val, NULL, 16);
-		default:
-			return 0;
+		default: return 0;
 	}
 }
 
@@ -162,8 +157,7 @@ uint64_t sym_int_get_max(struct symbol* sym) {
 			if (!prop)
 				return 0;
 			return strtoll(prop->expr->right.sym->curr.val, NULL, 16);
-		default:
-			return 0;
+		default: return 0;
 	}
 }
 
@@ -183,13 +177,9 @@ size_t get_choice_symbols(struct symbol* sym, struct symbol** out) {
 
 	prop = sym_get_choice_prop(sym);
 	if (out) {
-		expr_list_for_each_sym(prop->expr, e, choice_sym) {
-			out[i++] = choice_sym;
-		}
+		expr_list_for_each_sym(prop->expr, e, choice_sym) { out[i++] = choice_sym; }
 	} else {
-		expr_list_for_each_sym(prop->expr, e, choice_sym) {
-			++i;
-		}
+		expr_list_for_each_sym(prop->expr, e, choice_sym) { ++i; }
 	}
 
 	return i;
@@ -198,17 +188,13 @@ size_t get_choice_symbols(struct symbol* sym, struct symbol** out) {
 struct expr* sym_direct_deps_with_prompts(struct symbol* sym) {
 	struct property* prop;
 	struct expr* e = NULL;
-	for_all_prompts(sym, prop) {
-		e = expr_alloc_or(e, expr_copy(prop->visible.expr));
-	}
+	for_all_prompts(sym, prop) { e = expr_alloc_or(e, expr_copy(prop->visible.expr)); }
 	return expr_eliminate_dups(expr_alloc_and(e, expr_copy(sym->dir_dep.expr)));
 }
 
 size_t sym_prompt_count(struct symbol* sym) {
 	struct property* prop;
 	size_t count = 0;
-	for_all_prompts(sym, prop) {
-		++count;
-	}
+	for_all_prompts(sym, prop) { ++count; }
 	return count;
 }

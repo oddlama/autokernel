@@ -1,13 +1,15 @@
 use anyhow::{ensure, Context, Error, Result};
+use colored::Colorize;
 use libc::c_char;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
-use std::fs;
 use std::io::prelude::*;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::time::Instant;
+use std::{fs, io};
 
 pub mod satisfier;
 mod transaction;
@@ -20,7 +22,7 @@ pub use symbol::*;
 mod expr;
 pub use expr::Expr;
 
-mod types;
+pub mod types;
 use types::*;
 pub use types::{SymbolValue, Tristate};
 
@@ -45,6 +47,11 @@ impl Bridge {
     /// Bridge object to interface with the C part.
     pub fn new(kernel_dir: PathBuf) -> Result<Bridge> {
         let (library_path, env) = prepare_bridge(&kernel_dir)?;
+
+        let time_start = Instant::now();
+        print!("{:>12} bridge\r", "Initializing".cyan());
+        io::stdout().flush().unwrap();
+
         let vtable = unsafe { BridgeVTable::new(library_path)? };
         // Create env vector
         let env: Vec<CString> = env
@@ -74,13 +81,26 @@ impl Bridge {
             }
         }
 
-        Ok(Bridge {
+        let bridge = Bridge {
             vtable,
             kernel_dir,
             symbols,
             name_to_symbol,
             history: RefCell::new(Vec::new()),
-        })
+        };
+        let n_valid_symbols = bridge
+            .symbols
+            .iter()
+            .filter(|s| !unsafe { &***s }.name.is_null() && !unsafe { &***s }.flags.intersects(SymbolFlags::CONST))
+            .count();
+        println!(
+            "{:>12} bridge [kernel {}, {} symbols] in {:.2?}",
+            "Initialized".green(),
+            bridge.get_env("KERNELVERSION"),
+            n_valid_symbols,
+            time_start.elapsed()
+        );
+        Ok(bridge)
     }
 
     pub fn wrap_symbol(&self, symbol: *mut CSymbol) -> Symbol {
@@ -115,7 +135,6 @@ impl Bridge {
     }
 
     pub fn write_config(&self, path: impl AsRef<Path>) -> Result<()> {
-        println!("Writing {}...", path.as_ref().display());
         let c: CString = CString::new(path.as_ref().to_str().context("Invalid filename")?)?;
         ensure!((self.vtable.c_conf_write)(c.as_ptr()) == 0, "Could not write config");
         Ok(())
@@ -142,6 +161,7 @@ impl Bridge {
 
 /// Compile (or find existing) bridge shared library.
 fn prepare_bridge(kernel_dir: &PathBuf) -> Result<(PathBuf, EnvironMap)> {
+    let time_start = Instant::now();
     let kconfig_dir = kernel_dir.join("scripts").join("kconfig");
 
     // Copy bridge.c to kernel scripts directory
@@ -180,7 +200,8 @@ fn prepare_bridge(kernel_dir: &PathBuf) -> Result<(PathBuf, EnvironMap)> {
         .map_err(|e| Error::msg(format!("OsString conversion failed for {:?}", e)))?;
 
     // Build our bridge by intercepting the final call of a make defconfig invocation.
-    println!("Building bridge for {}", kernel_dir.display());
+    print!("{:>12} bridge for {}\r", "Building".cyan(), kernel_dir.display());
+    io::stdout().flush().unwrap();
     let bridge_library = kconfig_dir.join("autokernel_bridge.so");
     let builder_output = Command::new("bash")
         .args(["-c", "--"])
@@ -197,5 +218,11 @@ fn prepare_bridge(kernel_dir: &PathBuf) -> Result<(PathBuf, EnvironMap)> {
         .1;
 
     let env = serde_json::from_str(builder_output)?;
+    println!(
+        "{:>12} bridge for {} in {:.2?}",
+        "Built".green(),
+        kernel_dir.display(),
+        time_start.elapsed()
+    );
     Ok((bridge_library, env))
 }

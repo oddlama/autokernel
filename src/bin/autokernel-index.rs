@@ -1,4 +1,5 @@
-use autokernel::bridge::{Bridge, Expr, Symbol};
+use autokernel::bridge::{types::SymbolType, Bridge, Expr, Symbol};
+use colored::Colorize;
 
 use std::path::PathBuf;
 
@@ -18,21 +19,24 @@ struct Args {
 
 #[derive(Debug, clap::Args)]
 struct ActionAnalyzeConfig {
-    /// The name for the indexed configuration
-    #[clap(short, long, value_name = "FILE", default_value = "index.")]
-    name: String,
-
+    /// The output file. Will print to stdout if not given.
+    output: Option<PathBuf>,
     /// The configuration file to index
     #[clap(short, long, value_parser, value_name = "DIR", value_hint = clap::ValueHint::FilePath)]
     config: PathBuf,
 }
 
 #[derive(Debug, clap::Args)]
-struct ActionAnalyzeDefaults {}
+struct ActionAnalyzeDefaults {
+    /// The output file. Will print to stdout if not given.
+    output: Option<PathBuf>,
+}
 
 #[derive(Debug, clap::Subcommand)]
 enum Action {
+    /// Analyze the default symbol values
     AnalyzeConfig(ActionAnalyzeConfig),
+    /// Analyze the default symbol values
     AnalyzeDefaults(ActionAnalyzeDefaults),
 }
 
@@ -57,27 +61,24 @@ fn valid_symbol(symbol: &Symbol) -> bool {
 
 fn dump_symbol(bridge: &Bridge, symbol: &Symbol) {
     println!(
-        "{} {:?} {:?}\n  VISIBI: {}\n  DIRECT: {}\n", //  REVERSE: {}\n  IMPLIED: {}",
+        "{} {:?} {:?}\n  VISIBI: {}\n", //  REVERSE: {}\n  IMPLIED: {}",
         symbol.name().unwrap(),
         symbol.symbol_type(),
         symbol.visible(),
         symbol.visibility_expression().unwrap().display(bridge),
-        symbol.direct_dependencies().unwrap().display(bridge),
         //symbol.reverse_dependencies().unwrap().display(bridge),
         //symbol.implied().unwrap().display(bridge)
     );
 }
 
 fn analyze_defaults(args: &Args, bridge: &Bridge, action: &ActionAnalyzeDefaults) -> Result<()> {
-    println!("Analyzing {:?} defaults...", args.kernel_dir);
-    //dump_symbol(bridge, &bridge.symbol("REGMAP_I2C").unwrap());
-    //dump_symbol(bridge, &bridge.symbol("RTLWIFI_USB").unwrap());
-    //dump_symbol(bridge, &bridge.symbol("KERNEL_GZIP").unwrap());
+    println!("{:>12} defaults...", "Analyzing".green());
     for symbol in &bridge.symbols {
         let symbol = bridge.wrap_symbol(*symbol);
-        if valid_symbol(&symbol) {
-            dump_symbol(bridge, &symbol);
+        if symbol.symbol_type() == SymbolType::Unknown {
+            println!("{}", symbol);
         }
+        if valid_symbol(&symbol) {}
     }
     Ok(())
 }

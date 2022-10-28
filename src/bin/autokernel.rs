@@ -59,8 +59,11 @@ struct ActionSatisfy {
 
 #[derive(Debug, clap::Subcommand)]
 enum Action {
+    /// Build the kernel using a .config file generated from the autokernel configuration
     Build(ActionBuild),
+    /// Generate a .config by applying the autokernel configuration
     GenerateConfig(ActionGenerateConfig),
+    /// Automatically Satisfy the dependencies of a given symbol
     Satisfy(ActionSatisfy),
 }
 
@@ -82,7 +85,10 @@ fn satisfy_symbol(args: &Args, bridge: &Bridge, action: &ActionSatisfy) -> Resul
         validate_transactions(&bridge.history.borrow())?;
     }
 
-    let value: Tristate = action.value.parse().map_err(|_| anyhow!("Invalid symbol value '{}'", action.value))?;
+    let value: Tristate = action
+        .value
+        .parse()
+        .map_err(|_| anyhow!("Invalid symbol value '{}'", action.value))?;
     println!(
         "Trying to satisfy {}={}...",
         action.symbol.blue(),
@@ -106,19 +112,24 @@ fn satisfy_symbol(args: &Args, bridge: &Bridge, action: &ActionSatisfy) -> Resul
 
 fn generate_config(args: &Args, bridge: &Bridge, action: &ActionGenerateConfig) -> Result<()> {
     let config = config::load(&args.config)?;
-    println!("Generating config...");
+    println!("{:>12} configuration ({})", "Applying".green(), args.config.display());
     config.apply_kernel_config(bridge)?;
     validate_transactions(&bridge.history.borrow())?;
 
-    // Write to given output file or fallback to .config in the kernel directory
     let output = action.output.clone().unwrap_or(args.kernel_dir.join(".config"));
+    println!("{:>12} kernel config ({})", "Writing".green(), output.display());
     bridge.write_config(output)?;
     Ok(())
 }
 
 fn build_kernel(args: &Args, bridge: &Bridge, action: &ActionBuild) -> Result<()> {
     let config = config::load(&args.config)?;
-    println!("Building kernel...");
+    println!(
+        "{:>12} kernel using {} {}",
+        "Building".green(),
+        env!("CARGO_PKG_NAME"),
+        env!("CARGO_PKG_VERSION")
+    );
     // umask 022 // do we want this from the config?
 
     // Clean output from previous builds if requested

@@ -6,6 +6,7 @@ use std::path::Path;
 
 use anyhow::{bail, Ok, Result};
 
+use colored::Colorize;
 pub use kconfig::KConfig;
 pub use lua::LuaConfig;
 
@@ -16,7 +17,7 @@ pub trait Config {
 /// Loads the given configuration file by instanciating
 /// the correct Config implementation
 pub fn load(path: impl AsRef<Path>) -> Result<Box<dyn Config>> {
-    println!("Loading config: {}", path.as_ref().display());
+    println!("{:>12} config ({})", "Loading".green(), path.as_ref().display());
     let ext = path
         .as_ref()
         .extension()
