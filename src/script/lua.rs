@@ -1,8 +1,8 @@
-use super::Config;
+use super::Script;
 use crate::bridge::satisfier::SolverConfig;
 use crate::{
     bridge::{Bridge, SymbolValue},
-    config,
+    script,
 };
 
 use std::fs;
@@ -13,22 +13,22 @@ use std::result::Result::Ok as StdOk;
 use anyhow::{Ok, Result};
 use rlua::{self, Error as LuaError, Lua};
 
-pub struct LuaConfig {
+pub struct LuaScript {
     lua: Lua,
     filename: String,
     code: String,
 }
 
-impl LuaConfig {
-    pub fn new(file: impl AsRef<Path>) -> Result<LuaConfig> {
-        Ok(LuaConfig::from_raw(
+impl LuaScript {
+    pub fn new(file: impl AsRef<Path>) -> Result<LuaScript> {
+        Ok(LuaScript::from_raw(
             file.as_ref().display().to_string(),
             fs::read_to_string(file)?,
         ))
     }
 
-    pub fn from_raw(filename: String, code: String) -> LuaConfig {
-        LuaConfig {
+    pub fn from_raw(filename: String, code: String) -> LuaScript {
+        LuaScript {
             lua: unsafe { Lua::new_with_debug() },
             filename,
             code,
@@ -36,8 +36,8 @@ impl LuaConfig {
     }
 }
 
-impl Config for LuaConfig {
-    fn apply_kernel_config(&self, bridge: &Bridge) -> Result<()> {
+impl Script for LuaScript {
+    fn apply(&self, bridge: &Bridge) -> Result<()> {
         self.lua.context(|lua_ctx| {
             lua_ctx.scope(|scope| {
                 let globals = lua_ctx.globals();
@@ -160,9 +160,9 @@ impl Config for LuaConfig {
                     if unchecked {
                         bridge.read_config_unchecked(path)
                     } else {
-                        config::KConfig::new(path)
+                        script::KConfig::new(path)
                             .map_err(|e| LuaError::RuntimeError(e.to_string()))?
-                            .apply_kernel_config(bridge)
+                            .apply(bridge)
                     }
                     .map_err(|e| LuaError::RuntimeError(e.to_string()))
                 })?;

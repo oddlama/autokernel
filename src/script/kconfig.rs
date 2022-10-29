@@ -7,7 +7,7 @@ use anyhow::Result;
 
 use crate::bridge;
 
-use super::Config;
+use super::Script;
 use std::fs;
 
 struct Assignment {
@@ -51,8 +51,8 @@ impl KConfig {
     }
 }
 
-impl Config for KConfig {
-    fn apply_kernel_config(&self, bridge: &Bridge) -> Result<()> {
+impl Script for KConfig {
+    fn apply(&self, bridge: &Bridge) -> Result<()> {
         for assignment in &self.assignments {
             bridge
                 .symbol(&assignment.symbol)

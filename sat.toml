@@ -1,0 +1,9 @@
+[kernel]
+script = "sat.lua"
+
+[initramfs]
+enable = true
+command = ["echo", "hi"]
+
+[install]
+enable = true
