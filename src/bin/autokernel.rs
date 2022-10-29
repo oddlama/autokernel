@@ -20,8 +20,8 @@ struct Args {
     #[clap(short, long, value_name = "FILE", default_value = "config.lua")]
     config: PathBuf,
 
-    /// kernel_dir, default /usr/src/linux/
-    #[clap(short, long, value_parser, value_name = "DIR", value_hint = clap::ValueHint::DirPath, default_value = "/usr/src/linux/")]
+    /// The kernel directory
+    #[clap(short, long, value_parser, value_name = "DIR", value_hint = clap::ValueHint::DirPath, default_value = "/usr/src/linux")]
     kernel_dir: PathBuf,
 
     #[clap(subcommand)]

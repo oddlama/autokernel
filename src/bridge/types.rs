@@ -68,7 +68,7 @@ impl fmt::Display for Tristate {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, strum::AsRefStr)]
 #[repr(C)]
 #[allow(dead_code)]
 pub enum SymbolType {
@@ -260,7 +260,6 @@ impl CSymbol {
 }
 
 use bitflags::bitflags;
-use serde::Serialize;
 
 bitflags! {
     #[repr(C)]
