@@ -209,6 +209,7 @@ fn prepare_bridge(kernel_dir: &PathBuf) -> Result<(PathBuf, EnvironMap)> {
         .current_dir(&kernel_dir)
         .stderr(Stdio::inherit())
         .output()?;
+    ensure!(builder_output.status.success());
 
     let builder_output = String::from_utf8_lossy(&builder_output.stdout).to_string();
     let builder_output = builder_output

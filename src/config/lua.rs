@@ -41,7 +41,6 @@ impl Config for LuaConfig {
         self.lua.context(|lua_ctx| {
             lua_ctx.scope(|scope| {
                 let globals = lua_ctx.globals();
-                lua_ctx.load(include_bytes!("api.lua")).set_name("api.lua")?.exec()?;
                 let symbol_set_auto = scope.create_function(
                     |_, (name, value, file, line, traceback): (String, String, String, u32, String)| {
                         bridge
@@ -157,8 +156,19 @@ impl Config for LuaConfig {
                     StdOk(format!("{:?}", bridge.symbol(&name).unwrap().symbol_type()))
                 })?;
 
+                let load_kconfig = scope.create_function(|_, (path, unchecked): (String, bool)| {
+                    if unchecked {
+                        bridge.read_config_unchecked(path)
+                    } else {
+                        config::KConfig::new(path)
+                            .map_err(|e| LuaError::RuntimeError(e.to_string()))?
+                            .apply_kernel_config(bridge)
+                    }
+                    .map_err(|e| LuaError::RuntimeError(e.to_string()))
+                })?;
+
                 let ak = lua_ctx.create_table()?;
-                ak.set("kernel_version", bridge.get_env("KERNELVERSION"))?;
+                ak.set("kernel_version_str", bridge.get_env("KERNELVERSION"))?;
                 ak.set("symbol_set_auto", symbol_set_auto)?;
                 ak.set("symbol_set_bool", symbol_set_bool)?;
                 ak.set("symbol_set_number", symbol_set_number)?;
@@ -167,21 +177,9 @@ impl Config for LuaConfig {
                 ak.set("symbol_get_string", symbol_get_string)?;
                 ak.set("symbol_get_type", symbol_get_type)?;
                 globals.set("ak", ak)?;
-
-                let load_kconfig = scope.create_function(|_, (path, nocheck): (String, bool)| {
-                    if nocheck {
-                        return bridge
-                            .read_config_unchecked(path)
-                            .map_err(|e| LuaError::RuntimeError(e.to_string()));
-                    }
-                    println!("rust: loading and applying config {path}");
-                    let config = config::KConfig::new(path).map_err(|e| LuaError::RuntimeError(e.to_string()))?;
-                    config
-                        .apply_kernel_config(bridge)
-                        .map_err(|e| LuaError::RuntimeError(e.to_string()))
-                })?;
-
                 globals.set("load_kconfig", load_kconfig)?;
+
+                lua_ctx.load(include_bytes!("api.lua")).set_name("api.lua")?.exec()?;
 
                 let mut define_all_syms = String::new();
                 for name in bridge.name_to_symbol.keys() {

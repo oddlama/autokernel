@@ -6,10 +6,9 @@ use autokernel::{
 };
 
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
-use std::result::Result::Ok as StdOk;
+use std::process::Command;
 
-use anyhow::{anyhow, Context, Ok, Result};
+use anyhow::{anyhow, ensure, Context, Ok, Result};
 use clap::Parser;
 use colored::Colorize;
 
@@ -104,7 +103,7 @@ fn satisfy_symbol(args: &Args, bridge: &Bridge, action: &ActionSatisfy) -> Resul
         });
 
     match satisfying_configuration {
-        StdOk(c) if c.is_empty() => println!("Nothing to do :)"),
+        Result::Ok(c) if c.is_empty() => println!("Nothing to do :)"),
         _ => print_satisfy_result(&satisfying_configuration),
     };
     Ok(())
@@ -124,39 +123,48 @@ fn generate_config(args: &Args, bridge: &Bridge, action: &ActionGenerateConfig) 
 
 fn build_kernel(args: &Args, bridge: &Bridge, action: &ActionBuild) -> Result<()> {
     let config = config::load(&args.config)?;
+    unsafe { libc::umask(0o022) };
+
+    println!("{:>12} kernel", "Cleaning".green());
+    // Clean output from previous builds if requested
+    if action.clean {
+        ensure!(Command::new("make")
+            .arg("clean")
+            .current_dir(&args.kernel_dir)
+            .status()
+            .context("Failed to clean")?
+            .success());
+    }
+
+    println!("{:>12} configuration ({})", "Applying".green(), args.config.display());
+    config.apply_kernel_config(bridge)?;
+    validate_transactions(&bridge.history.borrow())?;
+
+    let output = args.kernel_dir.join(".config");
+    println!("{:>12} kernel config ({})", "Writing".green(), output.display());
+    bridge.write_config(output)?;
+
     println!(
         "{:>12} kernel using {} {}",
         "Building".green(),
         env!("CARGO_PKG_NAME"),
         env!("CARGO_PKG_VERSION")
     );
-    // umask 022 // do we want this from the config?
 
-    // Clean output from previous builds if requested
-    if action.clean {
-        // run "make clean" in the kernel folder
-        println!(">> make clean");
-        Command::new("make")
-            .arg("clean")
-            .current_dir(&args.kernel_dir)
-            .stderr(Stdio::inherit())
-            .output()
-            .expect("make clean failed");
-    }
-
-    config.apply_kernel_config(bridge)?;
-    validate_transactions(&bridge.history.borrow())?;
-
-    let output = args.kernel_dir.join(".config");
-    bridge.write_config(output)?;
-
-    // make
+    ensure!(Command::new("make")
+        .current_dir(&args.kernel_dir)
+        .status()
+        .context("Failed to make kernel")?
+        .success());
 
     // if config.initramfs {
-    //   initramfs build
+    //   config.fire_event(Events::BuildInitramfs)?;
     //   initramfs integrate
+    //   config.fire_event(Events::PreInitramfsBuild)?;
     //   make
     // }
+
+    println!("{:>12} kernel modules", "Installing".green(),);
 
     // if action.install {
     //    // make modules_install

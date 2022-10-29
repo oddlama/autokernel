@@ -1,4 +1,87 @@
 --###############################################################
+-- Utility
+
+Ver = { }
+Ver.__index = Ver
+
+function Ver:new(ver)
+	local o = {}
+	setmetatable(o, self)
+	o.str = ver
+	o.major = 0
+	o.minor = 0
+	o.patch = 0
+	o.add = nil
+
+	local minus = string.find(ver, "%-")
+	if minus then
+		o.add = string.sub(ver, minus + 1)
+		ver = string.sub(ver, 1, minus - 1)
+	end
+
+	local dot = string.find(ver, "%.")
+	if dot then
+		o.major = tonumber(string.sub(ver, 1, dot - 1))
+		ver = string.sub(ver, dot + 1)
+	end
+
+	dot = string.find(ver, "%.")
+	if dot then
+		o.minor = tonumber(string.sub(ver, 1, dot - 1))
+		ver = string.sub(ver, dot + 1)
+	end
+
+	if (ver or "") ~= "" then
+		o.patch = tonumber(ver)
+	end
+	return o
+end
+
+function Ver:__tostring()
+	return self.str
+end
+
+function Ver.__eq(a, b)
+	return a.major == b.major and a.minor == b.minor and a.patch == b.patch
+end
+function Ver.__lt(a, b)
+	if a.major == b.major then
+		if a.minor == b.minor then
+			if a.patch == b.patch then
+				return false
+			else
+				return a.patch < b.patch
+			end
+		else
+			return a.minor < b.minor
+		end
+	else
+		return a.major < b.major
+	end
+end
+function Ver.__le(a, b)
+	if a.major == b.major then
+		if a.minor == b.minor then
+			if a.patch == b.patch then
+				return true
+			else
+				return a.patch < b.patch
+			end
+		else
+			return a.minor < b.minor
+		end
+	else
+		return a.major < b.major
+	end
+end
+
+function ver(str)
+	return Ver:new(str)
+end
+
+kernel_version = ver(ak.kernel_version_str)
+
+--###############################################################
 -- Tristate
 
 Tristate = { }
