@@ -3,7 +3,6 @@ use autokernel::{
     bridge::{Bridge, SymbolValue, Tristate},
     config::{Config, KConfig, LuaConfig},
 };
-use log::info;
 
 mod setup_teardown;
 use serial_test::serial;
@@ -23,7 +22,7 @@ fn integration_setup() {
 fn integration_test_symbols() {
     let bridge = setup();
 
-    info!("Testing tristate");
+    println!("Testing tristate");
     test_symbol_tristate(&bridge);
     //TODO more tests
 
@@ -48,7 +47,7 @@ fn test_symbol_tristate(bridge: &Bridge) {
 #[serial(K)]
 fn integration_test_kconfig() {
     let bridge = setup();
-    info!("testing kconfig");
+    println!("testing kconfig");
     let config = KConfig::from_content("good.kconfig".into(), include_str!("good.kconfig").into()).unwrap();
     test_config(&bridge, &config).unwrap();
     teardown();
@@ -58,7 +57,7 @@ fn integration_test_kconfig() {
 #[serial(K)]
 fn integration_test_luaconfig() {
     let bridge = setup();
-    info!("testing LuaConfig");
+    println!("testing LuaConfig");
     macro_rules! lua_test {
         ($name:literal, $code:expr) => {
             test_config(&bridge, &LuaConfig::from_raw($name.into(), $code.into())).unwrap()

@@ -1,9 +1,6 @@
 use autokernel::bridge::Bridge;
-use libc::TIMER_ABSTIME;
 
 use anyhow::Context;
-use log::error;
-use log::info;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -17,7 +14,7 @@ fn cache_kernel(kdir: &PathBuf) -> String {
     let kernel_tar = format!("{}.tar.xz", &TEST_KERNEL);
     // test if kernel exists
     if kdir.join(&kernel_tar).exists() {
-        info!("kernel tar already in cache");
+        println!("kernel tar already in cache");
         return kernel_tar;
     }
 
@@ -31,10 +28,6 @@ fn cache_kernel(kdir: &PathBuf) -> String {
     return kernel_tar;
 }
 
-fn init_logger() {
-    let _ = env_logger::builder().is_test(true).try_init();
-}
-
 fn setup_kernel(kdir: &PathBuf) -> PathBuf {
     let kernel_tar = cache_kernel(kdir);
 
@@ -44,7 +37,7 @@ fn setup_kernel(kdir: &PathBuf) -> PathBuf {
     }
 
     // remove kernel tar and folder if they already exists
-    //info!("cleaning previous test if exists");
+    //println!("cleaning previous test if exists");
     //if kdir.join(TEST_KERNEL).exists() {
     //    Command::new("rm")
     //        .arg("-r")
@@ -54,7 +47,7 @@ fn setup_kernel(kdir: &PathBuf) -> PathBuf {
     //        .unwrap();
     //}
 
-    info!("extracting kernel {} ...", TEST_KERNEL);
+    println!("extracting kernel {} ...", TEST_KERNEL);
     Command::new("tar")
         .arg("-xvf")
         .arg(&kernel_tar)
@@ -66,9 +59,8 @@ fn setup_kernel(kdir: &PathBuf) -> PathBuf {
 }
 
 pub fn setup() -> Bridge {
-    init_logger();
     let kdir = env::temp_dir().join(&TMP_TEST_DIR);
-    info!("creating {} directory", &kdir.display());
+    println!("creating {} directory", &kdir.display());
     fs::create_dir_all(&kdir).unwrap();
     let kdir = kdir
         .canonicalize()
@@ -84,7 +76,7 @@ pub fn teardown() {
 }
 
 pub fn teardown_full() {
-    if let Err(e) = fs::remove_dir_all(env::temp_dir().join(TMP_TEST_DIR).join(TEST_KERNEL)) {
+    if let Err(_e) = fs::remove_dir_all(env::temp_dir().join(TMP_TEST_DIR).join(TEST_KERNEL)) {
         eprintln!("could not remove tmp dir");
     }
 }
