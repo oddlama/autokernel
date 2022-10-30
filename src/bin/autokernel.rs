@@ -141,11 +141,12 @@ fn build_kernel(args: &Args, bridge: &Bridge, action: &ActionBuild) -> Result<()
     validate_transactions(&bridge.history.borrow())?;
 
     let output = args.kernel_dir.join(".config");
-    println!("{:>12} kernel config ({})", "Writing".green(), output.display());
-    bridge.write_config(output)?;
-
     if config.initramfs.enable {
         // TODO disable initramfs shortly
+
+        println!("{:>12} kernel config ({}) [stage 1/2]", "Writing".green(), output.display());
+        bridge.write_config(&output)?;
+
         println!("{:>12} `make` [stage 1/2]", "Running".green());
         ensure!(Command::new("make")
             .current_dir(&args.kernel_dir)
@@ -153,8 +154,9 @@ fn build_kernel(args: &Args, bridge: &Bridge, action: &ActionBuild) -> Result<()
             .context("Failed to make kernel")?
             .success());
 
+        // TODO install kernel modules? initramfs needs.
+
         println!("{:>12} initramfs with `{}`", "Running".green(), "TODO");
-        // TODO build initramfs
         ensure!(Command::new(&config.initramfs.command[0])
             .args(&config.initramfs.command[1..])
             .current_dir(&args.kernel_dir)
@@ -162,7 +164,10 @@ fn build_kernel(args: &Args, bridge: &Bridge, action: &ActionBuild) -> Result<()
             .context("Failed to make kernel")?
             .success());
 
-        // TODO enable again initramfs shortly
+        // TODO enable again initramfs
+        println!("{:>12} kernel config ({}) [stage 2/2]", "Writing".green(), output.display());
+        bridge.write_config(&output)?;
+
         println!("{:>12} `make` [stage 2/2]", "Running".green());
         ensure!(Command::new("make")
             .current_dir(&args.kernel_dir)
@@ -170,6 +175,9 @@ fn build_kernel(args: &Args, bridge: &Bridge, action: &ActionBuild) -> Result<()
             .context("Failed to make kernel")?
             .success());
     } else {
+        println!("{:>12} kernel config ({})", "Writing".green(), output.display());
+        bridge.write_config(&output)?;
+
         println!("{:>12} `make`", "Running".green());
         ensure!(Command::new("make")
             .current_dir(&args.kernel_dir)

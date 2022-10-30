@@ -5,25 +5,26 @@ use colored::Colorize;
 use serde::Deserialize;
 
 #[derive(Deserialize, Default)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct SectionKernel {
     pub script: String,
 }
 
 #[derive(Deserialize, Default)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct SectionInitramfs {
     pub enable: bool,
     pub command: Vec<String>,
 }
 
 #[derive(Deserialize, Default)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct SectionInstall {
     pub enable: bool,
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     pub kernel: SectionKernel,
     pub initramfs: SectionInitramfs,
