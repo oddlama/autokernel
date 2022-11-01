@@ -60,6 +60,7 @@ fn init_db(db: &PathBuf) -> Result<Connection> {
         "CREATE TABLE IF NOT EXISTS configs (
             id             TEXT PRIMARY KEY NOT NULL,
             name           TEXT NOT NULL,
+            arch           TEXT NOT NULL,
             kernel_version TEXT NOT NULL)",
         (), // empty list of parameters.
     )?;
@@ -93,8 +94,13 @@ fn analyze(_args: &Args, bridge: &Bridge, action: &ActionAnalyze) -> Result<()> 
     let tx = conn.transaction()?;
     let config_id = Uuid::new_v4().to_string();
     tx.execute(
-        "INSERT INTO configs VALUES (?1, ?2, ?3)",
-        (&config_id, &action.name, bridge.get_env("KERNELVERSION")),
+        "INSERT INTO configs VALUES (?1, ?2, ?3, ?4)",
+        (
+            &config_id,
+            &action.name,
+            bridge.get_env("ARCH"),
+            bridge.get_env("KERNELVERSION"),
+        ),
     )?;
 
     fn valid_symbol(symbol: &Symbol) -> bool {

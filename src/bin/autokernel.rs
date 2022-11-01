@@ -116,7 +116,7 @@ fn generate_config(args: &Args, bridge: &Bridge, action: &ActionGenerateConfig) 
     script::apply(config.kernel.script, bridge)?;
     validate_transactions(&bridge.history.borrow())?;
 
-    let output = action.output.clone().unwrap_or(args.kernel_dir.join(".config"));
+    let output = action.output.clone().unwrap_or_else(|| args.kernel_dir.join(".config"));
     println!("{:>12} kernel config ({})", "Writing".green(), output.display());
     bridge.write_config(output)?;
     Ok(())
