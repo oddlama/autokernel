@@ -33,7 +33,7 @@ impl KConfig {
             if line.is_empty() || line.starts_with('#') {
                 continue;
             }
-            let (k, v) = line.split_once('=').ok_or(anyhow!(format!("invalid line {line}")))?;
+            let (k, v) = line.split_once('=').ok_or_else(|| anyhow!("invalid line {line}"))?;
             // TODO trimming all " might not be desired
             // TODO trimming CONFIG on right side should only be done for choice symbols
             assignments.push(Assignment {

@@ -22,6 +22,17 @@ macro_rules! ensure {
 }
 
 #[derive(Error, Debug, Clone)]
+pub enum SymbolGetError {
+    #[error("unknown symbol type")]
+    UnknownType,
+
+    #[error("cannot be parsed as an integer")]
+    InvalidInt,
+    #[error("cannot be parsed as a hex integer")]
+    InvalidHex,
+}
+
+#[derive(Error, Debug, Clone)]
 pub enum SymbolSetError {
     #[error("unknown symbol type")]
     UnknownType,
@@ -249,16 +260,16 @@ impl<'a> Symbol<'a> {
         ret
     }
 
-    pub fn get_value(&self) -> Result<SymbolValue, ()> {
+    pub fn get_value(&self) -> Result<SymbolValue, SymbolGetError> {
         match self.symbol_type() {
-            SymbolType::Unknown => Err(()),
+            SymbolType::Unknown => Err(SymbolGetError::UnknownType),
             SymbolType::Boolean => Ok(SymbolValue::Boolean(self.get_tristate_value() == Tristate::Yes)),
             SymbolType::Tristate => Ok(SymbolValue::Tristate(self.get_tristate_value())),
             SymbolType::Int => Ok(SymbolValue::Int(
-                self.get_string_value().parse::<u64>().map_err(|_| ())?,
+                self.get_string_value().parse::<u64>().map_err(|_| SymbolGetError::InvalidInt)?,
             )),
             SymbolType::Hex => Ok(SymbolValue::Hex(
-                u64::from_str_radix(&self.get_string_value()[2..], 16).map_err(|_| ())?,
+                u64::from_str_radix(&self.get_string_value()[2..], 16).map_err(|_| SymbolGetError::InvalidHex)?,
             )),
             SymbolType::String => Ok(SymbolValue::String(self.get_string_value())),
         }
@@ -301,19 +312,19 @@ impl<'a> Symbol<'a> {
         unsafe { &*self.c_symbol }.get_tristate_value()
     }
 
-    pub fn visibility_expression_bare(&self) -> Result<Option<Expr>, ()> {
+    pub fn visibility_expression_bare(&self) -> Result<Option<Expr>, ExprConvertError> {
         unsafe { &mut *(self.bridge.vtable.c_sym_direct_deps_with_prompts)(self.c_symbol) }.expr()
     }
 
-    pub fn visibility_expression(&self) -> Result<Expr, ()> {
+    pub fn visibility_expression(&self) -> Result<Expr, ExprConvertError> {
         Ok(self.visibility_expression_bare()?.unwrap_or(Expr::Const(true)))
     }
 
-    pub fn reverse_dependencies_bare(&self) -> Result<Option<Expr>, ()> {
+    pub fn reverse_dependencies_bare(&self) -> Result<Option<Expr>, ExprConvertError> {
         unsafe { &(*self.c_symbol).reverse_dependencies }.expr()
     }
 
-    pub fn reverse_dependencies(&self) -> Result<Expr, ()> {
+    pub fn reverse_dependencies(&self) -> Result<Expr, ExprConvertError> {
         Ok(unsafe { &(*self.c_symbol).reverse_dependencies }
             .expr()?
             .unwrap_or(Expr::Const(false)))

@@ -2,6 +2,7 @@ use super::types::{CSymbol, SymbolType};
 use super::{Bridge, Tristate};
 use std::fmt;
 use std::fmt::Debug;
+use thiserror::Error;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Terminal {
@@ -29,8 +30,14 @@ pub enum Expr {
     Not(Box<Self>),
 }
 
+#[derive(Error, Debug, Clone)]
+pub enum EvalError {
+    #[error("encountered a terminal that cannot be evaluated")]
+    InvalidTerminal,
+}
+
 impl Expr {
-    pub fn or_clauses<'a>(&'a self) -> Vec<&'a Expr> {
+    pub fn or_clauses(&self) -> Vec<&Expr> {
         let mut exprs = Vec::new();
         fn visit<'a>(exprs: &mut Vec<&'a Expr>, expr: &'a Expr) {
             match expr {
@@ -45,7 +52,7 @@ impl Expr {
         exprs
     }
 
-    pub fn and_clauses<'a>(&'a self) -> Vec<&'a Expr> {
+    pub fn and_clauses(&self) -> Vec<&Expr> {
         let mut exprs = Vec::new();
         fn visit<'a>(exprs: &mut Vec<&'a Expr>, expr: &'a Expr) {
             match expr {
@@ -60,7 +67,7 @@ impl Expr {
         exprs
     }
 
-    pub fn eval(&self) -> Result<Tristate, ()> {
+    pub fn eval(&self) -> Result<Tristate, EvalError> {
         Ok(match self {
             Expr::Const(b) => (*b).into(),
             Expr::And(a, b) => {
@@ -81,15 +88,21 @@ impl Expr {
                     b
                 }
             }
-            Expr::Not(a) => a.eval()?.not(),
+            Expr::Not(a) => a.eval()?.invert(),
             Expr::Terminal(Terminal::Eq(a, b))
-                if matches!(unsafe {&**a}.symbol_type(), SymbolType::Tristate | SymbolType::Boolean) =>
+                if matches!(
+                    unsafe { &**a }.symbol_type(),
+                    SymbolType::Tristate | SymbolType::Boolean
+                ) =>
             unsafe { ((**a).get_tristate_value() == (**b).get_tristate_value()).into() },
             Expr::Terminal(Terminal::Neq(a, b))
-                if matches!(unsafe {&**a}.symbol_type(), SymbolType::Tristate | SymbolType::Boolean) =>
+                if matches!(
+                    unsafe { &**a }.symbol_type(),
+                    SymbolType::Tristate | SymbolType::Boolean
+                ) =>
             unsafe { ((**a).get_tristate_value() != (**b).get_tristate_value()).into() },
             Expr::Terminal(Terminal::Symbol(s)) => unsafe { (**s).get_tristate_value() },
-            Expr::Terminal(_) => return Err(()),
+            Expr::Terminal(_) => return Err(EvalError::InvalidTerminal),
         })
     }
 

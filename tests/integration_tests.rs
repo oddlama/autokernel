@@ -1,7 +1,6 @@
 use anyhow::Result;
 use autokernel::{
     bridge::{Bridge, SymbolValue, Tristate},
-    config::Config,
     script::{KConfig, LuaScript, Script},
 };
 

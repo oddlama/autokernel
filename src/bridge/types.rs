@@ -8,6 +8,21 @@ use std::str::FromStr;
 
 use colored::Color;
 use libc::{c_char, c_int, c_void};
+use thiserror::Error;
+
+#[derive(Error, Debug, Clone)]
+pub enum ExprConvertError {
+    #[error("encountered an expression of type None")]
+    None,
+    #[error("encountered a null expression")]
+    NullExpr,
+    #[error("encountered a null symbol")]
+    NullSymbol,
+    #[error("List expressions are not supported and shouldn't occur. Please report this as a bug if you encounter this message under normal use.")]
+    List,
+    #[error("Range expressions are not supported and shouldn't occur. Please report this as a bug if you encounter this message under normal use.")]
+    Range,
+}
 
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Clone, Copy)]
 #[repr(u8)]
@@ -19,7 +34,7 @@ pub enum Tristate {
 }
 
 impl Tristate {
-    pub fn not(self) -> Self {
+    pub fn invert(self) -> Self {
         match self {
             Tristate::No => Tristate::Yes,
             Tristate::Mod => Tristate::Mod,
@@ -159,7 +174,7 @@ pub struct CExpr {
 }
 
 impl CExpr {
-    pub fn expr(&mut self) -> Result<Option<Expr>, ()> {
+    pub fn expr(&mut self) -> Result<Option<Expr>, ExprConvertError> {
         convert_expression(self)
     }
 }
@@ -171,16 +186,16 @@ pub struct CExprValue {
 }
 
 impl CExprValue {
-    pub fn expr(&self) -> Result<Option<Expr>, ()> {
+    pub fn expr(&self) -> Result<Option<Expr>, ExprConvertError> {
         convert_expression(self.expression)
     }
 }
 
-fn convert_expression(expression: *mut CExpr) -> Result<Option<Expr>, ()> {
+fn convert_expression(expression: *mut CExpr) -> Result<Option<Expr>, ExprConvertError> {
     macro_rules! expr {
         ($which: ident) => {
             if expression.is_null() {
-                return Err(());
+                return Err(ExprConvertError::NullExpr);
             } else {
                 Box::new(convert_expression(unsafe { (*expression).$which.expression })?.unwrap())
             }
@@ -190,7 +205,7 @@ fn convert_expression(expression: *mut CExpr) -> Result<Option<Expr>, ()> {
     macro_rules! sym {
         ($which: ident) => {
             if expression.is_null() {
-                return Err(());
+                return Err(ExprConvertError::NullSymbol);
             } else {
                 unsafe { (*expression).$which.symbol }
             }
@@ -202,7 +217,7 @@ fn convert_expression(expression: *mut CExpr) -> Result<Option<Expr>, ()> {
     }
 
     Ok(Some(match unsafe { (*expression).expr_type } {
-        CExprType::None => return Err(()),
+        CExprType::None => return Err(ExprConvertError::None),
         CExprType::Or => Expr::Or(expr!(left), expr!(right)),
         CExprType::And => Expr::And(expr!(left), expr!(right)),
         CExprType::Not => Expr::Not(expr!(left)),
@@ -212,9 +227,9 @@ fn convert_expression(expression: *mut CExpr) -> Result<Option<Expr>, ()> {
         CExprType::Leq => Expr::Terminal(Terminal::Leq(sym!(left), sym!(right))),
         CExprType::Gth => Expr::Terminal(Terminal::Gth(sym!(left), sym!(right))),
         CExprType::Geq => Expr::Terminal(Terminal::Geq(sym!(left), sym!(right))),
-        CExprType::List => panic!("List expressions are not supported at this time, as they shouldn't be required. Please report this as a bug if you encounter this message under normal use."),
+        CExprType::List => return Err(ExprConvertError::List),
         CExprType::Symbol => Expr::Terminal(Terminal::Symbol(sym!(left))),
-        CExprType::Range => panic!("List expressions are not supported at this time, as they shouldn't be required. Please report this as a bug if you encounter this message under normal use."),
+        CExprType::Range => return Err(ExprConvertError::Range),
     }))
 }
 

@@ -5,6 +5,7 @@ use crate::{
     script,
 };
 
+use std::fmt::Write;
 use std::fs;
 use std::path::Path;
 use std::result::Result::Err as StdErr;
@@ -66,7 +67,9 @@ impl Script for LuaScript {
                         // We use an i64 here to detect whether values in lua got clipped. Apparently
                         // when values wrap
                         if value < 0 {
-                            return StdErr(LuaError::RuntimeError("Please pass values >=2*63 in string syntax. lua doesn't support this.".to_string()));
+                            return StdErr(LuaError::RuntimeError(
+                                "Please pass values >=2*63 in string syntax. lua doesn't support this.".to_string(),
+                            ));
                         }
                         bridge
                             .symbol(&name)
@@ -183,9 +186,9 @@ impl Script for LuaScript {
                 for name in bridge.name_to_symbol.keys() {
                     let has_uppercase_char = name.chars().any(|c| c.is_ascii_uppercase());
                     if !name.is_empty() && has_uppercase_char {
-                        define_all_syms.push_str(&format!("CONFIG_{name} = Symbol:new(nil, \"{name}\")\n"));
+                        writeln!(define_all_syms, "CONFIG_{name} = Symbol:new(nil, \"{name}\")")?;
                         if !name.chars().next().unwrap().is_ascii_digit() {
-                            define_all_syms.push_str(&format!("{name} = CONFIG_{name}\n"));
+                            writeln!(define_all_syms, "{name} = CONFIG_{name}")?;
                         }
                     }
                 }
