@@ -3,7 +3,6 @@ mod lua;
 use crate::bridge::Bridge;
 
 use std::path::Path;
-
 use anyhow::{bail, Ok, Result};
 
 use colored::Colorize;

@@ -1,15 +1,11 @@
-use super::Script;
+use super::{KConfig, Script};
 use crate::bridge::satisfier::SolverConfig;
-use crate::{
-    bridge::{Bridge, SymbolValue},
-    script,
-};
+use crate::bridge::{Bridge, SymbolValue};
 
 use std::fmt::Write;
 use std::fs;
 use std::path::Path;
-use std::result::Result::Err as StdErr;
-use std::result::Result::Ok as StdOk;
+use std::result::Result::{Err as StdErr, Ok as StdOk};
 
 use anyhow::{Ok, Result};
 use rlua::{self, Error as LuaError, Lua};
@@ -161,7 +157,7 @@ impl Script for LuaScript {
                     if unchecked {
                         bridge.read_config_unchecked(path)
                     } else {
-                        script::KConfig::new(path)
+                        KConfig::new(path)
                             .map_err(|e| LuaError::RuntimeError(e.to_string()))?
                             .apply(bridge)
                     }

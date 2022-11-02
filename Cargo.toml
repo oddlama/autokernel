@@ -5,7 +5,7 @@ edition = "2021"
 authors = ["oddlama <oddlama@oddlama.org>", "clotodex <clotodex@online.de>"]
 
 [features]
-index = ["dep:rusqlite", "dep:uuid"]
+index = ["dep:rusqlite"]
 
 [[bin]]
 name = "autokernel"
@@ -28,7 +28,6 @@ rlua = "0.19.4"
 itertools = "0.10.5"
 strum = { version = "0.24.1", features = ["derive"] }
 rusqlite = { version = "0.28.0", optional = true }
-uuid = { version = "1.2.1", features = ["v4"], optional = true }
 toml = "0.5.9"
 tempdir = "0.3.7"
 
