@@ -1,9 +1,7 @@
-[kernel]
+[config]
 script = "sat.lua"
 
 [initramfs]
 enable = true
-command = ["echo", "hi"]
-
-[install]
-enable = true
+builtin = true
+command = ["touch", "{OUTPUT}"]

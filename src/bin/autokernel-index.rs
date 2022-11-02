@@ -98,8 +98,8 @@ fn analyze(_args: &Args, bridge: &Bridge, action: &ActionAnalyze) -> Result<()> 
         (
             &config_id,
             &action.name,
-            bridge.get_env("ARCH"),
-            bridge.get_env("KERNELVERSION"),
+            bridge.get_env("ARCH").unwrap(),
+            bridge.get_env("KERNELVERSION").unwrap(),
         ),
     )?;
 

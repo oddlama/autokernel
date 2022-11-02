@@ -96,7 +96,7 @@ impl Bridge {
         println!(
             "{:>12} bridge [kernel {}, {} symbols] in {:.2?}",
             "Initialized".green(),
-            bridge.get_env("KERNELVERSION"),
+            bridge.get_env("KERNELVERSION").unwrap(),
             n_valid_symbols,
             time_start.elapsed()
         );
@@ -149,12 +149,14 @@ impl Bridge {
         Ok(())
     }
 
-    pub fn get_env(&self, name: &str) -> String {
+    pub fn get_env(&self, name: &str) -> Option<String> {
         let param = CString::new(name).unwrap();
-        return unsafe { CStr::from_ptr((self.vtable.c_get_env)(param.as_ptr())) }
-            .to_str()
-            .unwrap()
-            .to_owned();
+        let ret = (self.vtable.c_get_env)(param.as_ptr());
+        if ret.is_null() {
+            None
+        } else {
+            Some(unsafe { CStr::from_ptr(ret) }.to_str().unwrap().to_owned())
+        }
     }
 }
 
