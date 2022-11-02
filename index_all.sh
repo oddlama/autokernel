@@ -35,26 +35,6 @@ function major_minor() {
 	echo "$major.$minor"
 }
 
-declare -A DEBIAN_TAGS
-function load_debian_tags() {
-	echo "[32mLoading[m debian config metadata"
-	local raw_debian_tags
-	raw_debian_tags=$(git ls-remote --tags https://salsa.debian.org/kernel-team/linux.git \
-		| grep 'refs/tags/debian/[0-9]\+\.[0-9]\+\(\.[0-9]\+\)\?-[0-9]\+\^{}$' \
-		| sed -e 's/\([a-f0-9]*\).*refs.tags.debian.\(.*\)\^{}/\2=\1/' \
-		| sort -V) \
-		|| die "Could not fetch debian kernel config tags"
-
-	local ARRAY
-	readarray -t ARRAY <<< "$raw_debian_tags" || return 1
-	for i in "${ARRAY[@]}"; do
-		local commit="${i##*"="}"
-		local mm
-		mm=$(major_minor "$i") || die "mm"
-		DEBIAN_TAGS["$mm"]="$commit"
-	done
-}
-
 function download_kernel() {
 	local kver="$1"
 	local out="$DOWNLOAD_TMP_DIR/linux-${kver}.tar.xz"
@@ -91,6 +71,13 @@ function get_defconfig_config() {
 	cp "$kdir/.config" "$out"
 }
 
+declare -A DEBIAN_CONFIG_PACKAGES
+DEBIAN_CONFIG_PACKAGES=(
+	["4.19"]="linux-config-4.19_4.19.249-2_amd64.deb"
+	["5.10"]="linux-config-5.10_5.10.149-2_amd64.deb"
+	["5.19"]="linux-config-5.19_5.19.11-1~bpo11+1_amd64.deb"
+	["6.0"]="linux-config-6.0_6.0.5-1_amd64.deb"
+)
 function get_debian_config() {
 	local out="$1"
 	local kdir="$2"
@@ -98,12 +85,17 @@ function get_debian_config() {
 	local mm
 	mm=$(major_minor "$kver") || die "mm"
 
-	[[ -v "DEBIAN_TAGS[$mm]" ]] || return 2
-	local url="https://salsa.debian.org/kernel-team/linux/-/raw/${DEBIAN_TAGS[$mm]}/debian/config/config?inline=false"
-	download_config "$out" "$url" \
+	[[ -v "DEBIAN_CONFIG_PACKAGES[$mm]" ]] || return 2
+	local url="http://ftp.debian.org/debian/pool/main/l/linux/${DEBIAN_CONFIG_PACKAGES[$mm]}"
+	download_config "$out.deb" "$url" \
 		|| die "Could not download $url"
+	ar p "$out.deb" data.tar.xz \
+		| tar xJ -O "./usr/src/linux-config-$mm/config.amd64_none_amd64.xz" \
+		| unxz > "$out" \
+		|| die "Could not extract .config from $out.deb"
 }
 
+declare -A ARCH_COMMITS
 ARCH_COMMITS=(
 	["4.18"]=3c50e4f43d575714980505f41bf82f7ec2156776
 	["4.19"]=38db1d25f1f21e2a3ff989602bfddde777f0d258
@@ -137,8 +129,8 @@ function get_arch_config() {
 	local mm
 	mm=$(major_minor "$kver") || die "mm"
 
-	[[ -v "DEBIAN_TAGS[$mm]" ]] || return 2
-	local url="${ARCH_TAGS[$mm]}"
+	[[ -v "ARCH_COMMITS[$mm]" ]] || return 2
+	local url="https://raw.githubusercontent.com/archlinux/svntogit-packages/${ARCH_COMMITS[$mm]}/linux/trunk/config"
 	download_config "$out" "$url" \
 		|| die "Could not download $url"
 }
@@ -160,6 +152,7 @@ function get_config() {
 	# Return 1 -> ERR
 	# Return 2 -> NO ASSOCIATED CONFIG
 	# Return _ -> OTHER ERR
+	[[ -e "$out" ]] && return 0
 	"get_${provider}_config" "$out" "$kdir" "$kver"
 }
 
@@ -220,5 +213,4 @@ function main() {
 }
 
 
-load_debian_tags
 main

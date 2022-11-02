@@ -57,7 +57,7 @@ fn init_db(db: &PathBuf) -> Result<Connection> {
     // Create tables
     let tx = conn.transaction()?;
     tx.execute(
-        "CREATE TABLE IF NOT EXISTS configs (
+        "CREATE TABLE IF NOT EXISTS config (
             id             TEXT PRIMARY KEY NOT NULL,
             name           TEXT NOT NULL,
             arch           TEXT NOT NULL,
@@ -65,7 +65,7 @@ fn init_db(db: &PathBuf) -> Result<Connection> {
         (), // empty list of parameters.
     )?;
     tx.execute(
-        "CREATE TABLE IF NOT EXISTS symbols (
+        "CREATE TABLE IF NOT EXISTS symbol (
             config           TEXT NOT NULL,
             name             TEXT NOT NULL,
             type             TEXT NOT NULL,
@@ -94,7 +94,7 @@ fn analyze(_args: &Args, bridge: &Bridge, action: &ActionAnalyze) -> Result<()> 
     let tx = conn.transaction()?;
     let config_id = Uuid::new_v4().to_string();
     tx.execute(
-        "INSERT INTO configs VALUES (?1, ?2, ?3, ?4)",
+        "INSERT INTO config VALUES (?1, ?2, ?3, ?4)",
         (
             &config_id,
             &action.name,
@@ -115,7 +115,7 @@ fn analyze(_args: &Args, bridge: &Bridge, action: &ActionAnalyze) -> Result<()> 
             n_analyzed_symbols += 1;
 
             tx.execute(
-                "INSERT INTO symbols VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                "INSERT INTO symbol VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                 (
                     &config_id,
                     symbol.name().unwrap().to_string(),
