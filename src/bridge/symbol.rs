@@ -178,7 +178,7 @@ impl<'a> Symbol<'a> {
                 let value = u64::from_str_radix(&value[2..], 16).map_err(|_| SymbolSetError::InvalidHex)?;
                 self.set_value(SymbolValue::Hex(value))?
             }
-            (SymbolType::String, SymbolValue::Auto(value)) => self.set_value(SymbolValue::String(value.to_owned()))?,
+            (SymbolType::String, SymbolValue::Auto(value)) => self.set_value(SymbolValue::String(value))?,
             (SymbolType::Boolean | SymbolType::Tristate, SymbolValue::Boolean(value)) => set_tristate(value.into())?,
             (SymbolType::Boolean, SymbolValue::Tristate(value)) if value != Tristate::Mod => set_tristate(value)?,
             (SymbolType::Tristate, SymbolValue::Tristate(value)) => set_tristate(value)?,
@@ -251,7 +251,7 @@ impl<'a> Symbol<'a> {
 
     pub fn get_value(&self) -> Result<SymbolValue, ()> {
         match self.symbol_type() {
-            SymbolType::Unknown => return Err(()),
+            SymbolType::Unknown => Err(()),
             SymbolType::Boolean => Ok(SymbolValue::Boolean(self.get_tristate_value() == Tristate::Yes)),
             SymbolType::Tristate => Ok(SymbolValue::Tristate(self.get_tristate_value())),
             SymbolType::Int => Ok(SymbolValue::Int(
@@ -302,7 +302,7 @@ impl<'a> Symbol<'a> {
     }
 
     pub fn visibility_expression_bare(&self) -> Result<Option<Expr>, ()> {
-        Ok(unsafe { &mut *(self.bridge.vtable.c_sym_direct_deps_with_prompts)(self.c_symbol) }.expr()?)
+        unsafe { &mut *(self.bridge.vtable.c_sym_direct_deps_with_prompts)(self.c_symbol) }.expr()
     }
 
     pub fn visibility_expression(&self) -> Result<Expr, ()> {
@@ -310,7 +310,7 @@ impl<'a> Symbol<'a> {
     }
 
     pub fn reverse_dependencies_bare(&self) -> Result<Option<Expr>, ()> {
-        Ok(unsafe { &(*self.c_symbol).reverse_dependencies }.expr()?)
+        unsafe { &(*self.c_symbol).reverse_dependencies }.expr()
     }
 
     pub fn reverse_dependencies(&self) -> Result<Expr, ()> {
@@ -378,13 +378,11 @@ impl<'a> fmt::Display for Symbol<'a> {
                 _ => (Color::BrightRed, "=?".to_string()),
             };
             write!(f, "{}{}", name.color(name_color), value_indicator.dimmed())
+        } else if self.is_choice() {
+            let choices = self.choices().unwrap().into_iter().map(|s| self.bridge.wrap_symbol(s));
+            write!(f, "<choice>[{}]", choices.format(", "))
         } else {
-            if self.is_choice() {
-                let choices = self.choices().unwrap().into_iter().map(|s| self.bridge.wrap_symbol(s));
-                write!(f, "<choice>[{}]", choices.format(", "))
-            } else {
-                write!(f, "<??>")
-            }
+            write!(f, "<??>")
         }
     }
 }

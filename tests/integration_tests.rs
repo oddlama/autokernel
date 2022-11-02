@@ -1,7 +1,8 @@
 use anyhow::Result;
 use autokernel::{
     bridge::{Bridge, SymbolValue, Tristate},
-    config::{Config, KConfig, LuaConfig},
+    config::Config,
+    script::{KConfig, LuaScript, Script},
 };
 
 mod setup_teardown;
@@ -49,7 +50,7 @@ fn integration_test_kconfig() {
     let bridge = setup();
     println!("testing kconfig");
     let config = KConfig::from_content("good.kconfig".into(), include_str!("good.kconfig").into()).unwrap();
-    test_config(&bridge, &config).unwrap();
+    test_script(&bridge, &config).unwrap();
     teardown();
 }
 
@@ -57,17 +58,17 @@ fn integration_test_kconfig() {
 #[serial(K)]
 fn integration_test_luaconfig() {
     let bridge = setup();
-    println!("testing LuaConfig");
+    println!("testing LuaScript");
     macro_rules! lua_test {
         ($name:literal, $code:expr) => {
-            test_config(&bridge, &LuaConfig::from_raw($name.into(), $code.into())).unwrap()
+            test_script(&bridge, &LuaScript::from_raw($name.into(), $code.into())).unwrap()
         };
     }
 
     macro_rules! lua_bad_test {
         ($name:literal, $code:expr) => {
             assert!(
-                test_config(&bridge, &LuaConfig::from_raw($name.into(), $code.into())).is_err(),
+                test_script(&bridge, &LuaScript::from_raw($name.into(), $code.into())).is_err(),
                 $name
             )
         };
@@ -95,7 +96,6 @@ fn integration_test_luaconfig() {
     teardown();
 }
 
-fn test_config(bridge: &Bridge, config: &impl Config) -> Result<()> {
-    config.apply_kernel_config(&bridge)?;
-    Ok(())
+fn test_script(bridge: &Bridge, script: &impl Script) -> Result<()> {
+    script.apply(bridge)
 }

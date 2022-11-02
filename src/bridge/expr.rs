@@ -41,8 +41,8 @@ impl Expr {
                 e => exprs.push(e),
             }
         }
-        visit(&mut exprs, &self);
-        return exprs;
+        visit(&mut exprs, self);
+        exprs
     }
 
     pub fn and_clauses<'a>(&'a self) -> Vec<&'a Expr> {
@@ -56,8 +56,8 @@ impl Expr {
                 e => exprs.push(e),
             }
         }
-        visit(&mut exprs, &self);
-        return exprs;
+        visit(&mut exprs, self);
+        exprs
     }
 
     pub fn eval(&self) -> Result<Tristate, ()> {

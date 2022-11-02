@@ -50,7 +50,9 @@ fn print_locations(mut locations: Vec<Location>) {
     //     eprintln!("   {} {}", "|".blue(), line.dimmed())
     // }
     locations.sort_by_key(|x| (&x.transaction.file, x.transaction.line));
-    let num_col_width = format!("{}", locations.iter().map(|l| l.transaction.line).max().unwrap_or(0)).len().max(2);
+    let num_col_width = format!("{}", locations.iter().map(|l| l.transaction.line).max().unwrap_or(0))
+        .len()
+        .max(2);
     let indent = " ".repeat(num_col_width);
     let mut previous_file = None;
     for loc in locations {
@@ -67,7 +69,7 @@ fn print_locations(mut locations: Vec<Location>) {
             previous_file = Some(&loc.transaction.file)
         }
 
-        let line = read_line_at_location(loc.transaction).unwrap_or("<cannot read file>".into());
+        let line = read_line_at_location(loc.transaction).unwrap_or_else(|| "<cannot read file>".into());
         eprintln!(
             "{:>indent$} {} {}",
             loc.transaction.line.to_string().blue(),
@@ -75,7 +77,7 @@ fn print_locations(mut locations: Vec<Location>) {
             line,
             indent = num_col_width
         );
-        if loc.hints.len() > 0 {
+        if !loc.hints.is_empty() {
             eprintln!(
                 "{indent} {} {} {}",
                 "|".blue(),
@@ -145,7 +147,7 @@ pub fn print_satisfy_result(satisfying_configuration: &Result<Vec<(String, Trist
     }
 }
 
-pub fn validate_transactions(history: &Vec<Transaction>) -> Result<()> {
+pub fn validate_transactions(history: &[Transaction]) -> Result<()> {
     // TODO extract source line and display like rustc
     // hide stacktrace unless --verbose / --debug is given
     let mut n_errors = 0u32;
@@ -161,7 +163,7 @@ pub fn validate_transactions(history: &Vec<Transaction>) -> Result<()> {
 
             print_locations(vec![Location {
                 transaction: t,
-                hints: &[&format!("hint: {}", value_change_note(t)).dimmed().to_string()],
+                hints: &[&format!("hint: {}", value_change_note(t)).dimmed()],
                 color: Color::Red,
             }]);
             match error {
@@ -221,7 +223,7 @@ pub fn validate_transactions(history: &Vec<Transaction>) -> Result<()> {
                 }
                 _ => eprintln!("{}", error),
             }
-            eprintln!("");
+            eprintln!();
         }
 
         // Detect re-assignments
@@ -237,18 +239,16 @@ pub fn validate_transactions(history: &Vec<Transaction>) -> Result<()> {
                     Location {
                         transaction: t,
                         hints: &[
-                            &format!("help: reassigned here to {:?}", t.value).yellow().to_string(),
-                            &format!("hint: {}", value_change_note(t)).dimmed().to_string(),
+                            &format!("help: reassigned here to {:?}", t.value).yellow(),
+                            &format!("hint: {}", value_change_note(t)).dimmed(),
                         ],
                         color: Color::Yellow,
                     },
                     Location {
                         transaction: other,
                         hints: &[
-                            &format!("help: previously assigned here to {:?}", t.value)
-                                .yellow()
-                                .to_string(),
-                            &format!("hint: {}", value_change_note(t)).dimmed().to_string(),
+                            &format!("help: previously assigned here to {:?}", t.value).yellow(),
+                            &format!("hint: {}", value_change_note(t)).dimmed(),
                         ],
                         color: Color::Yellow,
                     },

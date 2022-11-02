@@ -25,7 +25,7 @@ fn cache_kernel(kdir: &PathBuf) -> String {
         .current_dir(&kdir)
         .status()
         .unwrap();
-    return kernel_tar;
+    kernel_tar
 }
 
 fn setup_kernel(kdir: &PathBuf) -> PathBuf {
@@ -72,7 +72,7 @@ pub fn setup() -> Bridge {
 
 pub fn teardown() {
     // TODO nothing to do for now
-    return;
+    
 }
 
 pub fn teardown_full() {

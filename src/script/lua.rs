@@ -46,7 +46,7 @@ impl Script for LuaScript {
                         bridge
                             .symbol(&name)
                             .unwrap()
-                            .set_value_tracked(SymbolValue::Auto(value.clone()), file, line, Some(traceback))
+                            .set_value_tracked(SymbolValue::Auto(value), file, line, Some(traceback))
                             .ok();
                         StdOk(())
                     },
@@ -56,7 +56,7 @@ impl Script for LuaScript {
                         bridge
                             .symbol(&name)
                             .unwrap()
-                            .set_value_tracked(SymbolValue::Boolean(value.clone()), file, line, Some(traceback))
+                            .set_value_tracked(SymbolValue::Boolean(value), file, line, Some(traceback))
                             .ok();
                         StdOk(())
                     },
@@ -66,9 +66,7 @@ impl Script for LuaScript {
                         // We use an i64 here to detect whether values in lua got clipped. Apparently
                         // when values wrap
                         if value < 0 {
-                            return StdErr(LuaError::RuntimeError(format!(
-                                "Please pass values >=2*63 in string syntax. lua doesn't support this."
-                            )));
+                            return StdErr(LuaError::RuntimeError("Please pass values >=2*63 in string syntax. lua doesn't support this.".to_string()));
                         }
                         bridge
                             .symbol(&name)
@@ -184,7 +182,7 @@ impl Script for LuaScript {
                 let mut define_all_syms = String::new();
                 for name in bridge.name_to_symbol.keys() {
                     let has_uppercase_char = name.chars().any(|c| c.is_ascii_uppercase());
-                    if name.len() > 0 && has_uppercase_char {
+                    if !name.is_empty() && has_uppercase_char {
                         define_all_syms.push_str(&format!("CONFIG_{name} = Symbol:new(nil, \"{name}\")\n"));
                         if !name.chars().next().unwrap().is_ascii_digit() {
                             define_all_syms.push_str(&format!("{name} = CONFIG_{name}\n"));
