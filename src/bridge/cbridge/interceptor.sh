@@ -19,17 +19,9 @@ function build_bridge() {
 	else
 		detected_std=gnu89
 	fi
-	if grep -q 'menu\.o' scripts/kconfig/Makefile; then
-		needs_menu=menu
-	else
-		needs_menu=
-	fi
 	if grep -q 'common-objs' scripts/kconfig/Makefile; then
-		if [[ -e scripts/kconfig/lexer.lex.c ]]; then
-			INPUTS=(conf confdata expr $needs_menu symbol util lexer.lex parser.tab autokernel_bridge)
-		else
-			INPUTS=(confdata expr symbol preprocess zconf.lex zconf.tab autokernel_bridge)
-		fi
+		INPUTS=($(awk '/^common-objs.*:=/,/^$/' scripts/kconfig/Makefile | grep -P -o "\S+(?=\.o)"))
+		INPUTS+=(autokernel_bridge)
 	else
 		INPUTS=(conf zconf.tab autokernel_bridge)
 	fi
