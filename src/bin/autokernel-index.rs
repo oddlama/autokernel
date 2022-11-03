@@ -30,6 +30,10 @@ struct ActionValues {
     #[clap(short, long)]
     name: String,
 
+    /// The architecture for which the config is intended.
+    #[clap(short, long, value_name = "ARCH")]
+    arch: Option<String>,
+
     /// The kconf configuration file to apply before indexing
     #[clap(short, long, value_name = "CONFIG", value_hint = clap::ValueHint::FilePath)]
     kconf: PathBuf,
@@ -50,9 +54,9 @@ fn main() -> Result<()> {
     match &args.action {
         Action::Symbols => {
             index_symbols(&args, &bridge)?;
-            index_values(&args, &bridge, "defaults", None)
+            index_values(&args, &bridge, "defaults", None, None)
         }
-        Action::Values(action) => index_values(&args, &bridge, &action.name, Some(&action.kconf)),
+        Action::Values(action) => index_values(&args, &bridge, &action.name, Some(&action.kconf), action.arch.as_ref()),
     }
 }
 
@@ -76,8 +80,9 @@ fn init_db(db: &PathBuf) -> Result<Connection> {
             symbol           TEXT NOT NULL,
             kernel_version   TEXT NOT NULL,
             config_name      TEXT NOT NULL,
+            arch             TEXT,
             value            TEXT NOT NULL,
-            PRIMARY KEY (symbol, kernel_version, config_name))",
+            PRIMARY KEY (symbol, kernel_version, arch, config_name))",
         (), // empty list of parameters.
     )?;
 
@@ -136,7 +141,7 @@ fn index_symbols(args: &Args, bridge: &Bridge) -> Result<()> {
     Ok(())
 }
 
-fn index_values(args: &Args, bridge: &Bridge, name: &str, kconf: Option<&PathBuf>) -> Result<()> {
+fn index_values(args: &Args, bridge: &Bridge, name: &str, kconf: Option<&PathBuf>, arch: Option<&String>) -> Result<()> {
     if let Some(kconf) = kconf {
         bridge.read_config_unchecked(kconf)?;
         println!("{:>12} kconf ({})", "Loaded".green(), kconf.display());
@@ -157,11 +162,12 @@ fn index_values(args: &Args, bridge: &Bridge, name: &str, kconf: Option<&PathBuf
             n_indexed_symbols += 1;
 
             tx.execute(
-                "INSERT INTO value VALUES (?1, ?2, ?3, ?4)",
+                "INSERT INTO value VALUES (?1, ?2, ?3, ?4, ?5)",
                 (
                     symbol.name().unwrap().to_string(),
                     &kernel_version,
                     name,
+                    arch,
                     symbol.get_string_value(),
                 ),
             )?;

@@ -21,7 +21,8 @@ char** autokernel_env = NULL;
 		}                                    \
 	} while (0)
 
-static void dev_null_message_callback(const char* s) {}
+static void dev_null_message_callback(MESSAGE_CALLBACK_TYPE) {}
+struct property *sym_get_range_prop(struct symbol *sym);
 
 /**
  * The compilation script redirects calls to getenv() inside
@@ -73,14 +74,14 @@ void init(char const* const* env) {
 	DEBUG("Initializing environment\n");
 	init_environment(env);
 	DEBUG("Kernel version: %s\n", autokernel_getenv("KERNELVERSION"));
-	DEBUG("Kernel directory: %s\n", autokernel_getenv("abs_objtree"));
+	DEBUG("Kernel directory: %s\n", autokernel_getenv("PWD"));
 
 	// Save current working directory
 	getcwd(saved_working_directory, 2048);
 
 	// Parse Kconfig and load empty .config (/dev/null)
 	gettimeofday(&start, NULL);
-	if (chdir(autokernel_getenv("abs_objtree")) != 0) {
+	if (chdir(autokernel_getenv("PWD")) != 0) {
 		perror("Failed to change directory");
 	}
 	conf_parse("Kconfig");
