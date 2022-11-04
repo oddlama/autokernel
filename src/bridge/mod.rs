@@ -208,7 +208,7 @@ fn prepare_bridge(kernel_dir: &PathBuf) -> Result<(PathBuf, EnvironMap)> {
         .args(["-c", "--"])
         .arg("umask 022 && make SHELL=\"$INTERCEPTOR_SHELL\" defconfig")
         .env("INTERCEPTOR_SHELL", interceptor_shell)
-        .current_dir(&kernel_dir)
+        .current_dir(kernel_dir)
         .stderr(Stdio::inherit())
         .output()?;
     ensure!(builder_output.status.success());

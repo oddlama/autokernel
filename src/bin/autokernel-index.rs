@@ -1,11 +1,12 @@
 use autokernel::bridge::{Bridge, Symbol};
-use rusqlite::Connection;
+use rusqlite::{Connection, Transaction};
+use uuid::Uuid;
 
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::time::Instant;
 
-use anyhow::{Ok, Result};
+use anyhow::{bail, Ok, Result};
 use clap::Parser;
 use colored::Colorize;
 
@@ -41,8 +42,8 @@ struct ActionValues {
 
 #[derive(Debug, clap::Subcommand)]
 enum Action {
-    /// Index symbol metadata and default values
-    Symbols,
+    /// Index kernel symbols, metadata and default values
+    Kernel,
     /// Index symbol values
     Values(ActionValues),
 }
@@ -51,58 +52,118 @@ fn main() -> Result<()> {
     let args = Args::parse();
     let bridge = Bridge::new(args.kernel_dir.clone())?;
 
+    let mut conn = Connection::open(&args.db)?;
+    create_schema(&mut conn)?;
+
+    let kernel_name = bridge.get_env("PWD").unwrap().split("/").last().unwrap().to_string();
+    let (v_major, v_minor, v_patch) = parse_kernel_version(&bridge.get_env("KERNELVERSION").unwrap())?;
+
     match &args.action {
-        Action::Symbols => {
-            index_symbols(&args, &bridge)?;
-            index_values(&args, &bridge, "defaults", None, None)
+        Action::Kernel => {
+            let kernel_id = Uuid::new_v4().to_string();
+            let tx = conn.transaction()?;
+            tx.execute(
+                "INSERT INTO kernel VALUES (?1, ?2, ?3, ?4, ?5)",
+                (&kernel_id, v_major, v_minor, v_patch, kernel_name),
+            )?;
+
+            index_kernel(&bridge, &tx, &kernel_id)?;
+            index_values(&bridge, &tx, &kernel_id, "defaults", None, None)?;
+            // TODO index defconfig
+            tx.commit()?;
         }
-        Action::Values(action) => index_values(&args, &bridge, &action.name, Some(&action.kconf), action.arch.as_ref()),
-    }
+        Action::Values(action) => {
+            let kernel_id: String = conn
+                .prepare(
+                    "SELECT id from kernel WHERE version_major=? AND version_minor=? AND version_patch=? AND name=?",
+                )?
+                .query_row((v_major, v_minor, v_patch, &kernel_name), |row| row.get(0))?;
+            let tx = conn.transaction()?;
+
+            index_values(
+                &bridge,
+                &tx,
+                &kernel_id,
+                &action.name,
+                Some(&action.kconf),
+                action.arch.as_ref(),
+            )?;
+            tx.commit()?;
+        }
+    };
+
+    Ok(())
 }
 
-fn init_db(db: &PathBuf) -> Result<Connection> {
-    let mut conn = Connection::open(db)?;
-
-    // Create tables
+fn create_schema(conn: &mut Connection) -> Result<()> {
     let tx = conn.transaction()?;
+    // Create tables
+    tx.execute(
+        "CREATE TABLE IF NOT EXISTS kernel (
+            id               TEXT NOT NULL,
+            version_major    INTEGER NOT NULL,
+            version_minor    INTEGER NOT NULL,
+            version_patch    INTEGER NOT NULL,
+            name             TEXT NOT NULL,
+            UNIQUE (version_major, version_minor, version_patch, name),
+            PRIMARY KEY (id))",
+        (), // empty list of parameters.
+    )?;
+    tx.execute(
+        "CREATE TABLE IF NOT EXISTS config (
+            id               TEXT NOT NULL,
+            kernel_id        TEXT NOT NULL REFERENCES kernel(id),
+            architecture     TEXT,
+            name             TEXT NOT NULL,
+            UNIQUE (kernel_id, architecture, name),
+            PRIMARY KEY (id))",
+        (), // empty list of parameters.
+    )?;
     tx.execute(
         "CREATE TABLE IF NOT EXISTS symbol (
+            kernel_id        TEXT NOT NULL REFERENCES kernel(id),
             name             TEXT NOT NULL,
-            kernel_version   TEXT NOT NULL,
             type             TEXT NOT NULL,
             visibility_expression TEXT,
             reverse_dependencies  TEXT,
-            PRIMARY KEY (name, kernel_version))",
+            PRIMARY KEY (kernel_id, name))",
         (), // empty list of parameters.
     )?;
     tx.execute(
         "CREATE TABLE IF NOT EXISTS value (
-            symbol           TEXT NOT NULL,
-            kernel_version   TEXT NOT NULL,
-            config_name      TEXT NOT NULL,
-            arch             TEXT,
+            config_id        TEXT NOT NULL REFERENCES config(id),
+            symbol_name      TEXT NOT NULL,
             value            TEXT NOT NULL,
-            PRIMARY KEY (symbol, kernel_version, arch, config_name))",
+            PRIMARY KEY (config_id, symbol_name))",
         (), // empty list of parameters.
     )?;
-
     tx.commit()?;
-    Ok(conn)
+    Ok(())
 }
 
 fn is_valid_symbol(symbol: &Symbol) -> bool {
     return !symbol.is_const() && symbol.name().is_some();
 }
 
-fn index_symbols(args: &Args, bridge: &Bridge) -> Result<()> {
-    print!("{:>12} symbols...\r", "Indexing".cyan());
+fn parse_kernel_version(ver: &str) -> Result<(u32, u32, u32)> {
+    if let Some(d1) = ver.find('.') {
+        let major = ver[..d1].parse::<u32>()?;
+        let rest = &ver[d1 + 1..];
+        if let Some(d2) = rest.find('.') {
+            Ok((major, rest[..d2].parse::<u32>()?, rest[d2 + 1..].parse::<u32>()?))
+        } else {
+            Ok((major, rest.parse::<u32>()?, 0))
+        }
+    } else {
+        bail!("Cannot parse kernel version (missing .)");
+    }
+}
+
+fn index_kernel(bridge: &Bridge, tx: &Transaction, kernel_id: &str) -> Result<()> {
+    print!("{:>12} kernel...\r", "Indexing".cyan());
     io::stdout().flush()?;
 
-    let mut conn = init_db(&args.db)?;
     let time_start = Instant::now();
-    let tx = conn.transaction()?;
-    let kernel_version = bridge.get_env("KERNELVERSION").unwrap();
-
     colored::control::set_override(false);
     let mut n_indexed_symbols = 0;
     for symbol in &bridge.symbols {
@@ -113,8 +174,8 @@ fn index_symbols(args: &Args, bridge: &Bridge) -> Result<()> {
             tx.execute(
                 "INSERT INTO symbol VALUES (?1, ?2, ?3, ?4, ?5)",
                 (
+                    kernel_id,
                     symbol.name().unwrap().to_string(),
-                    &kernel_version,
                     symbol.symbol_type().as_ref(),
                     symbol
                         .visibility_expression_bare()
@@ -129,31 +190,38 @@ fn index_symbols(args: &Args, bridge: &Bridge) -> Result<()> {
         }
     }
     colored::control::unset_override();
-    tx.commit()?;
 
     println!(
-        "{:>12} {} symbols to {} in {:.2?}",
+        "{:>12} kernel [{} symbols] in {:.2?}",
         "Indexed".green(),
         n_indexed_symbols,
-        args.db.display(),
         time_start.elapsed()
     );
     Ok(())
 }
 
-fn index_values(args: &Args, bridge: &Bridge, name: &str, kconf: Option<&PathBuf>, arch: Option<&String>) -> Result<()> {
+fn index_values(
+    bridge: &Bridge,
+    tx: &Transaction,
+    kernel_id: &str,
+    name: &str,
+    kconf: Option<&PathBuf>,
+    arch: Option<&String>,
+) -> Result<()> {
     if let Some(kconf) = kconf {
         bridge.read_config_unchecked(kconf)?;
         println!("{:>12} kconf ({})", "Loaded".green(), kconf.display());
     }
 
+    let time_start = Instant::now();
+    let config_id = Uuid::new_v4().to_string();
+    tx.execute(
+        "INSERT INTO config VALUES (?1, ?2, ?3, ?4)",
+        (&config_id, kernel_id, arch, name),
+    )?;
+
     print!("{:>12} symbol values...\r", "Indexing".cyan());
     io::stdout().flush()?;
-
-    let mut conn = init_db(&args.db)?;
-    let time_start = Instant::now();
-    let tx = conn.transaction()?;
-    let kernel_version = bridge.get_env("KERNELVERSION").unwrap();
 
     let mut n_indexed_symbols = 0;
     for symbol in &bridge.symbols {
@@ -162,25 +230,21 @@ fn index_values(args: &Args, bridge: &Bridge, name: &str, kconf: Option<&PathBuf
             n_indexed_symbols += 1;
 
             tx.execute(
-                "INSERT INTO value VALUES (?1, ?2, ?3, ?4, ?5)",
+                "INSERT INTO value VALUES (?1, ?2, ?3)",
                 (
+                    &config_id,
                     symbol.name().unwrap().to_string(),
-                    &kernel_version,
-                    name,
-                    arch,
                     symbol.get_string_value(),
                 ),
             )?;
         }
     }
-    tx.commit()?;
 
     println!(
-        "{:>12} {} symbol values [{}] to {} in {:.2?}",
+        "{:>12} {} symbol values [{}] in {:.2?}",
         "Indexed".green(),
         n_indexed_symbols,
         name,
-        args.db.display(),
         time_start.elapsed()
     );
     Ok(())
