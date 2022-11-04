@@ -4,9 +4,10 @@ use uuid::Uuid;
 
 use std::io::{self, Write};
 use std::path::PathBuf;
+use std::process::Command;
 use std::time::Instant;
 
-use anyhow::{bail, Ok, Result};
+use anyhow::{bail, Ok, Result, ensure, Context};
 use clap::Parser;
 use colored::Colorize;
 
@@ -69,7 +70,16 @@ fn main() -> Result<()> {
 
             index_kernel(&bridge, &tx, &kernel_id)?;
             index_values(&bridge, &tx, &kernel_id, "defaults", None, None)?;
-            // TODO index defconfig
+
+            ensure!(Command::new("make")
+                .arg("defconfig")
+                .current_dir(&args.kernel_dir)
+                .status()
+                .context("Failed to generate defconfig")?
+                .success());
+            let defconfig = args.kernel_dir.join(".config");
+            index_values(&bridge, &tx, &kernel_id, "defconfig", Some(&defconfig), bridge.get_env("ARCH").as_ref())?;
+
             tx.commit()?;
         }
         Action::Values(action) => {
