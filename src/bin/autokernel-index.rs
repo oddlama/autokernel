@@ -43,6 +43,8 @@ struct ActionValues {
 
 #[derive(Debug, clap::Subcommand)]
 enum Action {
+    /// Just initialize the database schema
+    InitDb,
     /// Index kernel symbols, metadata and default values
     Kernel,
     /// Index symbol values
@@ -51,16 +53,19 @@ enum Action {
 
 fn main() -> Result<()> {
     let args = Args::parse();
-    let bridge = Bridge::new(args.kernel_dir.clone())?;
-
-    let mut conn = Connection::open(&args.db)?;
-    create_schema(&mut conn)?;
-
-    let kernel_name = bridge.get_env("PWD").unwrap().split("/").last().unwrap().to_string();
-    let (v_major, v_minor, v_patch) = parse_kernel_version(&bridge.get_env("KERNELVERSION").unwrap())?;
 
     match &args.action {
+        Action::InitDb => {
+            let mut conn = Connection::open(&args.db)?;
+            create_schema(&mut conn)?;
+        }
         Action::Kernel => {
+            let bridge = Bridge::new(args.kernel_dir.clone())?;
+            let mut conn = Connection::open(&args.db)?;
+            create_schema(&mut conn)?;
+
+            let kernel_name = bridge.get_env("PWD").unwrap().split("/").last().unwrap().to_string();
+            let (v_major, v_minor, v_patch) = parse_kernel_version(&bridge.get_env("KERNELVERSION").unwrap())?;
             let kernel_id = Uuid::new_v4().to_string();
             let tx = conn.transaction()?;
             tx.execute(
@@ -83,6 +88,12 @@ fn main() -> Result<()> {
             tx.commit()?;
         }
         Action::Values(action) => {
+            let bridge = Bridge::new(args.kernel_dir.clone())?;
+            let mut conn = Connection::open(&args.db)?;
+            create_schema(&mut conn)?;
+
+            let kernel_name = bridge.get_env("PWD").unwrap().split("/").last().unwrap().to_string();
+            let (v_major, v_minor, v_patch) = parse_kernel_version(&bridge.get_env("KERNELVERSION").unwrap())?;
             let kernel_id: String = conn
                 .prepare(
                     "SELECT id from kernel WHERE version_major=? AND version_minor=? AND version_patch=? AND name=?",
