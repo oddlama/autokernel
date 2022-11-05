@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use std::io::{self, Write};
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::time::Instant;
 
 use anyhow::{bail, Ok, Result, ensure, Context};
@@ -79,6 +79,7 @@ fn main() -> Result<()> {
             ensure!(Command::new("make")
                 .arg("defconfig")
                 .current_dir(&args.kernel_dir)
+                .stdout(Stdio::null())
                 .status()
                 .context("Failed to generate defconfig")?
                 .success());
