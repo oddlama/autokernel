@@ -1,6 +1,72 @@
-## About autokernel
+<p align="center"><img width="auto" height="90" src="https://user-images.githubusercontent.com/31919558/201540026-7b9281f5-0f1b-4d7a-8b69-4480b1e467d3.png"></p>
 
-Supported kernel versions: 4.2 to latest.
+<div align="center">
+
+[![Tutorial](https://img.shields.io/badge/Landing_Page-informational.svg)](https://github.com/oddlama/autokernel/blob/main/examples/tutorial.lua)
+[![MIT License](https://img.shields.io/badge/license-MIT-informational.svg)](./LICENSE)
+
+</div>
+
+# About autokernel
+
+Autokernel is a tool to manage your kernel configuration that guarantees semantic correctness.
+It checks symbol assignments for validity using a native bridge to the kernel's Kconfig interface
+and ensures that your configuration doesn't silently break on kernel updates.
+
+- 🧰 Configuration via Lua / kconfig configuration
+-  Automatically find satisfying assignments for a symbols and its dependencies
+- Integrate an initramfs in a two-stage kernel build
+- Write your configuration using classical kconfig files or in lua if you require conditionals or more complex logic.
+- Supports all kernels since version `4.2`
+
+## Installation \& Usage
+
+Autokernel can be installed with cargo:
+
+```bash
+$ cargo install autokernel
+```
+
+Afterwards you will need to create a `/etc/autokernel/config.toml` (for a reference see [config.toml](https://github.com/oddlama/autokernel/blob/main/config.toml)):
+
+```toml
+[config]
+#script = "/etc/autokernel/legacy.config"
+script = "/etc/autokernel/config.lua"
+```
+
+Then write your kernel configuration in `/etc/autokernel/config.lua`:
+
+```lua
+-- Begin with the defconfig for your architecture
+load_kconfig_unchecked(kernel_dir .. "/arch/x86/configs/x86_64_defconfig")
+
+-- Change some symbols
+NET "y"
+```
+
+And finally run autokernel to generate a `.config` file or directly build the kernel:
+
+```bash
+# Just generate the {kernel_dir}/.config file
+$ autokernel generate-config
+# Or directly build the whole kernel
+$ autokernel build
+```
+
+If you want to maintain a package for your favourite distribution, feel free to do so and let us know!
+
+## Example
+
+## Showcase
+
+#### Invalid value detection
+
+#### Detects missing dependencies
+
+#### Automatically satisfy a symbol and its dependencies
+
+#### Duplicate assignments
 
 ## Why?
 
@@ -12,7 +78,7 @@ This makes it difficult to all necessary critical changes in your config.
 Autokernel provides an alternative way to configure your kernel. Instead of simply merging
 traditional traditional kconfig files, autokernel provides a framework which understands
 the semantics behind symbols, their dependencies and allowed values and enforces these rules
-when generating a kernel configuration `.config`. 
+when generating a kernel configuration `.config`.
 
 Additionally, autokernel tries to provide as much helpful information as possible in case
 an error is encountered. It can not only detect invalid assignments, but also tries to
@@ -25,43 +91,3 @@ make the symbol visible.
 
 
 `CONFIG_THUNDERBOLT -> CONFIG_USB4`
-
-v2 is cool
-
-This is a full rewrite of the main autokernel.
-
-It has two major goals:
-- **build**: make rebuilding a kernel with custom options as safe and painless as possible
-- **configure** make configuring your kernel straightforward as possible
-
-Our approach:
-- using the kernel symbols we can check possible flags, available symbols, and can react in a configured way as well as configure the build process while defaulting to best practices
-- knowing transitive dependencies, we can support in enabling or disabling features, compare it to other distributions, and in the future even support e.g. lua scripts to make kernel configuration dynamic to the situation
-
-### Example usage
-
-`cargo run -- linux-5.19.1`
-
-### Build Feature Roadmap
-
-User story: "I would like to use the gentoo kernel but switch on a few flags and not have to worry about rebuilding the kernel carefully each update - it should just work"
-
-- [ ] Read config
-- [ ] Update with user config
-- [ ] Write config
-- [ ] Build kernel
-
-### Configuration Feature Roadmap
-
-User story: "I have specific flags I want to change, e.g. due to my hardware. I might know what the main one is, like thunderbolt, but want to make sure everything is configured correctly and have all sideeffects taken care of."
-User story 2: "I know what I want in which situation but currently have to track 10 different kernel configs for different devices. I would love a way to configure dynamically"
-
-- [ ] transitive config elements
-- [ ] distro comparisons
-- [ ] current hardware sanity checks
-- [ ] lua / wren / python scripts to manipulate symbols
-
-## Principles
-
-- rather keep the codebase simple than adding convenience features
-- unambiguosity is key, rather write more verbose configs, than have an unbootable kernel because of a typo (relevant for e.g. the lua API and == vs is(), where only is() is typesafe
