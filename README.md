@@ -12,18 +12,16 @@
 Autokernel is a tool to manage your kernel configuration that guarantees semantic correctness.
 It checks symbol assignments for validity using a native bridge to the kernel's Kconfig interface
 and ensures that your configuration doesn't silently break on kernel updates. Next time a config option is
-removed or renamed (like when `CONFIG_THUNDERBOLT` was merged under `CONFIG_USB4`), you will notice.
+removed or renamed (like when `CONFIG_THUNDERBOLT` was merged with `CONFIG_USB4`), you will notice.
 
 It provides a configuration framework which understands the semantics behind symbols,
 their dependencies and allowed values and enforces these rules when generating the final
-`.config` kernel configuration file.
+`.config` kernel configuration file. It is able to automatically resolve symbol dependencies
+and show useful diagnostics to help you solve configuration errors.
 
-It is able to automatically resolve symbol dependencies and show useful diagnostics to help you solve
-configuration errors. The configuration itself can be written using traditional kconfig files
-or by using the more flexible and powerful lua scripting api, which allows for more complex logic
-and compatibility with multiple kernel versions.
-
-All kernel versions back to `v4.2.0` are supported.
+The configuration itself can be written using traditional kconfig files
+or by using the more flexible and powerful lua scripting api. This allows for more complex logic
+and compatibility with multiple kernel versions. All kernel versions back to `v4.2.0` are supported.
 
 ## Installation \& Quickstart
 
@@ -33,7 +31,7 @@ Autokernel can be installed with cargo:
 $ cargo install autokernel
 ```
 
-Afterwards you will need to create a `/etc/autokernel/config.toml` (for a reference see [config.toml](https://github.com/oddlama/autokernel/blob/main/config.toml)).
+Afterwards you will need to create a `/etc/autokernel/config.toml` (for a reference see [examples/config.toml](https://github.com/oddlama/autokernel/blob/main/examples/config.toml)).
 Here you can configure which script is used to generate the kernel configuration and how the artifacts
 should be installed to your system when using `autokernel build --install`.
 
@@ -47,9 +45,8 @@ Now you can write your kernel configuration. You can either use a classic kconfi
 (just change the config above as the comment shows), or use the recommended lua interface.
 The provided lua API is a more powerful and versatile way to write your configuration.
 With it you will be able to create more structured, complex and reusable configurations.
-See [tutorial.lua](examples/tutorial.lua) for an introduction to the api.
-
-A very minimal example would be the following (save as `/etc/autokernel/config.lua`):
+See [tutorial.lua](examples/tutorial.lua) for an introduction to the api. Here's a very small
+example `config.lua`:
 
 ```lua
 -- Begin with the defconfig for your architecture
@@ -71,7 +68,7 @@ $ autokernel build
 
 If you want to maintain a package for your favourite distribution, feel free to do so and let us know!
 
-## Example
+## Introduction
 
 To set a symbol you can use the syntax below.
 
