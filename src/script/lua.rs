@@ -7,7 +7,7 @@ use std::fs;
 use std::path::Path;
 use std::result::Result::{Err as StdErr, Ok as StdOk};
 
-use anyhow::{Ok, Result};
+use anyhow::{Context, Ok, Result};
 use rlua::{self, Error as LuaError, Lua};
 
 pub struct LuaScript {
@@ -20,7 +20,7 @@ impl LuaScript {
     pub fn new(file: impl AsRef<Path>) -> Result<LuaScript> {
         Ok(LuaScript::from_raw(
             file.as_ref().display().to_string(),
-            fs::read_to_string(file)?,
+            fs::read_to_string(&file).context(format!("Could not read lua script {}", file.as_ref().display()))?,
         ))
     }
 

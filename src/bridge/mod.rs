@@ -46,7 +46,8 @@ impl Bridge {
     /// load it and associated functions and create and return a
     /// Bridge object to interface with the C part.
     pub fn new(kernel_dir: PathBuf) -> Result<Bridge> {
-        let (library_path, env) = prepare_bridge(&kernel_dir)?;
+        let (library_path, env) =
+            prepare_bridge(&kernel_dir).context(format!("Could not prepare bridge in {}", kernel_dir.display()))?;
 
         let time_start = Instant::now();
         print!("{:>12} bridge\r", "Initializing".cyan());
@@ -167,12 +168,14 @@ fn prepare_bridge(kernel_dir: &PathBuf) -> Result<(PathBuf, EnvironMap)> {
     let kconfig_dir = kernel_dir.join("scripts").join("kconfig");
 
     // Copy bridge.c to kernel scripts directory
+    let kconfig_bridge_c = kconfig_dir.join("autokernel_bridge.c");
     fs::OpenOptions::new()
         .create(true)
         .write(true)
         .truncate(true)
         .mode(0o644)
-        .open(&kconfig_dir.join("autokernel_bridge.c"))?
+        .open(&kconfig_bridge_c)
+        .context(format!("Could not open {}", kconfig_bridge_c.display()))?
         .write_all(include_bytes!("cbridge/bridge.c"))?;
 
     // This interceptor script is used to run autokernel's bridge with the
@@ -193,7 +196,8 @@ fn prepare_bridge(kernel_dir: &PathBuf) -> Result<(PathBuf, EnvironMap)> {
         .write(true)
         .truncate(true)
         .mode(0o755)
-        .open(&kconfig_interceptor_sh)?
+        .open(&kconfig_interceptor_sh)
+        .context(format!("Could not open {}", kconfig_interceptor_sh.display()))?
         .write_all(include_bytes!("cbridge/interceptor.sh"))?;
 
     let interceptor_shell = fs::canonicalize(&kconfig_interceptor_sh)?

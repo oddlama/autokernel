@@ -1,6 +1,6 @@
 use std::{fs, path::Path};
 
-use anyhow::{Ok, Result};
+use anyhow::{Context, Ok, Result};
 use colored::Colorize;
 use serde::Deserialize;
 
@@ -113,5 +113,8 @@ pub fn load(path: impl AsRef<Path>) -> Result<Config> {
         env!("CARGO_PKG_NAME"),
         env!("CARGO_PKG_VERSION")
     );
-    Ok(toml::from_str(&fs::read_to_string(path)?)?)
+    Ok(toml::from_str(&fs::read_to_string(&path).context(format!(
+        "Could not read config {}",
+        path.as_ref().display()
+    ))?)?)
 }
