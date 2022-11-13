@@ -25,7 +25,7 @@ pub fn load(path: impl AsRef<Path>) -> Result<Box<dyn Script>> {
 
     Ok(match ext {
         "lua" => Box::new(LuaScript::new(path)?),
-        "txt" => Box::new(KConfig::new(path)?),
+        "txt" | "config" => Box::new(KConfig::new(path)?),
         _ => bail!(format!("Unknown script type {ext}")),
     })
 }

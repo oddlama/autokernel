@@ -1,0 +1,84 @@
+# This is the autokernel configuration file.
+
+[config]
+# The script that defines which symbols should be set.
+# This can be a lua script (see example.lua), or a classic kconfig
+# file. Statements in this script will be checked for correctness.
+#
+# Recognized extensions:
+#   .lua -> Uses the lua interpreter
+#   .txt | .config -> Uses the kconfig interpreter
+#
+# Using lua you can utilize more complex logic to build your kernel config,
+# as you can directly interface with the autokernel bridge and conditionally
+# set symbols based on kernel version, or more complex conditions.
+#
+# This field is required.
+script = "/etc/autokernel/config.lua"
+
+[initramfs]
+# Whether an initramfs should be built.
+#enable = false
+
+# Whether the built initramfs should be integrated into the kernel in a two-stage build
+# (build kernel, generate initramfs, rebuild kernel to integrate initramfs). If your initramfs
+# packages some modules (and is therefore not kernel-agnostic), this option always ensures
+# that the correct initramfs is contained in the kernel binary.
+#builtin = false
+
+# The command used to build the initramfs.
+# The following variables will be replaced in all arguments:
+#   {OUTPUT}:
+#       Will be replaced with a path to where the resulting initramfs should be placed.
+#       If initramfs.builtin is true, this should be the uncompressed cpio image. It will
+#       then be compressed automatically in the second build stage according to your
+#       INITRAMFS_COMPRESSION_* choice in the kernel.
+#   {KERNEL_VERSION}:
+#       The version string of the kernel as set by the makefile.
+#   {INSTALL_MOD_PATH}:
+#       The directory where the built kernel modules reside temporarily.
+#       Typically this will be some path like /tmp/????/lib/modules/{KERNEL_VERSION}.
+# Example for dracut:
+#command = ["dracut", "--kver", {OUTPUT}",
+#                     "--kmoddir", "{INSTALL_MOD_PATH}",
+#                     "--no-hostonly",
+#                     "--add", "bash",
+#                     "--force", "{OUTPUT}"]
+# Default:
+#command = []
+
+# Section may be elided if defaults are not changed.
+[config.install]
+# This determines whether the config file should be installed (copied),
+# when build --install is used.
+#enable = true
+# The path to where the config file will be copied.
+# The following variables will be replaced:
+#     {KERNEL_VERSION}: The version string of the kernel as set by the makefile.
+#path = "/boot/config-{KERNEL_VERSION}"
+
+# Section may be elided if defaults are not changed.
+[kernel.install]
+# This determines whether the kernel should be installed (using `make install`),
+# when build --install is used.
+#enable = true
+
+# Section may be elided if defaults are not changed.
+[initramfs.install]
+# This determines whether the initramfs file should be installed (copied),
+# when build --install is used. This section is ignored if initramfs.builtin is true.
+#enable = true
+# The path to where the config file will be copied.
+# The following variables will be replaced:
+#     {KERNEL_VERSION}: The version string of the kernel as set by the makefile.
+#path = "/boot/initramfs-{KERNEL_VERSION}.img"
+
+# Section may be elided if defaults are not changed.
+[modules.install]
+# This determines whether the modules should be installed (using `make modules_install`),
+# when build --install is used.
+#enable = true
+# The prefix path to where the modules should be installed (uses `make INSTALL_MOD_PATH=... modules_install`).
+# The following variables will be replaced:
+#     {KERNEL_VERSION}: The version string of the kernel as set by the makefile.
+#path = "/"

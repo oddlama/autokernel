@@ -72,18 +72,12 @@ pub struct Config {
     pub modules: SectionModules,
 }
 
-impl Default for SectionModulesInstall {
+impl Default for SectionConfigInstall {
     fn default() -> Self {
         Self {
             enable: true,
-            path: "/".to_string(),
+            path: "/boot/config-{KERNEL_VERSION}".to_string(),
         }
-    }
-}
-
-impl Default for SectionKernelInstall {
-    fn default() -> Self {
-        Self { enable: true }
     }
 }
 
@@ -96,11 +90,17 @@ impl Default for SectionInitramfsInstall {
     }
 }
 
-impl Default for SectionConfigInstall {
+impl Default for SectionKernelInstall {
+    fn default() -> Self {
+        Self { enable: true }
+    }
+}
+
+impl Default for SectionModulesInstall {
     fn default() -> Self {
         Self {
             enable: true,
-            path: "/boot/config-{KERNEL_VERSION}".to_string(),
+            path: "/".to_string(),
         }
     }
 }
