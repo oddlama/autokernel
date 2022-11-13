@@ -107,8 +107,14 @@ elseif USB4:is("abc") then -- raises an error due to invalid symbol type compari
 end
 
 -- Comparisons between symbols are also possible
-if USB4:is(ACPI) then -- equivalent to USB4:is(ACPI:value())
-	print("Not reachable")
+if USB:is(USB4) then
+	print("USB == USB4")
+end
+
+-- Roughly equivalent to USB4:is(ACPI:value()), but has even stricter requirements:
+-- The two symbols must be of the same type.
+if USB4:is(ACPI) then -- <- error: trying to compare Tristate to Boolean
+	print("Not reachable, invalid comparison")
 end
 
 

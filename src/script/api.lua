@@ -150,7 +150,7 @@ function Symbol:is(value)
 	if getmetatable(value) == Symbol then
 		local vstype = value:type()
 		if stype == vstype then
-			return value:value() == value()
+			return value:value() == self:value()
 		else
 			error ("Cannot compare symbol of type " .. stype .. " to symbol of type " .. vstype)
 		end

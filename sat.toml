@@ -1,7 +1,0 @@
-[config]
-script = "sat.lua"
-
-[initramfs]
-enable = true
-builtin = true
-command = ["touch", "{OUTPUT}"]
