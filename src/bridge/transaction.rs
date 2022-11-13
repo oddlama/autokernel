@@ -148,8 +148,6 @@ pub fn print_satisfy_result(satisfying_configuration: &Result<Vec<(String, Trist
 }
 
 pub fn validate_transactions(history: &[Transaction]) -> Result<()> {
-    // TODO extract source line and display like rustc
-    // hide stacktrace unless --verbose / --debug is given
     let mut n_errors = 0u32;
     for (i, t) in history.iter().enumerate() {
         if let Some(error) = &t.error {

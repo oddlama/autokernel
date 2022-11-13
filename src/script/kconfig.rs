@@ -34,16 +34,9 @@ impl KConfig {
                 continue;
             }
             let (k, v) = line.split_once('=').ok_or_else(|| anyhow!("invalid line {line}"))?;
-            // TODO trimming all " might not be desired
-            // TODO trimming CONFIG on right side should only be done for choice symbols
             assignments.push(Assignment {
                 symbol: k.trim().trim_start_matches("CONFIG_").to_string(),
-                value: v
-                    .trim()
-                    .trim_start_matches('"')
-                    .trim_end_matches('"')
-                    .trim_start_matches("CONFIG_")
-                    .to_string(),
+                value: v.trim().trim_matches('"').to_string(),
                 line: i + 1,
             });
         }

@@ -23,8 +23,7 @@ struct Args {
     /// The configuration file to use
     #[clap(short, long, value_name = "FILE", default_value = "/etc/autokernel/config.toml")]
     config: PathBuf,
-
-    /// The kernel directory
+    /// The kernel directory to operate on
     #[clap(short, long, value_parser, value_name = "DIR", value_hint = clap::ValueHint::DirPath, default_value = "/usr/src/linux")]
     kernel_dir: PathBuf,
 
@@ -37,7 +36,7 @@ struct ActionBuild {
     /// Run make clean before building
     #[clap(short, long)]
     clean: bool,
-    /// Install the artifacts after building
+    /// Install the resulting artifacts after building
     #[clap(short, long)]
     install: bool,
 }
@@ -56,21 +55,24 @@ struct ActionSatisfy {
     /// The value to solve for (either m or y)
     #[clap(default_value = "y")]
     value: String,
-    /// Don't load the config before satisfying, instead run the solver directly with all symbols set to their default values
+    /// Don't apply a config before satisfying, instead run the solver directly with all symbols set to their default values
     #[clap(short, long)]
     ignore_config: bool,
-    /// Recursively satisfy any encountered dependencies
+    /// Recursively satisfy dependencies of encountered symbols
     #[clap(short, long)]
     recursive: bool,
 }
 
 #[derive(Debug, clap::Subcommand)]
 enum Action {
-    /// Build the kernel using a .config file generated from the autokernel configuration
+    /// First generate a .config file by applying the autokernel config and afterwards build the
+    /// kernel. Additional options may be given to generate an initramfs, integrate it into the
+    /// kernel and to install resulting artifacts (make install, make modules_install, ...).
     Build(ActionBuild),
-    /// Generate a .config by applying the autokernel configuration
+    /// Generate a .config file by applying the autokernel config
     GenerateConfig(ActionGenerateConfig),
-    /// Automatically Satisfy the dependencies of a given symbol
+    /// Automatically satisfy the dependencies of a given symbol. This will evaluate and
+    /// print the necessary changes to other symbols that are required before the given symbol can be set
     Satisfy(ActionSatisfy),
 }
 

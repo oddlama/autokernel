@@ -225,11 +225,7 @@ impl<'a> Symbol<'a> {
             (_, _) => return Err(SymbolSetError::InvalidValue),
         };
 
-        // TODO only recalculate the current symbol except when this was a choice?
-        // not sure, check C code. Probably we need to go through all deps and recalculate those
-        //self.recalculate();
         self.bridge.recalculate_all_symbols();
-
         Ok(())
     }
 

@@ -22,7 +22,7 @@ fn cache_kernel(kdir: &PathBuf) -> String {
     Command::new("wget")
         .arg("-q")
         .arg(format!("https://cdn.kernel.org/pub/linux/kernel/v5.x/{}", kernel_tar))
-        .current_dir(&kdir)
+        .current_dir(kdir)
         .status()
         .unwrap();
     kernel_tar
@@ -51,7 +51,7 @@ fn setup_kernel(kdir: &PathBuf) -> PathBuf {
     Command::new("tar")
         .arg("-xvf")
         .arg(&kernel_tar)
-        .current_dir(&kdir)
+        .current_dir(kdir)
         .stdout(Stdio::null())
         .status()
         .unwrap();
@@ -59,7 +59,7 @@ fn setup_kernel(kdir: &PathBuf) -> PathBuf {
 }
 
 pub fn setup() -> Bridge {
-    let kdir = env::temp_dir().join(&TMP_TEST_DIR);
+    let kdir = env::temp_dir().join(TMP_TEST_DIR);
     println!("creating {} directory", &kdir.display());
     fs::create_dir_all(&kdir).unwrap();
     let kdir = kdir
@@ -71,8 +71,7 @@ pub fn setup() -> Bridge {
 }
 
 pub fn teardown() {
-    // TODO nothing to do for now
-    
+    // Nothing to do for now
 }
 
 pub fn teardown_full() {
