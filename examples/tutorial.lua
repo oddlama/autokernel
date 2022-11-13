@@ -65,10 +65,11 @@ PHYSICAL_ALIGN(0x11223344)     -- <- A hex symbol
 -- Invalid assignments will always cause errors, but errors are reported "late",
 -- so evaluation continues even if an assignment failed. Most symbol assignments don't depend
 -- on each other, so this allows autokernel to show you all errors at once.
-ACPI "some string"   -- <- invalid value
-DEFAULT_HOSTNAME(y)  -- <- invalid value
-DOES_NOT_EXIST "y"   -- <- invalid symbol name
-RTLWIFI_USB "y"      -- <- unmet dependencies
+ACPI "some string"      -- <- invalid value
+DEFAULT_HOSTNAME(y)     -- <- invalid value
+DOES_NOT_EXIST "y"      -- <- invalid symbol name
+WLAN_VENDOR_REALTEK "y" -- <- unmet dependencies
+RTLWIFI_USB "n"         -- <- cannot be set manually
 
 
 --###############################################################
@@ -83,9 +84,9 @@ RTLWIFI_USB "y"      -- <- unmet dependencies
 -- can be used to convert a version string to such a `Version` instance, which
 -- can be compared to one another.
 if kernel_version >= ver("5.6") then
-	USB4:set(y)
+	USB4 "y"
 else
-	THUNDERBOLT:set(y)
+	THUNDERBOLT "y"
 end
 
 

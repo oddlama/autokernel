@@ -219,7 +219,7 @@ pub fn validate_transactions(history: &[Transaction]) -> Result<()> {
                     }
                     eprintln!("   {}", "|".blue());
                 }
-                _ => eprintln!("{}", error),
+                _ => eprintln!("{}: {}", "note".green(), error),
             }
             eprintln!();
         }

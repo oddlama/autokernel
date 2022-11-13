@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Tutorial](https://img.shields.io/badge/Landing_Page-informational.svg)](https://github.com/oddlama/autokernel/blob/main/examples/tutorial.lua)
+[![Tutorial](https://img.shields.io/badge/API-Tutorial-informational.svg)](https://github.com/oddlama/autokernel/blob/main/examples/tutorial.lua)
 [![MIT License](https://img.shields.io/badge/license-MIT-informational.svg)](./LICENSE)
 
 </div>
@@ -11,15 +11,21 @@
 
 Autokernel is a tool to manage your kernel configuration that guarantees semantic correctness.
 It checks symbol assignments for validity using a native bridge to the kernel's Kconfig interface
-and ensures that your configuration doesn't silently break on kernel updates.
+and ensures that your configuration doesn't silently break on kernel updates. Next time a config option is
+removed or renamed (like when `CONFIG_THUNDERBOLT` was merged under `CONFIG_USB4`), you will notice.
 
-- 🧰 Configuration via Lua / kconfig configuration
--  Automatically find satisfying assignments for a symbols and its dependencies
-- Integrate an initramfs in a two-stage kernel build
-- Write your configuration using classical kconfig files or in lua if you require conditionals or more complex logic.
-- Supports all kernels since version `4.2`
+It provides a configuration framework which understands the semantics behind symbols,
+their dependencies and allowed values and enforces these rules when generating the final
+`.config` kernel configuration file.
 
-## Installation \& Usage
+It is able to automatically resolve symbol dependencies and show useful diagnostics to help you solve
+configuration errors. The configuration itself can be written using traditional kconfig files
+or by using the more flexible and powerful lua scripting api, which allows for more complex logic
+and compatibility with multiple kernel versions.
+
+All kernel versions back to `v4.2.0` are supported.
+
+## Installation \& Quickstart
 
 Autokernel can be installed with cargo:
 
@@ -27,7 +33,9 @@ Autokernel can be installed with cargo:
 $ cargo install autokernel
 ```
 
-Afterwards you will need to create a `/etc/autokernel/config.toml` (for a reference see [config.toml](https://github.com/oddlama/autokernel/blob/main/config.toml)):
+Afterwards you will need to create a `/etc/autokernel/config.toml` (for a reference see [config.toml](https://github.com/oddlama/autokernel/blob/main/config.toml)).
+Here you can configure which script is used to generate the kernel configuration and how the artifacts
+should be installed to your system when using `autokernel build --install`.
 
 ```toml
 [config]
@@ -35,17 +43,24 @@ Afterwards you will need to create a `/etc/autokernel/config.toml` (for a refere
 script = "/etc/autokernel/config.lua"
 ```
 
-Then write your kernel configuration in `/etc/autokernel/config.lua`:
+Now you can write your kernel configuration. You can either use a classic kconfig file here
+(just change the config above as the comment shows), or use the recommended lua interface.
+The provided lua API is a more powerful and versatile way to write your configuration.
+With it you will be able to create more structured, complex and reusable configurations.
+See [tutorial.lua](examples/tutorial.lua) for an introduction to the api.
+
+A very minimal example would be the following (save as `/etc/autokernel/config.lua`):
 
 ```lua
 -- Begin with the defconfig for your architecture
 load_kconfig_unchecked(kernel_dir .. "/arch/x86/configs/x86_64_defconfig")
-
 -- Change some symbols
 NET "y"
+USB "y"
 ```
 
-And finally run autokernel to generate a `.config` file or directly build the kernel:
+Finally run autokernel to generate a `.config` file. In case your configuration contains any errors,
+autokernel will abort and print the relevant diagnostics.
 
 ```bash
 # Just generate the {kernel_dir}/.config file
@@ -58,36 +73,80 @@ If you want to maintain a package for your favourite distribution, feel free to 
 
 ## Example
 
-## Showcase
+To set a symbol you can use the syntax below.
 
-#### Invalid value detection
+```lua
+-- This will set `CONFIG_NET` to yes.
+NET "y"
+```
 
-#### Detects missing dependencies
+You can also try to assign a value that isn't allowed:
 
-#### Automatically satisfy a symbol and its dependencies
+```lua
+-- `CONFIG_NET` is a boolean symbol, so mod isn't allowed.
+NET "m"
+```
 
-#### Duplicate assignments
+The kernel would usually ignore such statements entirely. Autokernel will instead
+abort with an error and display diagnostics telling you that only `n` or `y` are allowed:
 
-## Why?
+![Invalid assignment](https://user-images.githubusercontent.com/31919558/201546052-5c65b680-f722-43f5-b563-80cd6c2ced7f.png)
 
-Frequently when the kernel evolves, its config options may change.
-If you want to keep a structured configuration for your kernel, it is easy to miss those changes,
-as the default behavior of the kernel kconfig scripts is to ignore invalid symbols and values.
-This makes it difficult to all necessary critical changes in your config.
+Kernel options can also only be assigned if they are visible, meaning that their
+dependencies must be met. If you try to enable an option that has unmet dependencies,
+autokernel will detect that and automatically suggest a solution.
 
-Autokernel provides an alternative way to configure your kernel. Instead of simply merging
-traditional traditional kconfig files, autokernel provides a framework which understands
-the semantics behind symbols, their dependencies and allowed values and enforces these rules
-when generating a kernel configuration `.config`.
+```lua
+-- This requires WLAN=y and NETDEVICES=y
+WLAN_VENDOR_REALTEK "y"
+```
 
-Additionally, autokernel tries to provide as much helpful information as possible in case
-an error is encountered. It can not only detect invalid assignments, but also tries to
-give you as much information about the cause as possible.
+![Automatic dependency resolution](https://user-images.githubusercontent.com/31919558/201546061-9da4cd5f-0fba-46a8-a161-8b583bf3e9e1.png)
 
-If you have ever searched for an option in `make menuconfig` and couldn't find it or jump to it,
-it is probably because it's dependencies were not yet met. In most cases, autokernel can automatically
-solve the dependency expression of the symbol and tell you which changes need to be made to
-make the symbol visible.
+Instead of blindly copying these assignments into your config, you can also invoke the solver directly
+from lua. This will only work when the solution is unambiguous, otherwise autokernel will
+raise an error and tell you what is missing.
 
+```lua
+-- Enable WLAN_VENDOR_REALTEK and any required dependencies
+WLAN_VENDOR_REALTEK:satisfy { y, recursive = true }
+```
 
-`CONFIG_THUNDERBOLT -> CONFIG_USB4`
+You can also view what you would have to change without provoking an error in your config first
+by using `autokernel satisfy --recursive WLAN_VENDOR_REALTEK` as a one-shot command.
+
+![One-shot dependency resolution](https://user-images.githubusercontent.com/31919558/201546071-de397f53-d4a7-40d8-b9dc-6ad6f6c5c64a.png)
+
+There are also some symbols that cannot be set manually, like `RTLWIFI_USB`.
+Trying to assign them directly will cause an error:
+
+```lua
+RTLWIFI_USB "y"
+```
+
+![Manual assignment error](https://user-images.githubusercontent.com/31919558/201546077-645e990d-8286-477c-886e-4e1614c88f07.png)
+
+Instead, these need to be enabled by setting another symbol that depends on `RTLWIFI_USB`.
+The automatic satisfier is able to solve these aswell, so you can use the same command as
+above to find the required assignments or just use `satisfy` directly from lua again:
+
+```lua
+RTLWIFI_USB:satisfy { y, recursive = true }
+```
+
+Finally you might want to build more complex scripts, which is were lua comes into play.
+It will allow you to do conditional assignments like this:
+
+```lua
+if kernel_version >= ver("5.6") then
+	USB4 "y"
+else
+	THUNDERBOLT "y"
+end
+```
+
+Refer to [tutorial.lua](examples/tutorial.lua) for a thorough introduction to the api.
+
+## Hardening example
+
+For an example configuration for kernel hardening, see [hardening.lua](examples/hardening.lua).
