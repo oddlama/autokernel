@@ -196,7 +196,10 @@ impl<'a> Symbol<'a> {
             (SymbolType::Int, SymbolValue::Int(value)) => {
                 let min = (self.bridge.vtable.c_sym_int_get_min)(self.c_symbol);
                 let max = (self.bridge.vtable.c_sym_int_get_max)(self.c_symbol);
-                ensure!(value >= min && value <= max, SymbolSetError::OutOfRange { min, max });
+                ensure!(
+                    (min == 0 && max == 0) || (value >= min && value <= max),
+                    SymbolSetError::OutOfRange { min, max }
+                );
                 let cstr = CString::new(value.to_string()).unwrap();
                 ensure!(
                     (self.bridge.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr()),
@@ -206,7 +209,10 @@ impl<'a> Symbol<'a> {
             (SymbolType::Hex, SymbolValue::Hex(value)) => {
                 let min = (self.bridge.vtable.c_sym_int_get_min)(self.c_symbol);
                 let max = (self.bridge.vtable.c_sym_int_get_max)(self.c_symbol);
-                ensure!(value >= min && value <= max, SymbolSetError::OutOfRange { min, max });
+                ensure!(
+                    (min == 0 && max == 0) || (value >= min && value <= max),
+                    SymbolSetError::OutOfRange { min, max }
+                );
                 let cstr = CString::new(format!("{:#x}", value)).unwrap();
                 ensure!(
                     (self.bridge.vtable.c_sym_set_string_value)(self.c_symbol, cstr.as_ptr()),
@@ -262,7 +268,9 @@ impl<'a> Symbol<'a> {
             SymbolType::Boolean => Ok(SymbolValue::Boolean(self.get_tristate_value() == Tristate::Yes)),
             SymbolType::Tristate => Ok(SymbolValue::Tristate(self.get_tristate_value())),
             SymbolType::Int => Ok(SymbolValue::Int(
-                self.get_string_value().parse::<u64>().map_err(|_| SymbolGetError::InvalidInt)?,
+                self.get_string_value()
+                    .parse::<u64>()
+                    .map_err(|_| SymbolGetError::InvalidInt)?,
             )),
             SymbolType::Hex => Ok(SymbolValue::Hex(
                 u64::from_str_radix(&self.get_string_value()[2..], 16).map_err(|_| SymbolGetError::InvalidHex)?,
