@@ -79,7 +79,14 @@ function ver(str)
 	return Ver:new(str)
 end
 
+kernel_dir = ak.kernel_dir
 kernel_version = ver(ak.kernel_version_str)
+function load_kconfig(path)
+	ak.load_kconfig(path, true)
+end
+function load_kconfig_unchecked(path)
+	ak.load_kconfig(path, false)
+end
 
 --###############################################################
 -- Tristate
@@ -140,12 +147,23 @@ function Symbol:str_value() return ak.symbol_get_string(self.name) end
 
 function Symbol:is(value)
 	local stype = self:type()
-	if getmetatable(value) == Tristate and (stype == "Boolean" or stype == "Tristate") then
-		return value == self:value()
-	elseif type(value) == "string" and stype == "String" then
+	if getmetatable(value) == Symbol then
+		local vstype = value:type()
+		if stype == vstype then
+			return value:value() == value()
+		else
+			error ("Cannot compare symbol of type " .. stype .. " to symbol of type " .. vstype)
+		end
+	elseif getmetatable(value) == Tristate and (stype == "Boolean" or stype == "Tristate") then
 		return value == self:value()
 	elseif type(value) == "number" and (stype == "Int" or stype == "Hex") then
 		return value == self:value()
+	elseif type(value) == "string" and stype == "String" then
+		return value == self:value()
+	elseif type(value) == "string" and (stype == "Boolean" or stype == "Tristate") then
+		return tristate_from_str(value) == self:value()
+	elseif type(value) == "string" and (stype == "Int" or stype == "Hex") then
+		return tonumber(value) == self:value()
 	else
 		error ("Cannot compare symbol of type " .. stype .. " to value of type " .. type(value))
 	end
@@ -186,6 +204,9 @@ function Symbol:satisfy(tbl, dbginfo)
 
 	local value = tbl[1]
 	local recursive = tbl["recursive"]
+	if value == nil or recursive == nil then
+		error "satisfy requires a table with a symbol value and the recursive argument, like `Symbol:satisfy { y, recursive = true }`"
+	end
 
 	if type(value) == "string" then
 		if value == "m" then

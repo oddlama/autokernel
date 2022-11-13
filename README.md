@@ -1,5 +1,31 @@
 ## About autokernel
 
+Supported kernel versions: 4.2 to latest.
+
+## Why?
+
+Frequently when the kernel evolves, its config options may change.
+If you want to keep a structured configuration for your kernel, it is easy to miss those changes,
+as the default behavior of the kernel kconfig scripts is to ignore invalid symbols and values.
+This makes it difficult to all necessary critical changes in your config.
+
+Autokernel provides an alternative way to configure your kernel. Instead of simply merging
+traditional traditional kconfig files, autokernel provides a framework which understands
+the semantics behind symbols, their dependencies and allowed values and enforces these rules
+when generating a kernel configuration `.config`. 
+
+Additionally, autokernel tries to provide as much helpful information as possible in case
+an error is encountered. It can not only detect invalid assignments, but also tries to
+give you as much information about the cause as possible.
+
+If you have ever searched for an option in `make menuconfig` and couldn't find it or jump to it,
+it is probably because it's dependencies were not yet met. In most cases, autokernel can automatically
+solve the dependency expression of the symbol and tell you which changes need to be made to
+make the symbol visible.
+
+
+`CONFIG_THUNDERBOLT -> CONFIG_USB4`
+
 v2 is cool
 
 This is a full rewrite of the main autokernel.

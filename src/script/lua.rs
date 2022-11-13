@@ -153,18 +153,23 @@ impl Script for LuaScript {
                     StdOk(format!("{:?}", bridge.symbol(&name).unwrap().symbol_type()))
                 })?;
 
-                let load_kconfig = scope.create_function(|_, (path, unchecked): (String, bool)| {
-                    if unchecked {
-                        bridge.read_config_unchecked(path)
-                    } else {
+                let load_kconfig = scope.create_function(|_, (path, checked): (String, bool)| {
+                    if checked {
                         KConfig::new(path)
                             .map_err(|e| LuaError::RuntimeError(e.to_string()))?
                             .apply(bridge)
+                            .ok();
+                        // Errors will be tracked automatically
+                        StdOk(())
+                    } else {
+                        bridge
+                            .read_config_unchecked(path)
+                            .map_err(|e| LuaError::RuntimeError(e.to_string()))
                     }
-                    .map_err(|e| LuaError::RuntimeError(e.to_string()))
                 })?;
 
                 let ak = lua_ctx.create_table()?;
+                ak.set("kernel_dir", bridge.kernel_dir.to_str())?;
                 ak.set("kernel_version_str", bridge.get_env("KERNELVERSION"))?;
                 ak.set("symbol_set_auto", symbol_set_auto)?;
                 ak.set("symbol_set_bool", symbol_set_bool)?;
@@ -173,8 +178,8 @@ impl Script for LuaScript {
                 ak.set("symbol_satisfy_and_set", symbol_satisfy_and_set)?;
                 ak.set("symbol_get_string", symbol_get_string)?;
                 ak.set("symbol_get_type", symbol_get_type)?;
+                ak.set("load_kconfig", load_kconfig)?;
                 globals.set("ak", ak)?;
-                globals.set("load_kconfig", load_kconfig)?;
 
                 lua_ctx.load(include_bytes!("api.lua")).set_name("api.lua")?.exec()?;
 

@@ -144,7 +144,8 @@ impl Bridge {
         let c: CString = CString::new(path.as_ref().to_str().context("Invalid filename")?)?;
         ensure!(
             (self.vtable.c_conf_read_unchecked)(c.as_ptr()) == 0,
-            "Could not read config unchecked"
+            "Error while executing conf_read({:?}). Is the file accessible?",
+            path.as_ref()
         );
         Ok(())
     }
