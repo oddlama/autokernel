@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+## [2.0.0] – 2022-11-14
+
 ### Documentation
 
 - Add commented example config file
@@ -30,5 +32,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add symbol value tracking to keep a "transaction history"
 - Print assignment errors and duplicate assignment warnings
 
-[unreleased]: https://github.com/oddlama/autokernel/compare/v0.1.0...HEAD
+[unreleased]: https://github.com/oddlama/autokernel/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/oddlama/autokernel/compare/v0.1.0...v2.0.0
 [0.1.0]: https://github.com/oddlama/autokernel/releases/tag/v0.1.0
