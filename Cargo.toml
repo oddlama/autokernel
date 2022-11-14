@@ -49,6 +49,18 @@ serial_test = "0.9.0"
 [profile.release]
 lto = true
 
+[package.metadata.release]
+allow-branch = ["main"]
+sign-commit = true
+sign-tag = true
+pre-release-commit-message = "chore(release): prepare for {{version}}"
+post-release-commit-message = "chore(release): bump version to {{next_version}}"
+pre-release-replacements = [
+    { file="CHANGELOG.md", search="## \\[unreleased\\]", replace = "## [unreleased]\n\n## [{{version}}] – {{date}}", exactly = 1 },
+    { file="CHANGELOG.md", search="HEAD", replace = "{{tag_name}}", exactly = 1 },
+    { file="CHANGELOG.md", search="\\[unreleased\\]: ", replace = "[unreleased]: https://github.com/oddlama/autokernel/compare/{{tag_name}}...HEAD\n[{{version}}]: ", exactly = 1 },
+]
+
 [package.metadata.deb]
 section = "utils"
 assets = [
