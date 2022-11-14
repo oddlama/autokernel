@@ -10,7 +10,7 @@
 -- Loading kconfig files
 --###############################################################
 
--- First, it is a good ideais to begin with loading the defconfig for your architecture.
+-- First, it is a good idea to begin with loading the defconfig for your architecture.
 -- This will be sane base configuration to build upon.
 --
 -- This is done unchecked (by calling the kernel's internal conf_read() function), as these
@@ -142,7 +142,7 @@ end
 RTLWIFI_USB:satisfy { y, recursive = true }
 
 -- This will automatically calculate and assign the required values for the symbol
--- `RTLWIFI_USB` and its dependencies to be set to `y`. 
+-- `RTLWIFI_USB` and its dependencies to be set to `y`.
 -- Specifying `recursive = true` also includes transitive dependencies.
 --
 -- The returned solution will always be unambiguous with respect to the symbols that will be enabled.

@@ -9,10 +9,11 @@
 
 # About autokernel
 
-Autokernel is a tool to manage your kernel configuration that guarantees semantic correctness.
-It checks symbol assignments for validity using a native bridge to the kernel's Kconfig interface
-and ensures that your configuration doesn't silently break on kernel updates. Next time a config option is
-removed or renamed (like when `CONFIG_THUNDERBOLT` was merged with `CONFIG_USB4`), you will notice.
+Autokernel is a tool for managing your kernel configuration that guarantees semantic correctness.
+It checks symbol assignments for validity by creating a native bridge to the kernel's
+Kconfig interface and ensures that your configuration does not silently break during kernel updates.
+The next time a config option is removed or renamed, similar to when `CONFIG_THUNDERBOLT` was merged
+with `CONFIG_USB4`, you will notice.
 
 It provides a configuration framework which understands the semantics behind symbols,
 their dependencies and allowed values and enforces these rules when generating the final

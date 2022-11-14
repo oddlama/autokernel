@@ -17,10 +17,10 @@ use clap::Parser;
 use colored::Colorize;
 use tempdir::TempDir;
 
-/// A tool to manage your kernel configuration that guarantees semantic correctness.
-/// It checks symbol assignments for validity using a native bridge to the kernel's
-/// Kconfig interface and ensures that your configuration doesn't silently break on kernel updates.
-/// It can be used to just generate a `.config` file, or even to build the kernel.
+/// Autokernel is a tool for managing your kernel configuration that guarantees semantic correctness.
+/// It checks symbol assignments for validity by creating a native bridge to the kernel's
+/// Kconfig interface and ensures that your configuration does not silently break during kernel updates.
+/// It can be used to generate a `.config` file, or even to build the kernel.
 #[derive(Parser, Debug)]
 #[clap(version, about, long_about = None)]
 struct Args {
