@@ -3,6 +3,7 @@
 <div align="center">
 
 [![Tutorial](https://img.shields.io/badge/API-Tutorial-informational.svg)](https://github.com/oddlama/autokernel/blob/main/examples/tutorial.lua)
+[![Crates.io](https://img.shields.io/crates/v/autokernel.svg)](https://crates.io/crates/autokernel)
 [![MIT License](https://img.shields.io/badge/license-MIT-informational.svg)](./LICENSE)
 
 </div>
