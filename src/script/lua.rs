@@ -168,6 +168,10 @@ impl Script for LuaScript {
                     }
                 })?;
 
+                let kernel_env = scope.create_function(|_, name: String| {
+                    StdOk(bridge.get_env(&name))
+                })?;
+
                 let ak = lua_ctx.create_table()?;
                 ak.set("kernel_dir", bridge.kernel_dir.to_str())?;
                 ak.set("kernel_version_str", bridge.get_env("KERNELVERSION"))?;
@@ -179,6 +183,7 @@ impl Script for LuaScript {
                 ak.set("symbol_get_string", symbol_get_string)?;
                 ak.set("symbol_get_type", symbol_get_type)?;
                 ak.set("load_kconfig", load_kconfig)?;
+                ak.set("kernel_env", kernel_env)?;
                 globals.set("ak", ak)?;
 
                 lua_ctx.load(include_bytes!("api.lua")).set_name("api.lua")?.exec()?;
