@@ -26,9 +26,9 @@ function build_bridge() {
 		INPUTS=(conf zconf.tab autokernel_bridge)
 	fi
 	if grep -q "set_message_callback.*va" scripts/kconfig/lkc_proto.h; then
-		message_callback_type="const char*, va_list"
+		message_callback_type="const char* _a, va_list _b"
 	else
-		message_callback_type="const char*"
+		message_callback_type="const char* _a"
 	fi
 	for i in "${INPUTS[@]}"; do
 		if [[ "$i" == autokernel_bridge ]]; then
