@@ -64,7 +64,8 @@ impl BridgeVTable {
         let c_sym_calc_value = load_symbol!(FuncSymCalcValue, b"sym_calc_value");
         let c_sym_int_get_min = load_symbol!(FuncSymIntGetMin, b"sym_int_get_min");
         let c_sym_int_get_max = load_symbol!(FuncSymIntGetMin, b"sym_int_get_max");
-        let c_sym_direct_deps_with_prompts = load_symbol!(FuncSymDirectDepsWithPrompts, b"sym_direct_deps_with_prompts");
+        let c_sym_direct_deps_with_prompts =
+            load_symbol!(FuncSymDirectDepsWithPrompts, b"sym_direct_deps_with_prompts");
         let c_sym_prompt_count = load_symbol!(FuncSymPromptCount, b"sym_prompt_count");
         let c_conf_write = load_symbol!(FuncConfWrite, b"conf_write");
         let c_conf_read_unchecked = load_symbol!(FuncConfReadUnchecked, b"conf_read");

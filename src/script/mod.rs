@@ -2,8 +2,8 @@ mod kconfig;
 mod lua;
 use crate::bridge::Bridge;
 
-use std::path::Path;
 use anyhow::{bail, Ok, Result};
+use std::path::Path;
 
 use colored::Colorize;
 pub use kconfig::KConfig;

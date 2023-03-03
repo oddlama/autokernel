@@ -168,9 +168,7 @@ impl Script for LuaScript {
                     }
                 })?;
 
-                let kernel_env = scope.create_function(|_, name: String| {
-                    StdOk(bridge.get_env(&name))
-                })?;
+                let kernel_env = scope.create_function(|_, name: String| StdOk(bridge.get_env(&name)))?;
 
                 let ak = lua_ctx.create_table()?;
                 ak.set("kernel_dir", bridge.kernel_dir.to_str())?;

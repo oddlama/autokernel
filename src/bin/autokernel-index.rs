@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::Instant;
 
-use anyhow::{bail, Ok, Result, ensure, Context};
+use anyhow::{bail, ensure, Context, Ok, Result};
 use clap::Parser;
 use colored::Colorize;
 
@@ -84,7 +84,14 @@ fn main() -> Result<()> {
                 .context("Failed to generate defconfig")?
                 .success());
             let defconfig = args.kernel_dir.join(".config");
-            index_values(&bridge, &tx, &kernel_id, "defconfig", Some(&defconfig), bridge.get_env("ARCH").as_ref())?;
+            index_values(
+                &bridge,
+                &tx,
+                &kernel_id,
+                "defconfig",
+                Some(&defconfig),
+                bridge.get_env("ARCH").as_ref(),
+            )?;
 
             tx.commit()?;
         }
