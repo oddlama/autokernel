@@ -67,5 +67,5 @@ if [[ "$1" == "-c" && "$2" == "scripts/kconfig/conf "* ]]; then
 	echo "[AUTOKERNEL BRIDGE]"
 	python -c 'import os, json; print(json.dumps({k:v for k,v in os.environ.items()}))'
 else
-	exec /bin/bash "$@"
+	exec "$BASH" "$@"
 fi
