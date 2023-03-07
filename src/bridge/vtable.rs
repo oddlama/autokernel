@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 pub type EnvironMap = HashMap<String, String>;
-pub type FuncInit = extern "C" fn(*const *const c_char) -> ();
+pub type FuncInit = extern "C" fn(*const *const c_char) -> bool;
 pub type FuncGetEnv = extern "C" fn(*const c_char) -> *const c_char;
 pub type FuncSymbolCount = extern "C" fn() -> size_t;
 pub type FuncGetAllSymbols = extern "C" fn(*mut *mut CSymbol) -> ();
@@ -46,7 +46,7 @@ pub struct BridgeVTable {
 
 impl BridgeVTable {
     pub unsafe fn new(library_path: PathBuf) -> Result<BridgeVTable> {
-        let library = Library::new(&library_path)?;
+        let library = Library::new(library_path)?;
         macro_rules! load_symbol {
             ($type: ty, $name: expr) => {
                 (library.get($name)? as LSymbol<$type>).into_raw() as RawSymbol<$type>
@@ -93,7 +93,7 @@ impl BridgeVTable {
     /// needs to make static lifetime of the pointer explicit, otherwise it assumes CSymbol goes
     /// out of scope with the vtable reference that was used to call it
     pub fn get_all_symbols(&self) -> Vec<*mut CSymbol> {
-        let count = (self.c_symbol_count)() as usize;
+        let count = (self.c_symbol_count)();
         let mut symbols = Vec::with_capacity(count);
         (self.c_get_all_symbols)(symbols.as_mut_ptr() as *mut *mut CSymbol);
         unsafe { symbols.set_len(count) };

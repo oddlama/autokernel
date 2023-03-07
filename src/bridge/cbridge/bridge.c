@@ -62,7 +62,7 @@ void init_environment(char const* const* env) {
  * 2. Loads and parses the kconfig file.
  * 3. Counts the amount of loaded symbols.
  */
-void init(char const* const* env) {
+bool init(char const* const* env) {
 	struct timeval start, now;
 	struct symbol* sym;
 	int i;
@@ -77,19 +77,25 @@ void init(char const* const* env) {
 	DEBUG("Kernel directory: %s\n", autokernel_getenv("PWD"));
 
 	// Save current working directory
-	getcwd(saved_working_directory, 2048);
+	if (getcwd(saved_working_directory, 2048) == NULL) {
+		perror("Failed to save current working directory");
+		return false;
+	}
 
 	// Parse Kconfig and load empty .config (/dev/null)
 	gettimeofday(&start, NULL);
 	if (chdir(autokernel_getenv("PWD")) != 0) {
-		perror("Failed to change directory");
+		perror("Failed to chdir into kernel directory");
+		return false;
 	}
 	conf_parse("Kconfig");
 	if (conf_read("/dev/null") != 0) {
 		dprintf(2, "Failed to read /dev/null as dummy config\n");
+		return false;
 	}
 	if (chdir(saved_working_directory) != 0) {
-		perror("Failed to change back to original directory");
+		perror("Failed to chdir back to original directory");
+		return false;
 	}
 
 	gettimeofday(&now, NULL);
@@ -101,6 +107,7 @@ void init(char const* const* env) {
 	n_symbols = 3;
 	for_all_symbols(i, sym) { ++n_symbols; }
 	DEBUG("Found %ld symbols\n", n_symbols);
+	return true;
 }
 
 /**

@@ -65,7 +65,7 @@ impl Bridge {
         // Create vector of ptrs with NULL at the end
         let mut ffi_env: Vec<*const c_char> = env.iter().map(|cstr| cstr.as_ptr()).collect();
         ffi_env.push(std::ptr::null());
-        (vtable.c_init)(ffi_env.as_ptr());
+        ensure!((vtable.c_init)(ffi_env.as_ptr()), "Failed to initialize C bridge");
 
         // Load all symbols once
         let symbols = vtable.get_all_symbols();
