@@ -15,7 +15,7 @@ use std::process::Command;
 use anyhow::{anyhow, ensure, Context, Ok, Result};
 use clap::Parser;
 use colored::Colorize;
-use tempdir::TempDir;
+use tempfile::tempdir;
 
 /// Autokernel is a tool for managing your kernel configuration that guarantees semantic correctness.
 /// It checks symbol assignments for validity by creating a native bridge to the kernel's
@@ -163,7 +163,7 @@ fn build_kernel(args: &Args, bridge: &Bridge, action: &ActionBuild) -> Result<()
     script::apply(&config.config.script, bridge)?;
     validate_transactions(&bridge.history.borrow())?;
 
-    let tmpdir = TempDir::new("autokernel")?;
+    let tmpdir = tempdir()?;
     let config_output = args.kernel_dir.join(".config");
     let initramfs_out = tmpdir.path().join("initramfs.img");
 
