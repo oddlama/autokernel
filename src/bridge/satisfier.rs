@@ -20,8 +20,8 @@ pub enum SolveError {
     Unsatisfiable,
     #[error("complex negated expressions are unsupported")]
     ComplexNot,
-    #[error("expression contains unsupported constructs")]
-    UnsupportedConstituents,
+    #[error("expression contains at least one unsupported construct: {description}")]
+    UnsupportedConstituents { description: String },
     #[error("expression contains an ambiguous comparison")]
     AmbiguousComparison,
     #[error("encountered an invalid symbol")]
@@ -219,7 +219,7 @@ impl Solver for SimpleSolver {
     fn satisfy(&self, bridge: &Bridge, expr: &Expr, desired_value: Tristate) -> Result<Assignments, SolveError> {
         // If the expression already evaluates to at least the desired value,
         // we don't have to change any variables
-        if expr.eval().map_err(|_| SolveError::UnsupportedConstituents)? >= desired_value {
+        if expr.eval().map_err(|e| SolveError::UnsupportedConstituents{ description: e.to_string() })? >= desired_value {
             return Ok(HashMap::new());
         }
 
@@ -262,7 +262,7 @@ impl Solver for SimpleSolver {
                     }
                 }
                 Expr::Terminal(Terminal::Symbol(s)) => self.satisfy_eq(&bridge.wrap_symbol(*s), Tristate::No)?,
-                Expr::Terminal(_) => return Err(SolveError::UnsupportedConstituents),
+                Expr::Terminal(k) => return Err(SolveError::UnsupportedConstituents{ description: format!("{:?}", k) }),
                 _ => return Err(SolveError::ComplexNot),
             },
             Expr::Terminal(Terminal::Eq(a, b)) => {
@@ -298,7 +298,7 @@ impl Solver for SimpleSolver {
                 };
                 self.satisfy_neq(&s, Tristate::No, desired_value)?
             }
-            Expr::Terminal(_) => return Err(SolveError::UnsupportedConstituents),
+            Expr::Terminal(k) => return Err(SolveError::UnsupportedConstituents{ description: format!("{:?}", k)}),
         })
     }
 }

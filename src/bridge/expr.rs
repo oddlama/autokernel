@@ -32,8 +32,8 @@ pub enum Expr {
 
 #[derive(Error, Debug, Clone)]
 pub enum EvalError {
-    #[error("encountered a terminal that cannot be evaluated")]
-    InvalidTerminal,
+    #[error("encountered a terminal that cannot be evaluated: {terminal}")]
+    InvalidTerminal{ terminal: String },
 }
 
 impl Expr {
@@ -102,7 +102,7 @@ impl Expr {
                 ) =>
             unsafe { ((**a).get_tristate_value() != (**b).get_tristate_value()).into() },
             Expr::Terminal(Terminal::Symbol(s)) => unsafe { (**s).get_tristate_value() },
-            Expr::Terminal(_) => return Err(EvalError::InvalidTerminal),
+            Expr::Terminal(t) => return Err(EvalError::InvalidTerminal{ terminal: format!("{:?}", t) }),
         })
     }
 
