@@ -233,7 +233,7 @@ pub fn validate_transactions(history: &[Transaction]) -> Result<()> {
 
         // Detect re-assignments
         for other in history[0..i].iter().rev() {
-            if other.symbol == t.symbol {
+            if other.symbol == t.symbol && t.value_before != t.value_after {
                 eprintln!(
                     "{}: reassignment of symbol {} to {:?}",
                     "warning".yellow().bold(),
