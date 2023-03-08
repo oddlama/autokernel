@@ -34,6 +34,8 @@ pub enum Expr {
 pub enum EvalError {
     #[error("encountered a terminal that cannot be evaluated: {terminal:?}")]
     InvalidTerminal { terminal: Terminal },
+    #[error("encountered an integer symbol that could not be parsed: {symbol:?}")]
+    InvalidIntegerSymbol { symbol: String },
 }
 
 impl Expr {
@@ -68,6 +70,47 @@ impl Expr {
     }
 
     pub fn eval(&self) -> Result<Tristate, EvalError> {
+        macro_rules! is_tri_compatible {
+            ($a: ident, $b: ident) => {
+                matches!(
+                    unsafe { &**$a }.symbol_type(),
+                    SymbolType::Tristate | SymbolType::Boolean
+                ) && matches!(
+                    unsafe { &**$b }.symbol_type(),
+                    SymbolType::Tristate | SymbolType::Boolean
+                )
+            };
+        }
+        // a lot of symbols are of "Unknown" type, which primarily
+        // are symbols that are created just to hold a constant value.
+        macro_rules! is_int_compatible {
+            ($a: ident, $b: ident) => {
+                matches!(
+                    unsafe { &**$a }.symbol_type(),
+                    SymbolType::Int | SymbolType::Hex | SymbolType::Unknown
+                ) && matches!(
+                    unsafe { &**$a }.symbol_type(),
+                    SymbolType::Int | SymbolType::Hex | SymbolType::Unknown
+                )
+            };
+        }
+        macro_rules! get_tri {
+            ($which: ident) => {
+                unsafe { (**$which).get_tristate_value() }
+            };
+        }
+        macro_rules! get_int {
+            ($which: ident) => {
+                unsafe {
+                    (**$which)
+                        .get_int_value()
+                        .map_err(|_| EvalError::InvalidIntegerSymbol {
+                            symbol: (**$which).name().unwrap().to_string(),
+                        })?
+                }
+            };
+        }
+
         Ok(match self {
             Expr::Const(b) => (*b).into(),
             Expr::And(a, b) => {
@@ -89,18 +132,18 @@ impl Expr {
                 }
             }
             Expr::Not(a) => a.eval()?.invert(),
-            Expr::Terminal(Terminal::Eq(a, b))
-                if matches!(
-                    unsafe { &**a }.symbol_type(),
-                    SymbolType::Tristate | SymbolType::Boolean
-                ) =>
-            unsafe { ((**a).get_tristate_value() == (**b).get_tristate_value()).into() },
-            Expr::Terminal(Terminal::Neq(a, b))
-                if matches!(
-                    unsafe { &**a }.symbol_type(),
-                    SymbolType::Tristate | SymbolType::Boolean
-                ) =>
-            unsafe { ((**a).get_tristate_value() != (**b).get_tristate_value()).into() },
+            Expr::Terminal(Terminal::Eq(a, b)) if is_tri_compatible!(a, b) => (get_tri!(a) == get_tri!(b)).into(),
+            Expr::Terminal(Terminal::Eq(a, b)) if is_int_compatible!(a, b) => (get_int!(a) == get_int!(b)).into(),
+            Expr::Terminal(Terminal::Neq(a, b)) if is_tri_compatible!(a, b) => (get_tri!(a) != get_tri!(b)).into(),
+            Expr::Terminal(Terminal::Neq(a, b)) if is_int_compatible!(a, b) => (get_int!(a) != get_int!(b)).into(),
+            Expr::Terminal(Terminal::Lth(a, b)) if is_tri_compatible!(a, b) => (get_tri!(a) < get_tri!(b)).into(),
+            Expr::Terminal(Terminal::Lth(a, b)) if is_int_compatible!(a, b) => (get_int!(a) < get_int!(b)).into(),
+            Expr::Terminal(Terminal::Leq(a, b)) if is_tri_compatible!(a, b) => (get_tri!(a) <= get_tri!(b)).into(),
+            Expr::Terminal(Terminal::Leq(a, b)) if is_int_compatible!(a, b) => (get_int!(a) <= get_int!(b)).into(),
+            Expr::Terminal(Terminal::Gth(a, b)) if is_tri_compatible!(a, b) => (get_tri!(a) > get_tri!(b)).into(),
+            Expr::Terminal(Terminal::Gth(a, b)) if is_int_compatible!(a, b) => (get_int!(a) > get_int!(b)).into(),
+            Expr::Terminal(Terminal::Geq(a, b)) if is_tri_compatible!(a, b) => (get_tri!(a) >= get_tri!(b)).into(),
+            Expr::Terminal(Terminal::Geq(a, b)) if is_int_compatible!(a, b) => (get_int!(a) >= get_int!(b)).into(),
             Expr::Terminal(Terminal::Symbol(s)) => unsafe { (**s).get_tristate_value() },
             Expr::Terminal(t) => return Err(EvalError::InvalidTerminal { terminal: t.clone() }),
         })

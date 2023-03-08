@@ -126,7 +126,7 @@ struct CProperty {
 
 #[repr(C)]
 pub struct CSymbolValue {
-    value: *mut SymbolType,
+    pub value: *mut c_void,
     pub tri: Tristate,
 }
 
@@ -254,6 +254,24 @@ impl CSymbol {
             self.name
                 .as_ref()
                 .map(|obj| String::from_utf8_lossy(CStr::from_ptr(obj).to_bytes()))
+        }
+    }
+
+    pub fn get_int_value(&self) -> anyhow::Result<u64> {
+        let strval = unsafe { CStr::from_ptr(self.current_value.value as *const i8) }
+            .to_str()
+            .context("Symbol has an invalid associated string value")?;
+
+        use anyhow::Context;
+        match self.symbol_type {
+            SymbolType::Int | SymbolType::Hex | SymbolType::Unknown => {
+                if strval.len() >= 2 && &strval[..2] == "0x" {
+                    u64::from_str_radix(&strval[2..], 16).context("Could not parse hex value")
+                } else {
+                    strval.parse::<u64>().context("Could not parse integer value")
+                }
+            }
+            _ => anyhow::bail!("Cannot get integer value for symbol of type {:?}", self.symbol_type),
         }
     }
 

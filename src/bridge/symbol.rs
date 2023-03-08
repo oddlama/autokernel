@@ -283,6 +283,10 @@ impl<'a> Symbol<'a> {
         unsafe { &*self.c_symbol }.symbol_type()
     }
 
+    pub fn flags(&self) -> SymbolFlags {
+        unsafe { &*self.c_symbol }.flags
+    }
+
     pub fn is_const(&self) -> bool {
         unsafe { &*self.c_symbol }.is_const()
     }
@@ -390,7 +394,7 @@ impl<'a> fmt::Display for Symbol<'a> {
                 Ok(SymbolValue::Int(value)) => (Color::White, format!("={}", value)),
                 Ok(SymbolValue::Hex(value)) => (Color::White, format!("={:x}", value)),
                 Ok(SymbolValue::String(value)) => (Color::White, format!("=\"{}\"", value)),
-                _ => (Color::BrightRed, "=?".to_string()),
+                _ => (Color::Blue, "".into()),
             };
             write!(f, "{}{}", name.color(name_color), value_indicator.dimmed())
         } else if self.is_choice() {

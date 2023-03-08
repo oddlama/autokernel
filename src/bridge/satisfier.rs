@@ -221,7 +221,14 @@ impl Solver for SimpleSolver {
         // we don't have to change any variables
         if expr.eval().map_err(|e| match e {
             EvalError::InvalidTerminal { terminal } => SolveError::UnsupportedConstituents {
-                description: format!("{:?} which is {}", terminal, terminal.display(bridge).to_string()),
+                description: format!(
+                    "unsupported terminal {:?} which is {}",
+                    terminal,
+                    terminal.display(bridge)
+                ),
+            },
+            EvalError::InvalidIntegerSymbol { symbol } => SolveError::UnsupportedConstituents {
+                description: format!("invalid integer symbol {}", symbol),
             },
         })? >= desired_value
         {
