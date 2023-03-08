@@ -2,7 +2,7 @@ use itertools::Itertools;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use super::types::SymbolType;
-use super::{expr::Terminal, Expr};
+use super::{expr::EvalError, expr::Terminal, Expr};
 use super::{Bridge, Symbol, Tristate};
 use thiserror::Error;
 
@@ -219,7 +219,12 @@ impl Solver for SimpleSolver {
     fn satisfy(&self, bridge: &Bridge, expr: &Expr, desired_value: Tristate) -> Result<Assignments, SolveError> {
         // If the expression already evaluates to at least the desired value,
         // we don't have to change any variables
-        if expr.eval().map_err(|e| SolveError::UnsupportedConstituents{ description: e.to_string() })? >= desired_value {
+        if expr.eval().map_err(|e| match e {
+            EvalError::InvalidTerminal { terminal } => SolveError::UnsupportedConstituents {
+                description: format!("{:?} which is {}", terminal, terminal.display(bridge).to_string()),
+            },
+        })? >= desired_value
+        {
             return Ok(HashMap::new());
         }
 
@@ -262,7 +267,11 @@ impl Solver for SimpleSolver {
                     }
                 }
                 Expr::Terminal(Terminal::Symbol(s)) => self.satisfy_eq(&bridge.wrap_symbol(*s), Tristate::No)?,
-                Expr::Terminal(k) => return Err(SolveError::UnsupportedConstituents{ description: format!("{:?}", k) }),
+                Expr::Terminal(k) => {
+                    return Err(SolveError::UnsupportedConstituents {
+                        description: format!("{:?}", k),
+                    })
+                }
                 _ => return Err(SolveError::ComplexNot),
             },
             Expr::Terminal(Terminal::Eq(a, b)) => {
@@ -298,7 +307,11 @@ impl Solver for SimpleSolver {
                 };
                 self.satisfy_neq(&s, Tristate::No, desired_value)?
             }
-            Expr::Terminal(k) => return Err(SolveError::UnsupportedConstituents{ description: format!("{:?}", k)}),
+            Expr::Terminal(k) => {
+                return Err(SolveError::UnsupportedConstituents {
+                    description: format!("{:?}", k),
+                })
+            }
         })
     }
 }

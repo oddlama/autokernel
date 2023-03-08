@@ -139,6 +139,13 @@ pub fn print_satisfy_result(satisfying_configuration: &Result<Vec<(String, Trist
             }
             eprintln!("   {}", "|".blue());
         }
+        Err(SolveError::UnsupportedConstituents { description }) => {
+            eprintln!(
+                "   {} note: cannot derive solution because dependency expression contains unsupported constituents:",
+                "=".blue()
+            );
+            eprintln!("   {} - {}", "|".blue(), description);
+        }
         Err(err) => eprintln!(
             "   {} note: cannot suggest solution because automatic dependency resolution failed ({:?})",
             "=".blue(),
