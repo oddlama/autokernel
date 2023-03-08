@@ -59,12 +59,22 @@ struct ActionSatisfy {
     /// The value to solve for (either m or y)
     #[clap(default_value = "y")]
     value: String,
-    /// Don't apply a config before satisfying, instead run the solver directly with all symbols set to their default values
+    /// Don't apply the config before satisfying, instead run the solver directly with all symbols set to their default values
     #[clap(short, long)]
     ignore_config: bool,
     /// Recursively satisfy dependencies of encountered symbols
     #[clap(short, long)]
     recursive: bool,
+}
+
+#[derive(Debug, clap::Args)]
+struct ActionInfo {
+    /// The symbol about which information should be shown
+    symbol: String,
+    /// Don't apply the config before shown information. This means
+    /// that all symbols shown in dependency trees will have their default value
+    #[clap(short, long)]
+    ignore_config: bool,
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -78,6 +88,8 @@ enum Action {
     /// Automatically satisfy the dependencies of a given symbol. This will evaluate and
     /// print the necessary changes to other symbols that are required before the given symbol can be set
     Satisfy(ActionSatisfy),
+    /// Show information about a symbol. Mainly useful to see a symbol's dependencies and dependees.
+    Info(ActionInfo),
 }
 
 fn main() {
@@ -98,6 +110,7 @@ fn try_main() -> Result<()> {
         Action::Build(action) => build_kernel(&args, &bridge, action),
         Action::GenerateConfig(action) => generate_config(&args, &bridge, action),
         Action::Satisfy(action) => satisfy_symbol(&args, &bridge, action),
+        Action::Info(action) => info_symbol(&args, &bridge, action),
     }
 }
 
@@ -130,6 +143,43 @@ fn satisfy_symbol(args: &Args, bridge: &Bridge, action: &ActionSatisfy) -> Resul
         Result::Ok(c) if c.is_empty() => println!("Nothing to do :)"),
         _ => print_satisfy_result(&satisfying_configuration),
     };
+    Ok(())
+}
+
+fn info_symbol(args: &Args, bridge: &Bridge, action: &ActionInfo) -> Result<()> {
+    if !action.ignore_config {
+        let config = config::load(&args.config)?;
+        script::apply(config.config.script, bridge)?;
+        validate_transactions(&bridge.history.borrow())?;
+    }
+
+    let symbol = bridge.symbol(&action.symbol).context("This symbol doesn't exist")?;
+    println!("Information for {}:", symbol.name().unwrap().blue());
+    println!("  Current value:        {:?}", symbol.get_value()?);
+    println!("  Flags:                {:?}", symbol.flags());
+
+    match symbol.visibility_expression() {
+        Result::Ok(expr) => {
+            println!("  {}", "// This is technically called the visibility of the related menu entry for menuconfig,".dimmed());
+            println!("  {}", "// and determines the upper bound for the value that the symbol can have.".dimmed());
+            println!("  {}", "// It always expresses all dependencies of this symbol.".dimmed());
+            println!("  Dependencies:         {}", expr.display(bridge));
+            println!("    => upper bound:     {}", expr.eval().map_or("could not evaluate".to_string().red(), |v| v.to_string().color(v.color())));
+        },
+        Err(e) => println!("  Dependencies could not be parsed: {}", e),
+    }
+
+    match symbol.reverse_dependencies() {
+        Result::Ok(expr) => {
+            println!("  {}", "// The reverse dependencies determine the lower bound for the value a symbol can have.".dimmed());
+            println!("  {}", "// If another symbol requires this to be at least 'm' (1), then setting it to 'y' (2) is also allowed,".dimmed());
+            println!("  {}", "// but 'n' (0) is not.".dimmed());
+            println!("  Reverse dependencies: {}", expr.display(bridge));
+            println!("    => lower bound:     {}", expr.eval().map_or("could not evaluate".to_string().red(), |v| v.to_string().color(v.color())));
+        },
+        Err(e) => println!("  Reverse dependencies could not be parsed: {}", e),
+    }
+
     Ok(())
 }
 
