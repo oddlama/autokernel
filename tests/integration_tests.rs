@@ -58,14 +58,14 @@ fn integration_test_luaconfig() {
     println!("testing LuaScript");
     macro_rules! lua_test {
         ($name:literal, $code:expr) => {
-            test_script(&bridge, &LuaScript::from_raw($name.into(), $code.into())).unwrap()
+            test_script(&bridge, &LuaScript::from_raw($name.into(), $code.into()).unwrap()).unwrap()
         };
     }
 
     macro_rules! lua_bad_test {
         ($name:literal, $code:expr) => {
             assert!(
-                test_script(&bridge, &LuaScript::from_raw($name.into(), $code.into())).is_err(),
+                test_script(&bridge, &LuaScript::from_raw($name.into(), $code.into()).unwrap()).is_err(),
                 $name
             )
         };
