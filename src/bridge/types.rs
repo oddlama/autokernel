@@ -296,6 +296,7 @@ use bitflags::bitflags;
 
 bitflags! {
     #[repr(C)]
+    #[derive(Clone, Copy, Debug)]
     pub struct SymbolFlags: u32 {
         // WARNING might change in kernel and while unlikely should be checked
         const CONST     = 0x0001;

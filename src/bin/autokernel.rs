@@ -160,23 +160,45 @@ fn info_symbol(args: &Args, bridge: &Bridge, action: &ActionInfo) -> Result<()> 
 
     match symbol.visibility_expression() {
         Result::Ok(expr) => {
-            println!("  {}", "// This is technically called the visibility of the related menu entry for menuconfig,".dimmed());
-            println!("  {}", "// and determines the upper bound for the value that the symbol can have.".dimmed());
-            println!("  {}", "// It always expresses all dependencies of this symbol.".dimmed());
+            println!(
+                "  {}",
+                "// This is technically called the visibility of the related menu entry for menuconfig,".dimmed()
+            );
+            println!(
+                "  {}",
+                "// and determines the upper bound for the value that the symbol can have.".dimmed()
+            );
+            println!(
+                "  {}",
+                "// It always expresses all dependencies of this symbol.".dimmed()
+            );
             println!("  Dependencies:         {}", expr.display(bridge));
-            println!("    => upper bound:     {}", expr.eval().map_or("could not evaluate".to_string().red(), |v| v.to_string().color(v.color())));
-        },
+            println!(
+                "    => upper bound:     {}",
+                expr.eval().map_or("could not evaluate".to_string().red(), |v| v
+                    .to_string()
+                    .color(v.color()))
+            );
+        }
         Err(e) => println!("  Dependencies could not be parsed: {}", e),
     }
 
     match symbol.reverse_dependencies() {
         Result::Ok(expr) => {
-            println!("  {}", "// The reverse dependencies determine the lower bound for the value a symbol can have.".dimmed());
+            println!(
+                "  {}",
+                "// The reverse dependencies determine the lower bound for the value a symbol can have.".dimmed()
+            );
             println!("  {}", "// If another symbol requires this to be at least 'm' (1), then setting it to 'y' (2) is also allowed,".dimmed());
             println!("  {}", "// but 'n' (0) is not.".dimmed());
             println!("  Reverse dependencies: {}", expr.display(bridge));
-            println!("    => lower bound:     {}", expr.eval().map_or("could not evaluate".to_string().red(), |v| v.to_string().color(v.color())));
-        },
+            println!(
+                "    => lower bound:     {}",
+                expr.eval().map_or("could not evaluate".to_string().red(), |v| v
+                    .to_string()
+                    .color(v.color()))
+            );
+        }
         Err(e) => println!("  Reverse dependencies could not be parsed: {}", e),
     }
 
