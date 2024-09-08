@@ -202,6 +202,8 @@ fn prepare_bridge(kernel_dir: &PathBuf, bash: Option<&str>) -> Result<(PathBuf, 
     let shebang = format!("#!{}\n", bash.unwrap_or("/usr/bin/env bash"));
     interceptor_file.write_all(shebang.as_bytes())?;
     interceptor_file.write_all(include_bytes!("cbridge/interceptor.sh"))?;
+    interceptor_file.flush()?;
+    drop(interceptor_file);
 
     let interceptor_shell = fs::canonicalize(&kconfig_interceptor_sh)?
         .into_os_string()
