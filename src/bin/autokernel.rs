@@ -30,6 +30,9 @@ struct Args {
     /// The kernel directory to operate on
     #[clap(short, long, value_parser, value_name = "DIR", value_hint = clap::ValueHint::DirPath, default_value = "/usr/src/linux")]
     kernel_dir: PathBuf,
+    /// The bash executable to use for generated scripts, used in shebangs.
+    #[clap(short, long, value_name = "BASH", default_value = "/usr/bin/env bash")]
+    bash: String,
 
     #[clap(subcommand)]
     action: Action,
@@ -104,7 +107,7 @@ fn main() {
 
 fn try_main() -> Result<()> {
     let args = Args::parse();
-    let bridge = Bridge::new(args.kernel_dir.clone())?;
+    let bridge = Bridge::new(args.kernel_dir.clone(), Some(&args.bash))?;
 
     match &args.action {
         Action::Build(action) => build_kernel(&args, &bridge, action),

@@ -67,7 +67,7 @@ pub fn setup() -> Bridge {
         .context(format!("tmp {:?}, folder {:?}", env::temp_dir(), TMP_TEST_DIR))
         .unwrap();
     let kdir = setup_kernel(&kdir);
-    Bridge::new(kdir).unwrap()
+    Bridge::new(kdir, None).unwrap()
 }
 
 pub fn teardown() {

@@ -18,6 +18,10 @@ struct Args {
     #[clap(short, long, value_name = "DIR", value_hint = clap::ValueHint::DirPath, default_value = "/usr/src/linux")]
     kernel_dir: PathBuf,
 
+    /// The bash executable to use for generated scripts, used in shebangs.
+    #[clap(short, long, value_name = "BASH", default_value = "/usr/bin/env bash")]
+    bash: String,
+
     /// The database to write to
     #[clap(short, long, value_name = "SQLITE_DB", value_hint = clap::ValueHint::FilePath, default_value = "index.db")]
     db: PathBuf,
@@ -60,7 +64,7 @@ fn main() -> Result<()> {
             create_schema(&mut conn)?;
         }
         Action::Kernel => {
-            let bridge = Bridge::new(args.kernel_dir.clone())?;
+            let bridge = Bridge::new(args.kernel_dir.clone(), Some(&args.bash))?;
             let mut conn = Connection::open(&args.db)?;
             create_schema(&mut conn)?;
 
@@ -96,7 +100,7 @@ fn main() -> Result<()> {
             tx.commit()?;
         }
         Action::Values(action) => {
-            let bridge = Bridge::new(args.kernel_dir.clone())?;
+            let bridge = Bridge::new(args.kernel_dir.clone(), Some(&args.bash))?;
             let mut conn = Connection::open(&args.db)?;
             create_schema(&mut conn)?;
 

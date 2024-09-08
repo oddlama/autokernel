@@ -1,5 +1,4 @@
-#!/usr/bin/env bash
-
+# shebang is added dynamically, this is a bash
 set -uo pipefail
 
 BRIDGE_C="scripts/kconfig/autokernel_bridge.c"

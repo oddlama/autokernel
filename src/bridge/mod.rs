@@ -45,9 +45,9 @@ impl Bridge {
     /// Compile bridge library if necessary, then dynamically
     /// load it and associated functions and create and return a
     /// Bridge object to interface with the C part.
-    pub fn new(kernel_dir: PathBuf) -> Result<Bridge> {
-        let (library_path, env) =
-            prepare_bridge(&kernel_dir).context(format!("Could not prepare bridge in {}", kernel_dir.display()))?;
+    pub fn new(kernel_dir: PathBuf, bash: Option<&str>) -> Result<Bridge> {
+        let (library_path, env) = prepare_bridge(&kernel_dir, bash)
+            .context(format!("Could not prepare bridge in {}", kernel_dir.display()))?;
 
         let time_start = Instant::now();
         print!("{:>12} bridge\r", "Initializing".cyan());
@@ -163,7 +163,7 @@ impl Bridge {
 }
 
 /// Compile (or find existing) bridge shared library.
-fn prepare_bridge(kernel_dir: &PathBuf) -> Result<(PathBuf, EnvironMap)> {
+fn prepare_bridge(kernel_dir: &PathBuf, bash: Option<&str>) -> Result<(PathBuf, EnvironMap)> {
     let time_start = Instant::now();
     let kconfig_dir = kernel_dir.join("scripts").join("kconfig");
 
@@ -191,14 +191,17 @@ fn prepare_bridge(kernel_dir: &PathBuf) -> Result<(PathBuf, EnvironMap)> {
     // It is necessary that some kind of "conf" tool is being run, as their
     // prerequisite C objects are also required to build our bridge.
     let kconfig_interceptor_sh = kconfig_dir.join("autokernel_interceptor.sh");
-    fs::OpenOptions::new()
+    let mut interceptor_file = fs::OpenOptions::new()
         .create(true)
         .write(true)
         .truncate(true)
         .mode(0o755)
         .open(&kconfig_interceptor_sh)
-        .context(format!("Could not open {}", kconfig_interceptor_sh.display()))?
-        .write_all(include_bytes!("cbridge/interceptor.sh"))?;
+        .context(format!("Could not open {}", kconfig_interceptor_sh.display()))?;
+
+    let shebang = format!("#!{}\n", bash.unwrap_or("/usr/bin/env bash"));
+    interceptor_file.write_all(shebang.as_bytes())?;
+    interceptor_file.write_all(include_bytes!("cbridge/interceptor.sh"))?;
 
     let interceptor_shell = fs::canonicalize(&kconfig_interceptor_sh)?
         .into_os_string()
