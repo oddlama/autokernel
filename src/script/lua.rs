@@ -8,7 +8,7 @@ use std::path::Path;
 use std::result::Result::{Err as StdErr, Ok as StdOk};
 
 use anyhow::{Context, Ok, Result};
-use mlua::{self, Error as LuaError, ExternalResult, Lua, LuaOptions, StdLib};
+use mlua::{self, Error as LuaError, ExternalResult, Lua};
 
 pub struct LuaScript {
     lua: Lua,
@@ -26,7 +26,7 @@ impl LuaScript {
 
     pub fn from_raw(filename: String, code: String) -> Result<LuaScript> {
         Ok(LuaScript {
-            lua: Lua::new_with(StdLib::DEBUG, LuaOptions::default())?,
+            lua: unsafe { Lua::unsafe_new() },
             filename,
             code,
         })
